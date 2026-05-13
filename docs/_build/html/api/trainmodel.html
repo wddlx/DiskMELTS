@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>diskmelts.trainmodel &mdash; DiskMELTS 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="diskmelts.fitting" href="fitting.html" />
+    <link rel="prev" title="Quick Start" href="../quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DiskMELTS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">diskmelts.trainmodel</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.trainmodel.load_model_grid"><code class="docutils literal notranslate"><span class="pre">load_model_grid()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.trainmodel.generate_pre_training_set"><code class="docutils literal notranslate"><span class="pre">generate_pre_training_set()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.trainmodel.pretrain_forward_model"><code class="docutils literal notranslate"><span class="pre">pretrain_forward_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="fitting.html">diskmelts.fitting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="validation.html">diskmelts.validation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">diskmelts.plotting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DiskMELTS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">diskmelts.trainmodel</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/trainmodel.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="diskmelts-trainmodel">
+<h1>diskmelts.trainmodel<a class="headerlink" href="#diskmelts-trainmodel" title="Permalink to this heading"></a></h1>
+<p>Training utilities for per-molecule forward surrogate models.</p>
+<p>Each molecule requires two steps before fitting:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">generate_pre_training_set</span></code></strong> — build a CSV that enumerates every
+$(T, \log N)$ grid point with a peak-normalised spectrum.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pretrain_forward_model</span></code></strong> — train (or load) the two-MLP forward model
+from that CSV.</p></li>
+</ol>
+<p>The <code class="docutils literal notranslate"><span class="pre">MLP</span></code> class is used internally and is not part of the public API.</p>
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.trainmodel.load_model_grid">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.trainmodel.</span></span><span class="sig-name descname"><span class="pre">load_model_grid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/trainmodel.html#load_model_grid"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.trainmodel.load_model_grid" title="Permalink to this definition"></a></dt>
+<dd><p>Load all slab-model CSV files from a directory.</p>
+<p>Files must be named T{T}N{logN}.csv with columns ‘wave’ (µm) and ‘Line’ (Jy).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>grid_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – path to the directory containing the CSV files</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>keyed by (T, logN) tuples; each value is a dict with</dt><dd><p>’wavelength’ (np.ndarray) and ‘flux’ (np.ndarray)</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.trainmodel.generate_pre_training_set">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.trainmodel.</span></span><span class="sig-name descname"><span class="pre">generate_pre_training_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">models</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_noise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holdout_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/trainmodel.html#generate_pre_training_set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.trainmodel.generate_pre_training_set" title="Permalink to this definition"></a></dt>
+<dd><p>Build a pre-training CSV by enumerating every (T, logN) grid point for
+one molecule.</p>
+<p>A = 1 is fixed; spectra are peak-normalised so net_shape always predicts
+the unit-peak spectral shape.  Optionally repeats each grid point n_noise
+times with independent noise realisations.  Call once per molecule.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name used as column prefix (e.g. ‘H2O’, ‘C2H2’)</p></li>
+<li><p><strong>models</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_model_grid for this molecule,
+keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
+<li><p><strong>output_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – destination CSV path</p></li>
+<li><p><strong>wav_out</strong> (<em>np.ndarray</em><em> or </em><em>None</em>) – common wavelength grid in µm; defaults
+to the wavelength axis of the first model</p></li>
+<li><p><strong>noise_scale</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Gaussian noise std as a fraction of each model’s
+peak flux magnitude; 0.0 for noise-free output (default 0.0)</p></li>
+<li><p><strong>n_noise</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of independent noise realisations per grid point;
+total rows = n_grid_points × n_noise (default 1)</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – random seed for reproducibility</p></li>
+<li><p><strong>holdout_keys</strong> (<em>iterable</em><em> or </em><em>None</em>) – (T, logN) tuples to exclude from the
+CSV so they can serve as unseen test
+points in validate_nt_holdout; the
+excluded count is printed (default None)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the saved DataFrame</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(pd.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.trainmodel.pretrain_forward_model">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.trainmodel.</span></span><span class="sig-name descname"><span class="pre">pretrain_forward_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(11.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(64,</span> <span class="pre">128,</span> <span class="pre">64)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">early_stopping_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/trainmodel.html#pretrain_forward_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.trainmodel.pretrain_forward_model" title="Permalink to this definition"></a></dt>
+<dd><p>Train (or load) the two-MLP forward model for one molecule.</p>
+<p>Two sub-models are trained independently from the same pretrain CSV.
+<code class="docutils literal notranslate"><span class="pre">net_shape</span></code> maps (T, logN) to n_pca PCA coefficients of the
+peak-normalised spectral shape; <code class="docutils literal notranslate"><span class="pre">net_peak</span></code> maps (T, logN) to
+log10(peak flux).</p>
+<p>If model_path already exists the checkpoint is loaded and training is
+skipped entirely.  After training the checkpoint is saved to model_path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name matching column prefix in pretrain_csv
+(e.g. ‘H2O’, ‘C2H2’)</p></li>
+<li><p><strong>pretrain_csv</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – path to the CSV produced by generate_pre_training_set</p></li>
+<li><p><strong>wav_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (min_wav, max_wav) µm to select training channels;
+use the molecule’s actual emission range to drop
+zero-only channels before PCA
+(e.g. (12.0, 16.5) for C2H2/HCN/CO2, (11.0, 19.0)
+for H2O)</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> or </em><em>None</em>) – defaults to CUDA if available</p></li>
+<li><p><strong>hidden</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – hidden layer sizes for both MLPs (default (64, 128, 64))</p></li>
+<li><p><strong>n_epochs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – maximum training epochs (default 5000)</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – mini-batch size (default 128)</p></li>
+<li><p><strong>lr</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam learning rate (default 1e-4)</p></li>
+<li><p><strong>weight_decay</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam L2 regularisation (default 0.0)</p></li>
+<li><p><strong>model_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em>) – .pt checkpoint path; skip training if it
+exists, save there after training</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random seed for train/val split (default 42)</p></li>
+<li><p><strong>n_pca</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of PCA components for spectral shape compression;
+set to None or 0 to disable PCA (default 15)</p></li>
+<li><p><strong>early_stopping_patience</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – stop each sub-model when its validation
+loss does not improve for this many epochs;
+0 disables early stopping (default 500)</p></li>
+<li><p><strong>T_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – (T_min, T_max) K; if set, only rows in this
+temperature range are used; useful for
+hot/warm two-component splits (default None)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>with keys</dt><dd><p>net_shape          (nn.Module)      : shape MLP in eval mode
+net_peak           (nn.Module)      : peak MLP in eval mode
+xp_sc              (StandardScaler) : fitted on (T, logN) inputs
+yp_sc_shape        (StandardScaler) : fitted on PCA coefficients
+yp_sc_peak         (StandardScaler) : fitted on log10(peak) values
+pca                (PCA or None)    : fitted sklearn PCA, or None
+train_losses_shape (list)           : per-epoch train loss, shape MLP
+val_losses_shape   (list)           : per-epoch val   loss, shape MLP
+train_losses_peak  (list)           : per-epoch train loss, peak  MLP
+val_losses_peak    (list)           : per-epoch val   loss, peak  MLP
+wav                (np.ndarray)     : wavelength axis for wav_range
+X_pre_v            (np.ndarray)     : validation (T, logN), physical
+Y_pre_v            (np.ndarray)     : validation spectra (peak-norm.)
+X_pre_v_t          (torch.Tensor)   : standardised val inputs on device
+log10p_v           (np.ndarray)     : true log10(peak) for val samples</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../quickstart.html" class="btn btn-neutral float-left" title="Quick Start" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fitting.html" class="btn btn-neutral float-right" title="diskmelts.fitting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
