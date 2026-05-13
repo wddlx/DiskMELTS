@@ -1,25 +1,23 @@
 """
-dev_v1_pt_validation.py
+examples/dev_v1_pt_validation.py
 End-to-end pipeline for one molecule:
   generate pretrain CSV → train forward model → NT validation → full validation
 
-Edit the CONFIGURATION block below, then run:
-    python Package/dev_v1_pt_validation.py
+Edit the CONFIGURATION block below, then run from the repository root:
+    python examples/dev_v1_pt_validation.py
 
 NT validation   : recovers T and logN from grid spectra at A=1 (no A fitting).
 Full validation : recovers T, logN, and A from synthetic spectra with random A.
 """
 
 import os
-import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import numpy as np
 import torch
-from Trainmodel     import load_model_grid, generate_pre_training_set, pretrain_forward_model
-from Fitting import load_models
-from Validation     import validate_nt, validate_nt_holdout  # validate_full unused (step 6 off)
-from Plotting       import plot_validation_split  # plot_validation unused (step 6 off)
+
+from diskmelts.trainmodel import load_model_grid, generate_pre_training_set, pretrain_forward_model
+from diskmelts.fitting import load_models
+from diskmelts.validation import validate_nt, validate_nt_holdout  # validate_full unused (step 6 off)
+from diskmelts.plotting import plot_validation_split  # plot_validation unused (step 6 off)
 
 # ===========================================================================
 # CONFIGURATION — change MOL and GRID_DIR; everything else auto-adjusts
@@ -44,12 +42,12 @@ FIG_DIR      = 'figures/validation'
 #   CO2     (12.0, 16.5)       (12.0, 16.0)                       15
 #
 _MOL_DEFAULTS = {
-    'H2O':  dict(wav_range=(11.0, 19.0), fit_ranges=[(11.0,12.0),(16.5,18.5)], n_pca=21),
-    'C2H2': dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 16.5),              n_pca=15),
-    '13C12CH2': dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 16.5),              n_pca=15),
-    'HCN':  dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),              n_pca=15),
-    'CO2':  dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),              n_pca=15),
-    '13CO2':  dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),              n_pca=15),
+    'H2O':      dict(wav_range=(11.0, 19.0), fit_ranges=[(11.0, 12.0), (16.5, 18.5)], n_pca=21),
+    'C2H2':     dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 16.5),                 n_pca=15),
+    '13C12CH2': dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 16.5),                 n_pca=15),
+    'HCN':      dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),                 n_pca=15),
+    'CO2':      dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),                 n_pca=15),
+    '13CO2':    dict(wav_range=(11.0, 17.5), fit_ranges=(12.0, 17.0),                 n_pca=15),
 }
 WAV_RANGE  = _MOL_DEFAULTS[MOL]['wav_range']
 FIT_RANGES = _MOL_DEFAULTS[MOL]['fit_ranges']
@@ -74,18 +72,18 @@ LOGN_BOUNDS = (13.0, 19.0)   # (logN_min, logN_max) in log10(cm^-2)
 LOGA_BOUNDS = (-2.0, 2.0)    # (log10A_min, log10A_max) for full validation fitting
 
 # Holdout: grid points excluded from pretrain CSV and used as unseen validation
-HOLDOUT_N      = 30     # number of grid points to hold out
+HOLDOUT_N = 30     # number of grid points to hold out
 
 # NT validation (T and logN only, A = 1) — gradient-based Adam optimizer
-VAL_NT_FRAC    = 0.02   # fraction of pretrain CSV rows to validate (in-pretrain set)
-VAL_NT_STARTS  = 100     # random starting points for Adam
-VAL_NT_STEPS   = 300    # Adam gradient steps per start
-VAL_NT_LR      = 0.03   # Adam learning rate
+VAL_NT_FRAC   = 0.02   # fraction of pretrain CSV rows to validate (in-pretrain set)
+VAL_NT_STARTS = 100    # random starting points for Adam
+VAL_NT_STEPS  = 300    # Adam gradient steps per start
+VAL_NT_LR     = 0.03   # Adam learning rate
 
 # Full validation (T, logN, A with random A)
 VAL_FULL_N        = 30     # number of synthetic spectra
 VAL_FULL_NOISE    = 0.001  # noise fraction for synthetic spectra
-VAL_FULL_RESTARTS = 100    # fit_nested random restarts per spectrum (only used when FITTER='fit_nested')
+VAL_FULL_RESTARTS = 100    # fit_nested random restarts per spectrum
 
 # Full validation fitter: 'fit_nested' (random restarts) or 'fit_molecules' (Sobol global search)
 FITTER = 'fit_molecules'
@@ -113,8 +111,6 @@ print(f'    {len(models)} grid points, wav [{wav_full.min():.1f}, {wav_full.max(
 
 # ---------------------------------------------------------------------------
 # Step 1b — Select holdout grid points (excluded from pretrain CSV)
-#   Computed deterministically from SEED so the same points are held out on
-#   every run.  Delete the pretrain CSV to regenerate it with a new holdout.
 # ---------------------------------------------------------------------------
 print(f'\n[1b] Selecting {HOLDOUT_N} holdout grid points ...')
 _all_keys    = list(models.keys())
@@ -130,8 +126,6 @@ print(f'    {len(holdout_keys)} holdout keys (T range {min(k[0] for k in holdout
 
 # ---------------------------------------------------------------------------
 # Step 2 — Generate pretrain CSV (skipped if the file already exists)
-#   NOTE: if the CSV was generated in a previous run without holdout_keys,
-#   delete it so it is regenerated with the correct holdout exclusions.
 # ---------------------------------------------------------------------------
 print('\n[2] Pretrain CSV ...')
 if not os.path.exists(PRETRAIN_CSV):
@@ -149,7 +143,6 @@ else:
 
 # ---------------------------------------------------------------------------
 # Step 3 — Train (or load) the forward model
-#           pretrain_forward_model loads from MODEL_PATH if it already exists
 # ---------------------------------------------------------------------------
 print('\n[3] Training forward model ...')
 pretrain_forward_model(
@@ -168,7 +161,7 @@ pretrain_forward_model(
 )
 
 # ---------------------------------------------------------------------------
-# Step 4 — Load model via the standard Fitting API
+# Step 4 — Load model via the standard fitting API
 # ---------------------------------------------------------------------------
 print('\n[4] Loading model for fitting ...')
 pretrained = load_models(
@@ -214,7 +207,7 @@ plot_validation_split(MOL, nt_pretrain, nt_holdout,
 # print(f'\n[6] Full validation (T, logN, A)  fitter={FITTER!r} ...')
 #
 # if FITTER == 'fit_molecules':
-#     from Fitting import fit_molecules
+#     from diskmelts.fitting import fit_molecules
 #
 #     rng = np.random.default_rng(SEED)
 #     keys_list = list(models.keys())
@@ -225,9 +218,9 @@ plot_validation_split(MOL, nt_pretrain, nt_holdout,
 #
 #     print(f'  Sobol samples={VAL_NEW_N_SAMPLES}  refine={VAL_NEW_N_REFINE}  top={VAL_NEW_N_TOP}')
 #     for i in range(VAL_FULL_N):
-#         idx      = rng.integers(len(keys_list))
+#         idx         = rng.integers(len(keys_list))
 #         T_t, logN_t = keys_list[idx]
-#         A_t      = 10.0 ** rng.uniform(*LOGA_BOUNDS)
+#         A_t         = 10.0 ** rng.uniform(*LOGA_BOUNDS)
 #
 #         flux = A_t * models[keys_list[idx]]['flux'].copy()
 #         if VAL_FULL_NOISE > 0:
@@ -274,10 +267,12 @@ plot_validation_split(MOL, nt_pretrain, nt_holdout,
 #         'log10NA_true':  logN_true  + log10A_true,
 #         'log10NA_pred':  logN_pred  + log10A_pred,
 #     }
+#     from diskmelts.plotting import plot_validation
 #     plot_validation(MOL, full_results,
 #                     save_path=os.path.join(FIG_DIR, f'val_full_new_{MOL}.png'))
 #
 # else:  # 'fit_nested'
+#     from diskmelts.validation import validate_full
 #     full_results = validate_full(
 #         MOL, models, pretrained, FIT_RANGES,
 #         n_samples=VAL_FULL_N,
@@ -288,6 +283,7 @@ plot_validation_split(MOL, nt_pretrain, nt_holdout,
 #         n_restarts=VAL_FULL_RESTARTS,
 #         seed=SEED,
 #     )
+#     from diskmelts.plotting import plot_validation
 #     plot_validation(MOL, full_results,
 #                     save_path=os.path.join(FIG_DIR, f'val_full_{MOL}.png'))
 

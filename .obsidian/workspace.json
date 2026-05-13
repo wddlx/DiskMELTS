@@ -185,6 +185,16 @@
   },
   "active": "268549c81611c564",
   "lastOpenFiles": [
-    "readthedocs.yaml"
+    "examples/dev_v1_pt_validation.py",
+    "examples/dev_v1_realobs.py",
+    "pyproject.toml",
+    "src/diskmelts/validation.py",
+    "src/diskmelts/fitting.py",
+    "src/diskmelts/trainmodel.py",
+    "src/diskmelts/plotting.py",
+    "src/diskmelts/__init__.py",
+    "examples",
+    "src/diskmelts",
+    "src"
   ]
 }

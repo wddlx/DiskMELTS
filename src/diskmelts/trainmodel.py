@@ -1,5 +1,5 @@
 """
-Package/Trainmodel.py — Training utilities for per-molecule forward surrogate models.
+diskmelts/trainmodel.py — Training utilities for per-molecule forward surrogate models.
 
 Provides three public functions:
     load_model_grid          : load T{T}N{logN}.csv files from a Model_grids/ directory
@@ -10,7 +10,7 @@ Provides three public functions:
 
 Run as a script to generate pretrain CSVs, train all four molecules, and save
 loss-curve diagnostics:
-    python Package/Trainmodel.py
+    python src/diskmelts/trainmodel.py
 
 Edit the CONFIGURATION block inside if __name__ == '__main__' to change paths,
 which molecules to train, architecture, PCA size, learning rate, etc.
@@ -348,7 +348,6 @@ def pretrain_forward_model(
         criterion   = nn.MSELoss()
         opt_shape   = optim.Adam(net_shape.parameters(), lr=lr, weight_decay=weight_decay)
         opt_peak    = optim.Adam(net_peak.parameters(),  lr=lr, weight_decay=weight_decay)
-        # Halve LR when val loss plateaus for 10 epochs
         sched_shape = optim.lr_scheduler.ReduceLROnPlateau(opt_shape, patience=10, factor=0.5)
         sched_peak  = optim.lr_scheduler.ReduceLROnPlateau(opt_peak,  patience=10, factor=0.5)
 
@@ -402,7 +401,6 @@ def pretrain_forward_model(
                       f'shape tr={ts:.4f} val={vl_shape:.4f} lr={lr_s:.1e}  |  '
                       f'peak  tr={tp:.4f} val={vl_peak:.4f} lr={lr_p:.1e}')
 
-            # Independent early stopping for shape and peak sub-models
             if early_stopping_patience > 0:
                 if not stopped_shape:
                     if vl_shape < best_val_shape:
@@ -470,11 +468,11 @@ if __name__ == '__main__':
 
     # -- Paths ---------------------------------------------------------------
     _here        = os.path.dirname(os.path.abspath(__file__))
-    ROOT_DIR     = os.path.join(_here, '..')                   # project root
+    ROOT_DIR     = os.path.join(_here, '..', '..')              # project root
     GRID_ROOT    = os.path.join(ROOT_DIR, 'Model_grids')
-    DATA_DIR     = os.path.join(ROOT_DIR, 'data', 'processed')
-    MODEL_DIR    = os.path.join(ROOT_DIR, 'models')
-    FIG_DIR      = os.path.join(_here, 'figures', 'trainmodel')
+    DATA_DIR     = os.path.join(ROOT_DIR, 'Pretrain_grid')
+    MODEL_DIR    = os.path.join(ROOT_DIR, 'Trained_model')
+    FIG_DIR      = os.path.join(ROOT_DIR, 'figures', 'trainmodel')
     os.makedirs(DATA_DIR,  exist_ok=True)
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(FIG_DIR,   exist_ok=True)
@@ -482,18 +480,13 @@ if __name__ == '__main__':
     # -- Which molecules to train --------------------------------------------
     MOLECULES = ['H2O', 'C2H2', 'HCN', 'CO2']
 
-    # -- Wavelength range used to select training channels per molecule ------
-    # Keep this equal to the full model grid range (11–19 µm) for pretraining.
-    # Narrower retrieval/fitting ranges are applied only during inference.
     WAV_RANGES = {
         'H2O':  (11.0, 19.0),
-        'C2H2': (12.0, 16.5),   # zero outside this range → drop before PCA
+        'C2H2': (12.0, 16.5),
         'HCN':  (12.0, 16.5),
         'CO2':  (12.0, 16.5),
     }
 
-    # -- PCA: number of components per molecule ------------------------------
-    # Increase for more expressive shape representation; decrease to regularise.
     N_PCA = {
         'H2O':  22,
         'C2H2': 15,
@@ -501,7 +494,6 @@ if __name__ == '__main__':
         'CO2':  15,
     }
 
-    # -- MLP architecture (hidden layer sizes, same for net_shape and net_peak)
     HIDDEN = {
         'H2O':  (64, 128, 64),
         'C2H2': (64, 128, 64),
@@ -509,26 +501,18 @@ if __name__ == '__main__':
         'CO2':  (64, 128, 64),
     }
 
-    # -- Training hyperparameters --------------------------------------------
     N_EPOCHS               = 5000
     BATCH_SIZE             = 128
-    LR                     = 1e-4    # Adam learning rate
-    WEIGHT_DECAY           = 0.0     # Adam L2 regularisation
-    EARLY_STOPPING_PATIENCE = 500    # epochs without val improvement before stopping
+    LR                     = 1e-4
+    WEIGHT_DECAY           = 0.0
+    EARLY_STOPPING_PATIENCE = 500
     SEED                   = 42
 
-    # -- Pretrain CSV: noise-free, A=1, one row per grid point ---------------
     NOISE_SCALE_PRETRAIN = 0.0
-    N_NOISE_PRETRAIN     = 1     # noise realisations per grid point (1 = noise-free)
+    N_NOISE_PRETRAIN     = 1
 
-    # -- Combined training CSV (optional, for inverse models) ----------------
-
-    # -- H2O two-component mode ----------------------------------------------
-    # 'single'        : one model for all temperatures
-    # 'two_component' : train H2O_hot (T >= H2O_HOT_T_MIN) and
-    #                   H2O_warm (T < H2O_HOT_T_MIN) as two separate models
     H2O_MODE      = 'single'
-    H2O_HOT_T_MIN = 800   # K; boundary between hot and warm components
+    H2O_HOT_T_MIN = 800
 
     # -----------------------------------------------------------------------
     # Load model grids
@@ -570,7 +554,6 @@ if __name__ == '__main__':
     print('\n--- Pretraining forward models ---')
     pretrained = {}
 
-    # H2O — single or two-component
     _h2o_kw = dict(
         mol='H2O',
         pretrain_csv=PRETRAIN_CSVS['H2O'],
@@ -604,7 +587,6 @@ if __name__ == '__main__':
             model_path=os.path.join(MODEL_DIR, 'net_H2O_forward_11to19.pt'),
         )
 
-    # C-molecules
     for mol in ['C2H2', 'HCN', 'CO2']:
         print(f'\n[{mol}]')
         pretrained[mol] = pretrain_forward_model(
@@ -637,7 +619,6 @@ if __name__ == '__main__':
     # -----------------------------------------------------------------------
     print('\n=== Validation R² (physical flux) ===')
     for mol, res in pretrained.items():
-        # --- Loss curves ---
         if res['train_losses_shape'] or res['train_losses_peak']:
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3))
             ax1.semilogy(res['train_losses_shape'], label='Train')
@@ -653,7 +634,6 @@ if __name__ == '__main__':
             plt.savefig(os.path.join(FIG_DIR, f'loss_{mol}.png'), dpi=200)
             plt.close()
 
-        # --- Validation R² in physical flux space ---
         net_shape   = res['net_shape']
         net_peak    = res['net_peak']
         xp_sc       = res['xp_sc']
@@ -670,9 +650,9 @@ if __name__ == '__main__':
             z_s_s = net_shape(X_v_t).cpu().numpy()
             z_p_s = net_peak(X_v_t).cpu().numpy()
 
-        z_shape   = yp_sc_shape.inverse_transform(z_s_s)
-        log10p_pred = yp_sc_peak.inverse_transform(z_p_s)[:, 0]
-        Y_pred_norm = pca.inverse_transform(z_shape) if pca is not None else z_shape
+        z_shape      = yp_sc_shape.inverse_transform(z_s_s)
+        log10p_pred  = yp_sc_peak.inverse_transform(z_p_s)[:, 0]
+        Y_pred_norm  = pca.inverse_transform(z_shape) if pca is not None else z_shape
 
         Y_true_phys = Y_v         * (10 ** p_v)[:, None]
         Y_pred_phys = np.maximum(Y_pred_norm, 0.0) * (10 ** log10p_pred)[:, None]
@@ -682,7 +662,6 @@ if __name__ == '__main__':
         r2 = 1 - np.sum((yt - yp) ** 2) / np.sum((yt - yt.mean()) ** 2)
         print(f'  {mol}: R² = {r2:.4f}')
 
-        # --- 3 example spectra ---
         wav = res['wav']
         fig, axes = plt.subplots(1, 3, figsize=(10, 3), sharey=True)
         for k, ax in enumerate(axes):

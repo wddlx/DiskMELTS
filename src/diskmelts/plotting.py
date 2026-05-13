@@ -1,13 +1,13 @@
 """
-Package/Plotting.py — Visualise spectral fitting results from Fitting.py.
+diskmelts/plotting.py — Visualise spectral fitting results from fitting.py.
 
 Two public functions:
     plot_fit         : plot observed + model (top panel) and residuals + chi-sq (bottom panel)
-    plot_validation  : scatter plots of predicted vs. true from Validation.py results
+    plot_validation  : scatter plots of predicted vs. true from validation.py results
 
 Typical workflow
 ----------------
-    from Package.Plotting import plot_fit
+    from diskmelts.plotting import plot_fit
 
     obs_wav, obs_flux = ...
     h2o  = fit_nested(obs_wav, obs_flux, 'H2O',  pretrained, fit_ranges=...)
@@ -164,7 +164,6 @@ def plot_fit(
 
     # --- Noise for chi-square ---
     if sigma is None:
-        # Try to get it from results
         for res in results:
             if 'sigma' in res and res['sigma'] is not None:
                 sigma = float(res['sigma'])
@@ -305,7 +304,6 @@ def plot_validation(
     mol_display = _MOL_LABEL.get(mol, mol)
     has_A       = 'log10A_true' in val_results
 
-    # Define which parameters to plot
     if has_A:
         param_meta = [
             ('T_true',       'T_pred',       'T (K)',                   'Temperature'),
@@ -323,7 +321,6 @@ def plot_validation(
 
     n_panels = len(param_meta)
 
-    # --- Build combined outlier mask (>3σ residual in any parameter) ---
     outlier_mask = np.zeros(len(val_results['T_true']), dtype=bool)
     for true_key, pred_key, _, _ in param_meta:
         resid = val_results[pred_key] - val_results[true_key]
@@ -416,7 +413,6 @@ def plot_validation_split(
         fig.suptitle(f'{mol_display} — predicted vs. true', fontsize=11)
 
         for row, (data, row_label) in enumerate(zip(row_data, row_labels)):
-            # Build outlier mask independently per row
             outlier_mask = np.zeros(len(data['T_true']), dtype=bool)
             for true_key, pred_key, _, _ in param_meta:
                 resid = data[pred_key] - data[true_key]

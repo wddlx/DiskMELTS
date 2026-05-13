@@ -1,5 +1,5 @@
 """
-dev_v1_realobs.py
+examples/dev_v1_realobs.py
 Sequential multi-stage spectral fitting for one real continuum-subtracted spectrum.
 
 Each stage fits one molecule or a group of molecules jointly on the running
@@ -8,29 +8,28 @@ After every stage the running residual and cumulative model are saved.
 A final combined plot shows all components on the original spectrum.
 
 Edit the CONFIGURATION block, then run from the repository root:
-    conda run -n data_reduction python Package/dev_v1_realobs.py
+    conda run -n data_reduction python examples/dev_v1_realobs.py
 """
 
 import os
-import sys
-
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from diskmelts.fitting import (
+    load_models, load_observed_spectrum, fit_molecules,
+    save_fit_outputs, detect_stage_molecules,
+    save_running_spectrum, print_fit_params, save_fitted_comparison,
+)
+from diskmelts.plotting import plot_fit
 
-from Fitting import (load_models, load_observed_spectrum, fit_molecules,
-                          save_fit_outputs, detect_stage_molecules,
-                          save_running_spectrum, print_fit_params)
-from Plotting       import plot_fit
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Project root = two levels up from this file (examples/ → repo root)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ===========================================================================
 # CONFIGURATION
 # ===========================================================================
 
-INPUT_PATH = (
-    'Realobs_data/Consub_data/j16142029_v9.0_contsub_RVcorr.csv'
+INPUT_PATH = os.path.join(
+    BASE_DIR, 'Realobs_data', 'Consub_data', 'j16142029_v9.0_contsub_RVcorr.csv'
 )
 NAME = 'J16142029'   # source name used in filenames and plot titles;
                      # set to None to fall back to the input filename stem
@@ -57,7 +56,7 @@ FLUX_COL  = 1
 LINE_FREE_WINDOWS = [(11.45, 11.55), (13.10, 13.20), (15.65, 15.72), (15.90, 15.91)]
 
 # Detection screening: set True to skip molecules whose peak is below threshold
-DETECTION_SCREENING   = True
+DETECTION_SCREENING    = True
 DETECTION_SIGMA_FACTOR = 3.0   # threshold = this × σ_noise
 
 # ---------------------------------------------------------------------------
@@ -93,29 +92,28 @@ STAGES = [
         'loga_bounds':     (-2.0,  2.0),
         'detect_peaks':    [(17.19, 17.25), (17.31, 17.33), (17.49, 17.51)],
     },
-    '''
-    {
-        'name':         'C2H2_HCN',
-        'mol':          ['C2H2', 'HCN'],
-        'fit_ranges':   (12.0, 16.5),
-        'T_bounds':     (200.0, 1300.0),
-        'logN_bounds':  (14.0,  19.0),
-        'loga_bounds':  (-2.0,  2.0),
-        'detect_peaks': {
-            'C2H2': (13.705, 13.715),
-            'HCN':  (13.99,  14.05),
-        },
-    },
-    {
-        'name':         'CO2',
-        'mol':          'CO2',
-        'fit_ranges':   (12.0, 16.5),
-        'T_bounds':     (200.0, 1300.0),
-        'logN_bounds':  (14.0,  19.0),
-        'loga_bounds':  (-2.0,  2.0),
-        'detect_peaks': [(14.935, 14.985)],
-    },
-    '''
+    # Uncomment to add C-molecule stages:
+    # {
+    #     'name':         'C2H2_HCN',
+    #     'mol':          ['C2H2', 'HCN'],
+    #     'fit_ranges':   (12.0, 16.5),
+    #     'T_bounds':     (200.0, 1300.0),
+    #     'logN_bounds':  (14.0,  19.0),
+    #     'loga_bounds':  (-2.0,  2.0),
+    #     'detect_peaks': {
+    #         'C2H2': (13.705, 13.715),
+    #         'HCN':  (13.99,  14.05),
+    #     },
+    # },
+    # {
+    #     'name':         'CO2',
+    #     'mol':          'CO2',
+    #     'fit_ranges':   (12.0, 16.5),
+    #     'T_bounds':     (200.0, 1300.0),
+    #     'logN_bounds':  (14.0,  19.0),
+    #     'loga_bounds':  (-2.0,  2.0),
+    #     'detect_peaks': [(14.935, 14.985)],
+    # },
 ]
 
 # ---------------------------------------------------------------------------
@@ -203,7 +201,6 @@ for stage in STAGES:
     print(f'Stage: {stage_name}')
     print(f'{"=" * 60}')
 
-    # Detection screening — may reduce or empty the molecule list
     detected_mols = detect_stage_molecules(
         obs_wav, residual, stage, sigma_noise,
         screening=DETECTION_SCREENING,
@@ -213,7 +210,6 @@ for stage in STAGES:
         print(f'  Stage {stage_name!r} skipped.')
         continue
 
-    # Collapse single-element list back to a string for fit_molecules
     mol_to_fit = detected_mols[0] if len(detected_mols) == 1 else detected_mols
 
     fit = fit_molecules(
@@ -234,19 +230,15 @@ for stage in STAGES:
         sigma=sigma_noise,
         seed=SEED,
     )
-    # Store the spectrum that was fitted so per-stage plots are self-consistent
     fit['obs_wav']  = obs_wav
     fit['obs_flux'] = residual.copy()
 
-    # Update running state
     residual         = residual - fit['model_flux']
     cumulative_model = cumulative_model + fit['model_flux']
 
-    # Save per-stage fit outputs (spectrum, params, top-list CSVs)
     stage_prefix = f'{OUTPUT_PREFIX}_{stage_name}'
     saved        = save_fit_outputs(fit, OUTPUT_DIR, stage_prefix)
 
-    # Save running residual and cumulative model
     running_path = save_running_spectrum(obs_wav, residual, cumulative_model,
                                          OUTPUT_DIR, stage_prefix)
 
@@ -255,7 +247,6 @@ for stage in STAGES:
         print(f'    {k:8s}: {p}')
     print(f'    running : {running_path}')
 
-    # Per-stage plot — shows the residual that was fitted vs the stage model
     plot_fit(
         obs_wav=obs_wav,
         obs_flux=fit['obs_flux'],
@@ -278,121 +269,11 @@ for stage in STAGES:
 # Final combined plot — all components overlaid on the original spectrum
 # ---------------------------------------------------------------------------
 
-def _save_fitted_comparison(csv_path, source_name, all_fits):
-    """
-    Upsert one row of best-fit parameters into a comparison CSV.
-
-    The CSV schema matches Parameter_Comparison.csv (log10 units for N and A,
-    K for T).  If the file does not exist it is created.  If *source_name* is
-    already present its values are updated in-place; otherwise a new row is
-    appended.
-
-    Args:
-        csv_path (str): path to the comparison CSV.
-        source_name (str): identifier for this source (used as the key).
-        all_fits (dict): stage-name → fit-result dict from the fitting loop.
-    """
-    import pandas as pd
-
-    # Merge params and uncertainty from every completed stage
-    all_params = {}
-    all_unc    = {}
-    for fit in all_fits.values():
-        all_params.update(fit['params'])
-        all_unc.update(fit.get('uncertainty', {}))
-
-    def _v(comp, key):
-        """Best-fit value; '' if component was not fitted."""
-        if comp not in all_params:
-            return ''
-        return round(all_params[comp][key], 4)
-
-    def _e(comp, key, which):
-        """Uncertainty (minus/plus); '' if absent or non-finite."""
-        if comp not in all_unc:
-            return ''
-        v = all_unc[comp].get(key, {}).get(which, float('nan'))
-        return round(v, 4) if np.isfinite(v) else ''
-
-    # Build the flat row matching the CSV column order
-    row = {
-        'Source':               source_name,
-        # ── H2O warm ──────────────────────────────────────────────────────
-        'H2O_N_warm':           _v('H2O_warm', 'logN'),
-        'H2O_N_warm_err_low':   _e('H2O_warm', 'logN',   'minus'),
-        'H2O_N_warm_err_high':  _e('H2O_warm', 'logN',   'plus'),
-        'H2O_N_hot':            _v('H2O_hot',  'logN'),
-        'H2O_N_hot_err_low':    _e('H2O_hot',  'logN',   'minus'),
-        'H2O_N_hot_err_high':   _e('H2O_hot',  'logN',   'plus'),
-        'H2O_T_warm':           _v('H2O_warm', 'T'),
-        'H2O_T_warm_err_low':   _e('H2O_warm', 'T',      'minus'),
-        'H2O_T_warm_err_high':  _e('H2O_warm', 'T',      'plus'),
-        'H2O_T_hot':            _v('H2O_hot',  'T'),
-        'H2O_T_hot_err_low':    _e('H2O_hot',  'T',      'minus'),
-        'H2O_T_hot_err_high':   _e('H2O_hot',  'T',      'plus'),
-        'H2O_A_warm':           _v('H2O_warm', 'log10A'),
-        'H2O_A_warm_err_low':   _e('H2O_warm', 'log10A', 'minus'),
-        'H2O_A_warm_err_high':  _e('H2O_warm', 'log10A', 'plus'),
-        'H2O_A_hot':            _v('H2O_hot',  'log10A'),
-        'H2O_A_hot_err_low':    _e('H2O_hot',  'log10A', 'minus'),
-        'H2O_A_hot_err_high':   _e('H2O_hot',  'log10A', 'plus'),
-        # ── C2H2 ──────────────────────────────────────────────────────────
-        'C2H2_N':               _v('C2H2', 'logN'),
-        'C2H2_N_err_low':       _e('C2H2', 'logN',   'minus'),
-        'C2H2_N_err_high':      _e('C2H2', 'logN',   'plus'),
-        'C2H2_T':               _v('C2H2', 'T'),
-        'C2H2_T_err_low':       _e('C2H2', 'T',      'minus'),
-        'C2H2_T_err_high':      _e('C2H2', 'T',      'plus'),
-        'C2H2_A':               _v('C2H2', 'log10A'),
-        'C2H2_A_err_low':       _e('C2H2', 'log10A', 'minus'),
-        'C2H2_A_err_high':      _e('C2H2', 'log10A', 'plus'),
-        # ── HCN ───────────────────────────────────────────────────────────
-        'HCN_N':                _v('HCN', 'logN'),
-        'HCN_N_err_low':        _e('HCN', 'logN',   'minus'),
-        'HCN_N_err_high':       _e('HCN', 'logN',   'plus'),
-        'HCN_T':                _v('HCN', 'T'),
-        'HCN_T_err_low':        _e('HCN', 'T',      'minus'),
-        'HCN_T_err_high':       _e('HCN', 'T',      'plus'),
-        'HCN_A':                _v('HCN', 'log10A'),
-        'HCN_A_err_low':        _e('HCN', 'log10A', 'minus'),
-        'HCN_A_err_high':       _e('HCN', 'log10A', 'plus'),
-        # ── CO2 ───────────────────────────────────────────────────────────
-        'CO2_N':                _v('CO2', 'logN'),
-        'CO2_N_err_low':        _e('CO2', 'logN',   'minus'),
-        'CO2_N_err_high':       _e('CO2', 'logN',   'plus'),
-        'CO2_T':                _v('CO2', 'T'),
-        'CO2_T_err_low':        _e('CO2', 'T',      'minus'),
-        'CO2_T_err_high':       _e('CO2', 'T',      'plus'),
-        'CO2_A':                _v('CO2', 'log10A'),
-        'CO2_A_err_low':        _e('CO2', 'log10A', 'minus'),
-        'CO2_A_err_high':       _e('CO2', 'log10A', 'plus'),
-    }
-
-    if os.path.exists(csv_path):
-        df   = pd.read_csv(csv_path)
-        mask = df['Source'] == source_name
-        if mask.any():
-            for col, val in row.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-            print(f'  Updated existing row for {source_name!r} in {os.path.basename(csv_path)}')
-        else:
-            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-            print(f'  Appended new row for {source_name!r} to {os.path.basename(csv_path)}')
-    else:
-        df = pd.DataFrame([row])
-        print(f'  Created {os.path.basename(csv_path)} with first row for {source_name!r}')
-
-    df.to_csv(csv_path, index=False)
-
-
 if all_fits:
-    # Save final running state
     final_path = save_running_spectrum(obs_wav, residual, cumulative_model,
                                        OUTPUT_DIR, f'{OUTPUT_PREFIX}_final')
     print(f'\nFinal running spectrum → {final_path}')
 
-    # Merge params and uncertainty from all stages for the annotation box
     combined_params      = {}
     combined_uncertainty = {}
     for fit in all_fits.values():
@@ -412,7 +293,6 @@ if all_fits:
         uncertainty=combined_uncertainty,
     )
 
-    # Save / update fitted parameters in the comparison CSV
-    _save_fitted_comparison(FITTED_CSV, OUTPUT_PREFIX, all_fits)
+    save_fitted_comparison(FITTED_CSV, OUTPUT_PREFIX, all_fits)
 
 print('\nDone.')

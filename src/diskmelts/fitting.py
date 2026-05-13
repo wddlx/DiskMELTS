@@ -1,5 +1,5 @@
 """
-Package/Fitting.py — Spectral fitting with pretrained forward surrogate models.
+diskmelts/fitting.py — Spectral fitting with pretrained forward surrogate models.
 
 This module provides all fitting and model-loading utilities.
 
@@ -32,7 +32,7 @@ import torch
 import scipy.optimize
 from scipy.stats import qmc
 
-from Trainmodel import pretrain_forward_model   # load-only (n_epochs=0)
+from diskmelts.trainmodel import pretrain_forward_model   # load-only (n_epochs=0)
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ def load_models(model_paths, pretrain_csv_paths, wav_ranges, n_pca=None, device=
                                    training (needed to reconstruct scalers and
                                    wavelength axis)
         wav_ranges (dict): mol -> (lo_µm, hi_µm); must match wav_range used
-                           in Trainmodel.pretrain_forward_model
+                           in trainmodel.pretrain_forward_model
         n_pca (int or dict or None): number of PCA components; must match what
                                      was used during training. Pass a dict
                                      {mol: n} for per-molecule values, or a
@@ -345,7 +345,6 @@ def _draw_unit_samples(n_samples, n_dim, method='sobol', seed=None):
     """Draw approximately space-filling samples in [0, 1]^n_dim."""
     method = method.lower()
     if method == 'sobol':
-        # random_base2 is preferred for Sobol balance; draw enough and trim.
         m = int(np.ceil(np.log2(max(n_samples, 2))))
         sampler = qmc.Sobol(d=n_dim, scramble=True, seed=seed)
         return sampler.random_base2(m)[:n_samples]
@@ -615,9 +614,6 @@ def fit_molecules(
         loss = float(np.sum(residual ** 2))
         return loss, A, M
 
-    # ── Gaussian prior on T ──────────────────────────────────────────────────
-    # prior_scale converts dimensionless (ΔT/σ_T)² to Jy² so it is
-    # commensurate with the SSE.  If sigma is unavailable the prior is skipped.
     if T_prior is not None and (sigma is None or sigma <= 0):
         print('  Warning: T_prior supplied but sigma is None or ≤ 0 — prior skipped.')
     _prior_scale = (sigma ** 2
@@ -814,8 +810,6 @@ def save_fit_outputs(result, output_dir, output_prefix):
     Returns:
         dict: output kind -> saved path.
     """
-    import os
-
     os.makedirs(output_dir, exist_ok=True)
 
     spectrum_df = pd.DataFrame({
@@ -903,7 +897,6 @@ def detect_stage_molecules(obs_wav, obs_flux, stage, sigma_noise,
     thr = sigma_factor * sigma_noise
 
     if isinstance(detect_peaks, dict):
-        # Multi-molecule stage: check each molecule against its own peak window.
         detected = []
         for mol in mols:
             if mol not in detect_peaks:
@@ -917,7 +910,6 @@ def detect_stage_molecules(obs_wav, obs_flux, stage, sigma_noise,
                 print(f'  [{mol}] not detected (peak < {sigma_factor:.1f}σ) — excluded')
         return detected
     else:
-        # Single-molecule stage: detected if any listed peak window exceeds threshold.
         for lo, hi in detect_peaks:
             mask = (obs_wav >= lo) & (obs_wav <= hi)
             if mask.any() and np.nanmax(obs_flux[mask]) > thr:
@@ -941,7 +933,6 @@ def save_running_spectrum(obs_wav, residual, cumulative_model, output_dir, prefi
     Returns:
         str: path to the saved CSV.
     """
-    import os
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, f'{prefix}_running.csv')
     pd.DataFrame({
@@ -996,13 +987,11 @@ def save_fitted_comparison(csv_path, source_name, all_fits):
         all_unc.update(fit.get('uncertainty', {}))
 
     def _v(comp, key):
-        """Best-fit value; '' if component was not fitted."""
         if comp not in all_params:
             return ''
         return round(all_params[comp][key], 4)
 
     def _e(comp, key, which):
-        """Uncertainty (minus/plus); '' if absent or non-finite."""
         if comp not in all_unc:
             return ''
         v = all_unc[comp].get(key, {}).get(which, float('nan'))

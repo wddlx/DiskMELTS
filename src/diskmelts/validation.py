@@ -1,5 +1,5 @@
 """
-Package/Validation.py — Validation functions for pretrained forward models.
+diskmelts/validation.py — Validation functions for pretrained forward models.
 
 Two public functions, both operating on a single molecule per call:
 
@@ -13,20 +13,20 @@ Two public functions, both operating on a single molecule per call:
                     Spectra are generated in-memory directly from the model grid.
 
 Both functions return dicts of true and predicted parameter arrays for downstream
-analysis and plotting (see Package/Plotting.py :: plot_validation).
+analysis and plotting (see diskmelts/plotting.py :: plot_validation).
 
 Typical workflow
 ----------------
-    from Package.Fitting import load_models
-    from Package.Trainmodel     import load_model_grid
-    from Package.Validation     import validate_nt, validate_full
-    from Package.Plotting       import plot_validation
+    from diskmelts.fitting import load_models
+    from diskmelts.trainmodel import load_model_grid
+    from diskmelts.validation import validate_nt, validate_full
+    from diskmelts.plotting import plot_validation
 
     pretrained = load_models(model_paths, pretrain_csv_paths, wav_ranges)
     models_h2o = load_model_grid('Model_grids/H2O')
 
     nt   = validate_nt('H2O', pretrained,
-                       pretrain_csv='data/processed/pretrain_H2O_11to19_filtered.csv',
+                       pretrain_csv='Pretrain_grid/pretrain_H2O_11to19.csv',
                        fit_ranges=[(11.0, 12.0), (17.0, 18.5)])
     full = validate_full('H2O', models_h2o, pretrained,
                          fit_ranges=[(11.0, 12.0), (17.0, 18.5)])
@@ -40,7 +40,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from Fitting import fit_nested
+from diskmelts.fitting import fit_nested
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,6 @@ def _fit_only_nt(
     Recover T and logN only by jointly matching the peak-normalised spectral
     shape and the log10(peak flux) through the two-MLP forward model.
 
-    This is a direct port of optimize_T_logN_shape_peak from fit_onlyNT.py.
     Uses multi-start Adam gradient descent operating in standardised parameter
     space — no A is fitted.  wav_fit must be a subset of pretrained_mol['wav'].
 
@@ -183,7 +182,7 @@ def validate_nt(
     """
     Validate T and logN retrieval on pretrain grid spectra with A=1.
 
-    Uses the same gradient-based Adam optimizer as fit_onlyNT.py: jointly
+    Uses the same gradient-based Adam optimizer as the NT-only fitter: jointly
     matches the peak-normalised spectral shape (net_shape output) and the
     log10(peak flux) (net_peak output).  No A is fitted.  This works directly
     in the two-MLP representation space and is much more accurate for NT-only
@@ -217,7 +216,6 @@ def validate_nt(
     flux_cols = [c for c in df.columns if c.startswith('wav_')]
     wav_pre   = np.array([float(c[4:]) for c in flux_cols])
 
-    # Restrict to fitting domain
     df = df[
         (df[f'{mol}_T']    >= T_bounds[0])    & (df[f'{mol}_T']    <= T_bounds[1]) &
         (df[f'{mol}_logN'] >= logN_bounds[0]) & (df[f'{mol}_logN'] <= logN_bounds[1])
@@ -226,7 +224,6 @@ def validate_nt(
     n = int(len(df) * frac) if n_samples is None else min(n_samples, len(df))
     df_sample = df.sample(n=n, random_state=seed).reset_index(drop=True)
 
-    # Build wav_fit as a subset of the model's native wavelength grid
     wav_net = pretrained[mol]['wav']
     ranges  = [fit_ranges] if isinstance(fit_ranges[0], (int, float)) else list(fit_ranges)
     fit_mask_net = np.zeros(len(wav_net), dtype=bool)
@@ -244,7 +241,7 @@ def validate_nt(
         log10p = float(row[f'{mol}_log10_peak'])
 
         norm_flux    = row[flux_cols].to_numpy(dtype=np.float32)
-        obs_norm_fit = np.interp(wav_fit, wav_pre, norm_flux)  # onto model grid
+        obs_norm_fit = np.interp(wav_fit, wav_pre, norm_flux)
 
         T_p, logN_p = _fit_only_nt(
             obs_norm_fit, log10p, wav_fit, pretrained[mol],
@@ -283,9 +280,8 @@ def validate_nt_holdout(
     pretrain CSV (unseen during training).
 
     For each holdout (T, logN) key the physical flux is taken directly from
-    the model grid, peak-normalised, and passed to _fit_only_nt — the same
-    Adam-based optimizer used in validate_nt.  This gives an honest estimate
-    of generalisation to unseen grid points.
+    the model grid, peak-normalised, and passed to the Adam-based NT optimizer.
+    This gives an honest estimate of generalisation to unseen grid points.
 
     Args:
         mol (str): molecule name, e.g. 'H2O', 'C2H2'
@@ -325,11 +321,10 @@ def validate_nt_holdout(
         wav_model  = models[key]['wavelength']
         flux_model = models[key]['flux']
 
-        # Interpolate onto the model's native wavelength grid
         flux_interp = np.interp(wav_net, wav_model, flux_model)
         peak = np.abs(flux_interp).max()
         if peak <= 0:
-            continue   # skip dark/zero models
+            continue
 
         norm_flux    = flux_interp / peak
         log10_peak   = np.log10(float(peak))
