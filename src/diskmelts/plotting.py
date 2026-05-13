@@ -108,9 +108,9 @@ def plot_fit(
     """
     Two-panel spectral fit figure.
 
-    Top panel   : observed spectrum + total model + per-molecule components,
-                  with an optional parameter text box showing T, logN, log10A ± errors.
-    Bottom panel: residual (obs - total model) with ±1σ band and reduced χ²
+    The top panel shows the observed spectrum, total model, and per-molecule
+    components with an optional parameter text box (T, logN, log10A ± errors).
+    The bottom panel shows the residual with a ±1σ band and reduced χ².
 
     Args:
         obs_wav (np.ndarray): observed wavelength axis in µm

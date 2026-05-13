@@ -91,7 +91,7 @@ def generate_pre_training_set(
         wav_out (np.ndarray or None): common wavelength grid in µm; defaults
                                       to the wavelength axis of the first model
         noise_scale (float): Gaussian noise std as a fraction of each model's
-                             peak |flux|; 0.0 for noise-free output (default 0.0)
+                             peak flux magnitude; 0.0 for noise-free output (default 0.0)
         n_noise (int): number of independent noise realisations per grid point;
                        total rows = n_grid_points × n_noise (default 1)
         seed (int or None): random seed for reproducibility
@@ -200,10 +200,10 @@ def pretrain_forward_model(
     """
     Train (or load) the two-MLP forward model for one molecule.
 
-    Two sub-models are trained independently from the same pretrain CSV:
-        net_shape : (T, logN) → n_pca PCA coefficients of the peak-normalised
-                    spectral shape
-        net_peak  : (T, logN) → log10(peak flux)  [scalar]
+    Two sub-models are trained independently from the same pretrain CSV.
+    ``net_shape`` maps (T, logN) to n_pca PCA coefficients of the
+    peak-normalised spectral shape; ``net_peak`` maps (T, logN) to
+    log10(peak flux).
 
     If model_path already exists the checkpoint is loaded and training is
     skipped entirely.  After training the checkpoint is saved to model_path.

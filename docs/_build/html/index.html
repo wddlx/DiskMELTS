@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DiskMELTS &mdash; DiskMELTS 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            DiskMELTS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/trainmodel.html">diskmelts.trainmodel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/fitting.html">diskmelts.fitting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/validation.html">diskmelts.validation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/plotting.html">diskmelts.plotting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">DiskMELTS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">DiskMELTS</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="diskmelts">
+<h1>DiskMELTS<a class="headerlink" href="#diskmelts" title="Permalink to this heading"></a></h1>
+<p><strong>Machine-learning Enabled Line fitting Tool for Spectra</strong></p>
+<p>DiskMELTS is a neural surrogate-assisted framework for retrieving molecular gas
+parameters — temperature ($T$), column density ($\log N$), and emitting area ($A$) —
+from JWST mid-IR spectra (11–19 µm) of protoplanetary disks.</p>
+<hr class="docutils" />
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Permalink to this heading"></a></h2>
+<p>Each molecule is represented by two small MLPs trained on slab-model grids:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">net_shape</span></code> : $(T, \log N)$ → peak-normalised spectral shape (via PCA)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">net_peak</span></code>  : $(T, \log N)$ → $\log_{10}(\text{peak flux})$</p></li>
+</ul>
+<p>Retrieval is done by optimisation through the forward models, not by inverting
+them, which keeps the problem well-posed for any combination of molecules.</p>
+<hr class="docutils" />
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#install-from-source">Install from source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#conda-environment-recommended">Conda environment (recommended)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#verify">Verify</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#workflow-overview">Workflow overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#train-a-forward-model">1. Train a forward model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#validate-the-forward-model">2. Validate the forward model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#fit-a-real-spectrum">3. Fit a real spectrum</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#forward-model-convention">Forward model convention</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/trainmodel.html">diskmelts.trainmodel</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/trainmodel.html#diskmelts.trainmodel.load_model_grid"><code class="docutils literal notranslate"><span class="pre">load_model_grid()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/trainmodel.html#diskmelts.trainmodel.generate_pre_training_set"><code class="docutils literal notranslate"><span class="pre">generate_pre_training_set()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/trainmodel.html#diskmelts.trainmodel.pretrain_forward_model"><code class="docutils literal notranslate"><span class="pre">pretrain_forward_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/fitting.html">diskmelts.fitting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/fitting.html#loading-models">Loading models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/fitting.html#generating-spectra">Generating spectra</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/fitting.html#fitting">Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/fitting.html#i-o-helpers">I/O helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/validation.html">diskmelts.validation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/validation.html#diskmelts.validation.validate_nt"><code class="docutils literal notranslate"><span class="pre">validate_nt()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/validation.html#diskmelts.validation.validate_nt_holdout"><code class="docutils literal notranslate"><span class="pre">validate_nt_holdout()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/validation.html#diskmelts.validation.validate_full"><code class="docutils literal notranslate"><span class="pre">validate_full()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/plotting.html">diskmelts.plotting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/plotting.html#spectral-fit-plot">Spectral fit plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/plotting.html#validation-plots">Validation plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/plotting.html#molecule-colour-convention">Molecule colour convention</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>diskmelts.fitting &mdash; DiskMELTS 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            DiskMELTS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/trainmodel.html">diskmelts.trainmodel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/fitting.html">diskmelts.fitting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/validation.html">diskmelts.validation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/plotting.html">diskmelts.plotting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">DiskMELTS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">diskmelts.fitting</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for diskmelts.fitting</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">diskmelts/fitting.py — Spectral fitting with pretrained forward surrogate models.</span>
+
+<span class="sd">This module provides all fitting and model-loading utilities.</span>
+
+<span class="sd">Forward model convention:</span>
+<span class="sd">    flux = A * peak(T, logN) * shape(T, logN)</span>
+
+<span class="sd">Global-to-local search strategy in fit_molecules:</span>
+<span class="sd">1. Draw Sobol or Latin-hypercube samples over all nonlinear parameters (T, logN).</span>
+<span class="sd">2. For each nonlinear trial, solve all linear amplitudes A together with NNLS.</span>
+<span class="sd">3. Keep the best distinct candidates and refine them with L-BFGS-B.</span>
+
+<span class="sd">Public functions</span>
+<span class="sd">----------------</span>
+<span class="sd">    load_models          : load per-molecule .pt checkpoints from disk</span>
+<span class="sd">    generate_spectrum    : evaluate (T, logN, A) → flux via the two-MLP forward model</span>
+<span class="sd">    fit_nested           : single-molecule retrieval via random-restart L-BFGS-B + NNLS</span>
+<span class="sd">    fit_molecules        : multi-molecule global Sobol search + L-BFGS-B refinement</span>
+<span class="sd">    load_observed_spectrum: load a continuum-subtracted spectrum from CSV</span>
+<span class="sd">    detect_stage_molecules: screen for molecular detections above a noise threshold</span>
+<span class="sd">    save_fit_outputs     : write best-fit CSV, top-list CSV, and spectrum to disk</span>
+<span class="sd">    save_running_spectrum: write residual / running-model spectrum to disk</span>
+<span class="sd">    print_fit_params     : pretty-print best-fit parameters and uncertainties</span>
+<span class="sd">    save_fitted_comparison: upsert best-fit parameters into a comparison CSV</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.optimize</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">qmc</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts.trainmodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">pretrain_forward_model</span>   <span class="c1"># load-only (n_epochs=0)</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Module-level defaults</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="n">_DEFAULT_T_BOUNDS</span>    <span class="o">=</span> <span class="p">(</span><span class="mf">200.0</span><span class="p">,</span> <span class="mf">1400.0</span><span class="p">)</span>
+<span class="n">_DEFAULT_LOGN_BOUNDS</span> <span class="o">=</span> <span class="p">(</span><span class="mf">14.0</span><span class="p">,</span>  <span class="mf">19.0</span><span class="p">)</span>
+<span class="n">_DEFAULT_LOGA_BOUNDS</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Internal spectral helpers (forward model evaluation)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wav_mask</span><span class="p">(</span><span class="n">wav</span><span class="p">,</span> <span class="n">ranges</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Boolean mask for wavelengths within any of the given (lo, hi) ranges.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ranges</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="n">ranges</span> <span class="o">=</span> <span class="p">[</span><span class="n">ranges</span><span class="p">]</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">wav</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">lo</span><span class="p">,</span> <span class="n">hi</span> <span class="ow">in</span> <span class="n">ranges</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">|=</span> <span class="p">(</span><span class="n">wav</span> <span class="o">&gt;=</span> <span class="n">lo</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">wav</span> <span class="o">&lt;=</span> <span class="n">hi</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mask</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mol_flux_on_wav</span><span class="p">(</span><span class="n">pretrained_mol</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">logN</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">wav_grid</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluate one molecule&#39;s two-MLP forward model at (T, logN, A).</span>
+
+<span class="sd">    The model is evaluated on its native wavelength axis then interpolated onto</span>
+<span class="sd">    wav_grid, so wav_grid can have any sampling.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        pretrained_mol (dict): single-molecule entry from load_models</span>
+<span class="sd">        T (float): temperature in K</span>
+<span class="sd">        logN (float): log10 column density</span>
+<span class="sd">        A (float): linear area-scaling factor</span>
+<span class="sd">        wav_grid (np.ndarray): output wavelength grid in µm (any sampling)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (np.ndarray): model flux on wav_grid (Jy)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">net_shape</span>   <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;net_shape&#39;</span><span class="p">]</span>
+    <span class="n">net_peak</span>    <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;net_peak&#39;</span><span class="p">]</span>
+    <span class="n">xp_sc</span>       <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;xp_sc&#39;</span><span class="p">]</span>
+    <span class="n">yp_sc_shape</span> <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;yp_sc_shape&#39;</span><span class="p">]</span>
+    <span class="n">yp_sc_peak</span>  <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;yp_sc_peak&#39;</span><span class="p">]</span>
+    <span class="n">pca</span>         <span class="o">=</span> <span class="n">pretrained_mol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pca&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">wav_net</span>     <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;wav&#39;</span><span class="p">]</span>
+    <span class="n">device</span>      <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">net_shape</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="n">T_s</span>    <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">T</span>    <span class="o">-</span> <span class="n">xp_sc</span><span class="o">.</span><span class="n">mean_</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="n">xp_sc</span><span class="o">.</span><span class="n">scale_</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">logN_s</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">logN</span> <span class="o">-</span> <span class="n">xp_sc</span><span class="o">.</span><span class="n">mean_</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="n">xp_sc</span><span class="o">.</span><span class="n">scale_</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">x_s</span>    <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="n">T_s</span><span class="p">,</span> <span class="n">logN_s</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="n">net_shape</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+    <span class="n">net_peak</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="n">z_shape_s</span> <span class="o">=</span> <span class="n">net_shape</span><span class="p">(</span><span class="n">x_s</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">z_peak_s</span>  <span class="o">=</span> <span class="n">net_peak</span><span class="p">(</span><span class="n">x_s</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+    <span class="n">shape</span>  <span class="o">=</span> <span class="n">z_shape_s</span> <span class="o">*</span> <span class="n">yp_sc_shape</span><span class="o">.</span><span class="n">scale_</span> <span class="o">+</span> <span class="n">yp_sc_shape</span><span class="o">.</span><span class="n">mean_</span>
+    <span class="n">log10p</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">z_peak_s</span> <span class="o">*</span> <span class="n">yp_sc_peak</span><span class="o">.</span><span class="n">scale_</span> <span class="o">+</span> <span class="n">yp_sc_peak</span><span class="o">.</span><span class="n">mean_</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">pca</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">pca</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">flux_net</span> <span class="o">=</span> <span class="n">A</span> <span class="o">*</span> <span class="p">(</span><span class="mf">10.0</span> <span class="o">**</span> <span class="n">log10p</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">wav_grid</span><span class="p">,</span> <span class="n">wav_net</span><span class="p">,</span> <span class="n">flux_net</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Public: load models and generate spectra</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="load_models"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.load_models">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">load_models</span><span class="p">(</span><span class="n">model_paths</span><span class="p">,</span> <span class="n">pretrain_csv_paths</span><span class="p">,</span> <span class="n">wav_ranges</span><span class="p">,</span> <span class="n">n_pca</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load pretrained per-molecule forward models from disk.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model_paths (dict): mol -&gt; path to the .pt checkpoint file</span>
+<span class="sd">        pretrain_csv_paths (dict): mol -&gt; path to the pretrain CSV used during</span>
+<span class="sd">                                   training (needed to reconstruct scalers and</span>
+<span class="sd">                                   wavelength axis)</span>
+<span class="sd">        wav_ranges (dict): mol -&gt; (lo_µm, hi_µm); must match wav_range used</span>
+<span class="sd">                           in trainmodel.pretrain_forward_model</span>
+<span class="sd">        n_pca (int or dict or None): number of PCA components; must match what</span>
+<span class="sd">                                     was used during training. Pass a dict</span>
+<span class="sd">                                     {mol: n} for per-molecule values, or a</span>
+<span class="sd">                                     single int for all molecules.</span>
+<span class="sd">        device (torch.device or None): auto-selects CUDA if available</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (dict): mol -&gt; pretrained dict with keys</span>
+<span class="sd">                &#39;net_shape&#39;, &#39;net_peak&#39;, &#39;xp_sc&#39;, &#39;yp_sc_shape&#39;,</span>
+<span class="sd">                &#39;yp_sc_peak&#39;, &#39;pca&#39;, &#39;wav&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda&#39;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
+    <span class="n">pretrained</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">model_paths</span><span class="p">:</span>
+        <span class="n">mol_n_pca</span> <span class="o">=</span> <span class="n">n_pca</span><span class="p">[</span><span class="n">mol</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_pca</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="n">n_pca</span>
+        <span class="n">kw</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">mol_n_pca</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{</span><span class="s1">&#39;n_pca&#39;</span><span class="p">:</span> <span class="n">mol_n_pca</span><span class="p">}</span>
+        <span class="n">pretrained</span><span class="p">[</span><span class="n">mol</span><span class="p">]</span> <span class="o">=</span> <span class="n">pretrain_forward_model</span><span class="p">(</span>
+            <span class="n">mol</span><span class="o">=</span><span class="n">mol</span><span class="p">,</span>
+            <span class="n">pretrain_csv</span><span class="o">=</span><span class="n">pretrain_csv_paths</span><span class="p">[</span><span class="n">mol</span><span class="p">],</span>
+            <span class="n">wav_range</span><span class="o">=</span><span class="n">wav_ranges</span><span class="p">[</span><span class="n">mol</span><span class="p">],</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">n_epochs</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">model_path</span><span class="o">=</span><span class="n">model_paths</span><span class="p">[</span><span class="n">mol</span><span class="p">],</span>
+            <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kw</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  Loaded </span><span class="si">{</span><span class="n">mol</span><span class="si">}</span><span class="s1"> from </span><span class="si">{</span><span class="n">model_paths</span><span class="p">[</span><span class="n">mol</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pretrained</span></div>
+
+
+<div class="viewcode-block" id="generate_spectrum"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.generate_spectrum">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">generate_spectrum</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">logN</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">pretrained_mol</span><span class="p">,</span> <span class="n">obs_wav</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate a model spectrum for one molecule using the two-MLP forward model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        T (float): temperature in K</span>
+<span class="sd">        logN (float): log10 column density</span>
+<span class="sd">        A (float): linear area-scaling factor</span>
+<span class="sd">        pretrained_mol (dict): single-molecule pretrained dict, e.g. pretrained[&#39;H2O&#39;]</span>
+<span class="sd">        obs_wav (np.ndarray or None): output wavelength grid in µm; if None,</span>
+<span class="sd">                                      returns flux on the model&#39;s native grid</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (np.ndarray): model flux in Jy on obs_wav (or native grid if None)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">obs_wav</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">obs_wav</span> <span class="o">=</span> <span class="n">pretrained_mol</span><span class="p">[</span><span class="s1">&#39;wav&#39;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">_mol_flux_on_wav</span><span class="p">(</span><span class="n">pretrained_mol</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">logN</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">obs_wav</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="fit_nested"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.fit_nested">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">fit_nested</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">obs_flux</span><span class="p">,</span>
+    <span class="n">mol</span><span class="p">,</span>
+    <span class="n">pretrained</span><span class="p">,</span>
+    <span class="n">fit_ranges</span><span class="p">,</span>
+    <span class="n">T_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">logN_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">loga_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_restarts</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">n_top</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieve (T, logN, A) for one molecule via nested L-BFGS-B + NNLS optimisation.</span>
+
+<span class="sd">    Outer loop: scipy L-BFGS-B over (T, logN).</span>
+<span class="sd">    Inner loop: scipy NNLS solves for A (enforces A ≥ 0).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        obs_wav (np.ndarray): observed wavelength axis in µm</span>
+<span class="sd">        obs_flux (np.ndarray): observed flux in Jy</span>
+<span class="sd">        mol (str): molecule name, e.g. &#39;H2O&#39;, &#39;C2H2&#39;</span>
+<span class="sd">        pretrained (dict): output of load_models</span>
+<span class="sd">        fit_ranges: (lo, hi) or [(lo1,hi1), (lo2,hi2)] µm</span>
+<span class="sd">        T_bounds (tuple or None): (T_min, T_max) K (default (200, 1400))</span>
+<span class="sd">        logN_bounds (tuple or None): (logN_min, logN_max) (default (14, 19))</span>
+<span class="sd">        loga_bounds (tuple or None): (log10A_min, log10A_max) (default None = no upper limit)</span>
+<span class="sd">        n_restarts (int): number of random L-BFGS-B restarts (default 20)</span>
+<span class="sd">        n_top (int): if &gt; 1, include top-n restart solutions in &#39;top_list&#39;</span>
+<span class="sd">        seed (int or None): random seed</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (dict) with keys:</span>
+<span class="sd">            &#39;params&#39;     : {&#39;T&#39;, &#39;logN&#39;, &#39;A&#39;} — best-fit parameters</span>
+<span class="sd">            &#39;model_flux&#39; : np.ndarray on obs_wav — model spectrum</span>
+<span class="sd">            &#39;residual&#39;   : np.ndarray on obs_wav — obs_flux minus model_flux</span>
+<span class="sd">            &#39;top_list&#39;   : list of dicts (only present when n_top &gt; 1)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">obs_wav</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span>  <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">obs_flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">obs_flux</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">T_bounds</span>    <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">T_bounds</span>    <span class="o">=</span> <span class="n">_DEFAULT_T_BOUNDS</span>
+    <span class="k">if</span> <span class="n">logN_bounds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">logN_bounds</span> <span class="o">=</span> <span class="n">_DEFAULT_LOGN_BOUNDS</span>
+
+    <span class="k">if</span> <span class="n">loga_bounds</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_A_lo</span> <span class="o">=</span> <span class="mf">10.0</span> <span class="o">**</span> <span class="n">loga_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">_A_hi</span> <span class="o">=</span> <span class="mf">10.0</span> <span class="o">**</span> <span class="n">loga_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">_A_lo</span><span class="p">,</span> <span class="n">_A_hi</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+    <span class="n">fit_mask</span> <span class="o">=</span> <span class="n">_wav_mask</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">fit_ranges</span><span class="p">)</span>
+    <span class="n">wav_fit</span>  <span class="o">=</span> <span class="n">obs_wav</span><span class="p">[</span><span class="n">fit_mask</span><span class="p">]</span>
+    <span class="n">obs_fit</span>  <span class="o">=</span> <span class="n">obs_flux</span><span class="p">[</span><span class="n">fit_mask</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_nnls_step</span><span class="p">(</span><span class="n">x0</span><span class="p">):</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">_mol_flux_on_wav</span><span class="p">(</span><span class="n">pretrained</span><span class="p">[</span><span class="n">mol</span><span class="p">],</span> <span class="n">x0</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x0</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">wav_fit</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">_A_hi</span><span class="p">):</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">lsq_linear</span><span class="p">(</span><span class="n">spec</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">obs_fit</span><span class="p">,</span>
+                                            <span class="n">bounds</span><span class="o">=</span><span class="p">([</span><span class="n">_A_lo</span><span class="p">],</span> <span class="p">[</span><span class="n">_A_hi</span><span class="p">]))</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">A_vec</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">nnls</span><span class="p">(</span><span class="n">spec</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">obs_fit</span><span class="p">)</span>
+            <span class="n">A</span>        <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">A_vec</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">resid</span> <span class="o">=</span> <span class="n">obs_fit</span> <span class="o">-</span> <span class="n">spec</span> <span class="o">*</span> <span class="n">A</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">resid</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)),</span> <span class="n">A</span>
+
+    <span class="n">bounds</span>  <span class="o">=</span> <span class="p">[</span><span class="n">T_bounds</span><span class="p">,</span> <span class="n">logN_bounds</span><span class="p">]</span>
+    <span class="n">all_res</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_restarts</span><span class="p">):</span>
+        <span class="n">x0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">*</span><span class="n">T_bounds</span><span class="p">),</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">*</span><span class="n">logN_bounds</span><span class="p">)])</span>
+        <span class="n">opt</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">_nnls_step</span><span class="p">(</span><span class="n">p</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x0</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;L-BFGS-B&#39;</span><span class="p">,</span> <span class="n">bounds</span><span class="o">=</span><span class="n">bounds</span><span class="p">)</span>
+        <span class="n">loss</span><span class="p">,</span> <span class="n">A</span> <span class="o">=</span> <span class="n">_nnls_step</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">all_res</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">loss</span><span class="p">,</span> <span class="n">opt</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">A</span><span class="p">))</span>
+    <span class="n">all_res</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">_</span><span class="p">,</span> <span class="n">best_x</span><span class="p">,</span> <span class="n">best_A</span> <span class="o">=</span> <span class="n">all_res</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">params</span>     <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">best_x</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s1">&#39;logN&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">best_x</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">best_A</span><span class="p">)}</span>
+    <span class="n">model_flux</span> <span class="o">=</span> <span class="n">_mol_flux_on_wav</span><span class="p">(</span><span class="n">pretrained</span><span class="p">[</span><span class="n">mol</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;logN&#39;</span><span class="p">],</span>
+                                   <span class="n">params</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">],</span> <span class="n">obs_wav</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;mol&#39;</span><span class="p">:</span>        <span class="n">mol</span><span class="p">,</span>
+        <span class="s1">&#39;params&#39;</span><span class="p">:</span>     <span class="n">params</span><span class="p">,</span>
+        <span class="s1">&#39;model_flux&#39;</span><span class="p">:</span> <span class="n">model_flux</span><span class="p">,</span>
+        <span class="s1">&#39;residual&#39;</span><span class="p">:</span>   <span class="n">obs_flux</span> <span class="o">-</span> <span class="n">model_flux</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">n_top</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">top_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">all_res</span><span class="p">[:</span><span class="n">n_top</span><span class="p">]):</span>
+            <span class="n">top_list</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s1">&#39;rank&#39;</span><span class="p">:</span> <span class="n">rank</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;mse_loss&#39;</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
+                <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s1">&#39;logN&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">A</span><span class="p">),</span>
+            <span class="p">})</span>
+        <span class="n">result</span><span class="p">[</span><span class="s1">&#39;top_list&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">top_list</span>
+    <span class="k">return</span> <span class="n">result</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_as_list</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return x as a list, treating strings as one item.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">x</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_range_list</span><span class="p">(</span><span class="n">ranges</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a single (lo, hi) range or a list of ranges.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ranges</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">ranges</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">ranges</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_union_ranges</span><span class="p">(</span><span class="n">ranges</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deduplicate wavelength ranges while preserving order.&quot;&quot;&quot;</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">ranges</span><span class="p">:</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_components</span><span class="p">(</span><span class="n">molecules</span><span class="p">,</span> <span class="n">h2o_components</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">component_names</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Expand molecule names into fitted components.</span>
+
+<span class="sd">    Each component has a unique label and a model_mol key.  For two-component</span>
+<span class="sd">    water, both components use model_mol=&#39;H2O&#39; but have labels H2O_1/H2O_2.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">molecules</span> <span class="o">=</span> <span class="n">_as_list</span><span class="p">(</span><span class="n">molecules</span><span class="p">)</span>
+    <span class="n">components</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">molecules</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">mol</span> <span class="o">==</span> <span class="s1">&#39;H2O&#39;</span> <span class="ow">and</span> <span class="n">h2o_components</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">components</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span>
+                <span class="p">{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;H2O_1&#39;</span><span class="p">,</span> <span class="s1">&#39;model_mol&#39;</span><span class="p">:</span> <span class="s1">&#39;H2O&#39;</span><span class="p">},</span>
+                <span class="p">{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;H2O_2&#39;</span><span class="p">,</span> <span class="s1">&#39;model_mol&#39;</span><span class="p">:</span> <span class="s1">&#39;H2O&#39;</span><span class="p">},</span>
+            <span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">mol</span><span class="p">,</span> <span class="s1">&#39;model_mol&#39;</span><span class="p">:</span> <span class="n">mol</span><span class="p">})</span>
+
+    <span class="k">if</span> <span class="n">component_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">component_names</span> <span class="o">=</span> <span class="n">_as_list</span><span class="p">(</span><span class="n">component_names</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">component_names</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;component_names must match the number of fitted components&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">comp</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">components</span><span class="p">,</span> <span class="n">component_names</span><span class="p">):</span>
+            <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">label</span>
+    <span class="k">return</span> <span class="n">components</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fit_ranges_for_components</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">,</span> <span class="n">components</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build a joint fitting range from either a shared range/list or mol -&gt; ranges.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span>
+            <span class="n">mol</span> <span class="o">=</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">fit_ranges</span><span class="p">:</span>
+                <span class="n">ranges</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">_range_list</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">[</span><span class="n">label</span><span class="p">]))</span>
+            <span class="k">elif</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">fit_ranges</span><span class="p">:</span>
+                <span class="n">ranges</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">_range_list</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">[</span><span class="n">mol</span><span class="p">]))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;fit_ranges has no entry for </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s1"> or </span><span class="si">{</span><span class="n">mol</span><span class="si">!r}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_union_ranges</span><span class="p">(</span><span class="n">ranges</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_range_list</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_draw_unit_samples</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dim</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;sobol&#39;</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Draw approximately space-filling samples in [0, 1]^n_dim.&quot;&quot;&quot;</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;sobol&#39;</span><span class="p">:</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="mi">2</span><span class="p">))))</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">qmc</span><span class="o">.</span><span class="n">Sobol</span><span class="p">(</span><span class="n">d</span><span class="o">=</span><span class="n">n_dim</span><span class="p">,</span> <span class="n">scramble</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler</span><span class="o">.</span><span class="n">random_base2</span><span class="p">(</span><span class="n">m</span><span class="p">)[:</span><span class="n">n_samples</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;latin&#39;</span><span class="p">,</span> <span class="s1">&#39;lhs&#39;</span><span class="p">,</span> <span class="s1">&#39;latin_hypercube&#39;</span><span class="p">):</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">qmc</span><span class="o">.</span><span class="n">LatinHypercube</span><span class="p">(</span><span class="n">d</span><span class="o">=</span><span class="n">n_dim</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;random&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span><span class="o">.</span><span class="n">random</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dim</span><span class="p">))</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;sample_method must be &#39;sobol&#39;, &#39;latin_hypercube&#39;, or &#39;random&#39;&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_scale_unit_samples</span><span class="p">(</span><span class="n">unit</span><span class="p">,</span> <span class="n">bounds</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scale unit-cube samples to physical bounds.&quot;&quot;&quot;</span>
+    <span class="n">lows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bounds</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">highs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bounds</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">lows</span> <span class="o">+</span> <span class="n">unit</span> <span class="o">*</span> <span class="p">(</span><span class="n">highs</span> <span class="o">-</span> <span class="n">lows</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_ordered_water</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">components</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Require increasing T for duplicated H2O components to reduce label switching.&quot;&quot;&quot;</span>
+    <span class="n">h2o_idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="k">if</span> <span class="n">c</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;H2O&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">h2o_idx</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="n">temps</span> <span class="o">=</span> <span class="p">[</span><span class="n">params</span><span class="p">[</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">h2o_idx</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">t1</span> <span class="o">&lt;=</span> <span class="n">t2</span> <span class="k">for</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">temps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">temps</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_distinct_solutions</span><span class="p">(</span><span class="n">solutions</span><span class="p">,</span> <span class="n">n_keep</span><span class="p">,</span> <span class="n">components</span><span class="p">,</span> <span class="n">min_distance</span><span class="o">=</span><span class="mf">0.03</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Keep top solutions that are separated in normalized nonlinear parameter space.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">n_keep</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">kept</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">sol</span> <span class="ow">in</span> <span class="n">solutions</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">kept</span><span class="p">:</span>
+            <span class="n">kept</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sol</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">sol</span><span class="p">[</span><span class="s1">&#39;x_scaled&#39;</span><span class="p">]</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="n">k</span><span class="p">[</span><span class="s1">&#39;x_scaled&#39;</span><span class="p">])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">))</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">kept</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">min_distance</span><span class="p">:</span>
+            <span class="n">kept</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sol</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kept</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">n_keep</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="k">return</span> <span class="n">kept</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_weighted_quantile</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">quantiles</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute weighted quantiles for one-dimensional values.&quot;&quot;&quot;</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">quantiles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">quantiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">quantiles</span><span class="p">)</span>
+
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">weights</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">quantiles</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
+    <span class="n">cdf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+    <span class="n">cdf</span> <span class="o">=</span> <span class="n">cdf</span> <span class="o">/</span> <span class="n">cdf</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">quantiles</span><span class="p">,</span> <span class="n">cdf</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_top_list_uncertainty</span><span class="p">(</span><span class="n">top_list</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Summarize parameter uncertainty from retained top solutions.</span>
+
+<span class="sd">    If sigma is provided, solutions are weighted as exp(-0.5 * delta_sse/sigma^2).</span>
+<span class="sd">    Otherwise the 16/50/84 percentiles are unweighted.  This is an exploration</span>
+<span class="sd">    uncertainty from the global search, not a full posterior sample.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">top_list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="n">sigma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">sigma</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">losses</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;mse_loss&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">top_list</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">losses</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">(</span><span class="n">losses</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">delta</span> <span class="o">/</span> <span class="n">sigma</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">labels</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">top_list</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;params&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">uncertainty</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="n">uncertainty</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">):</span>
+            <span class="n">vals</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">][</span><span class="n">label</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">top_list</span> <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">s</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]]</span>
+            <span class="n">q16</span><span class="p">,</span> <span class="n">q50</span><span class="p">,</span> <span class="n">q84</span> <span class="o">=</span> <span class="n">_weighted_quantile</span><span class="p">(</span><span class="n">vals</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.16</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">,</span> <span class="mf">0.84</span><span class="p">],</span> <span class="n">weights</span><span class="p">)</span>
+            <span class="n">uncertainty</span><span class="p">[</span><span class="n">label</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;q16&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">q16</span><span class="p">),</span>
+                <span class="s1">&#39;q50&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">q50</span><span class="p">),</span>
+                <span class="s1">&#39;q84&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">q84</span><span class="p">),</span>
+                <span class="s1">&#39;minus&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">q50</span> <span class="o">-</span> <span class="n">q16</span><span class="p">),</span>
+                <span class="s1">&#39;plus&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">q84</span> <span class="o">-</span> <span class="n">q50</span><span class="p">),</span>
+            <span class="p">}</span>
+    <span class="k">return</span> <span class="n">uncertainty</span>
+
+
+<div class="viewcode-block" id="fit_molecules"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.fit_molecules">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">fit_molecules</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">obs_flux</span><span class="p">,</span>
+    <span class="n">mol</span><span class="p">,</span>
+    <span class="n">pretrained</span><span class="p">,</span>
+    <span class="n">fit_ranges</span><span class="p">,</span>
+    <span class="n">h2o_components</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">component_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">T_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">logN_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">loga_bounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span>
+    <span class="n">sample_method</span><span class="o">=</span><span class="s1">&#39;sobol&#39;</span><span class="p">,</span>
+    <span class="n">n_refine</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">n_top</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">distinct_min_distance</span><span class="o">=</span><span class="mf">0.03</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">T_prior</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">T_prior_log10</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fit one or more selected molecules with global screening + local optimisation.</span>
+
+<span class="sd">    Nonlinear parameters are (T, logN) for every fitted component.  Linear</span>
+<span class="sd">    amplitudes A are solved together at every trial.  This is usually better</span>
+<span class="sd">    than pure random L-BFGS-B restarts because the initial candidates cover the</span>
+<span class="sd">    allowed parameter volume more evenly.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        obs_wav (np.ndarray): observed wavelength axis in µm.</span>
+<span class="sd">        obs_flux (np.ndarray): observed flux in Jy.</span>
+<span class="sd">        mol (str or list[str]): molecule(s) to fit, e.g. &#39;H2O&#39; or</span>
+<span class="sd">            [&#39;C2H2&#39;, &#39;HCN&#39;, &#39;CO2&#39;].</span>
+<span class="sd">        pretrained (dict): mol -&gt; pretrained surrogate dict from load_models.</span>
+<span class="sd">        fit_ranges: shared (lo, hi), shared list of ranges, or dict mapping</span>
+<span class="sd">            molecule/component labels to ranges.  Dict ranges are unioned for a</span>
+<span class="sd">            joint fit.</span>
+<span class="sd">        h2o_components (int): 1 or 2.  If 2 and molecules contains &#39;H2O&#39;, two</span>
+<span class="sd">            H2O components are fitted using the same pretrained[&#39;H2O&#39;] model.</span>
+<span class="sd">        component_names (list[str] or None): optional custom labels for fitted</span>
+<span class="sd">            components.  Useful for names like [&#39;H2O_warm&#39;, &#39;H2O_hot&#39;].</span>
+<span class="sd">        T_bounds (tuple or dict or None): default (200, 1400).  A dict can use</span>
+<span class="sd">            molecule names or component labels.</span>
+<span class="sd">        logN_bounds (tuple or dict or None): default (14, 19).  A dict can use</span>
+<span class="sd">            molecule names or component labels.</span>
+<span class="sd">        loga_bounds (tuple or None): bounds on log10(A).  None means A &gt;= 0</span>
+<span class="sd">            with no upper bound; otherwise bounded least squares is used.</span>
+<span class="sd">        n_samples (int): number of global screening samples.</span>
+<span class="sd">        sample_method (str): &#39;sobol&#39;, &#39;latin_hypercube&#39;, or &#39;random&#39;.</span>
+<span class="sd">        n_refine (int): number of distinct global candidates to refine locally.</span>
+<span class="sd">        n_top (int): number of ranked refined solutions to return.</span>
+<span class="sd">        distinct_min_distance (float): normalized distance used to avoid</span>
+<span class="sd">            refining many nearly identical global candidates.</span>
+<span class="sd">        sigma (float or None): optional noise std in Jy.  If provided,</span>
+<span class="sd">            top-solution uncertainties are likelihood-weighted by SSE.  If</span>
+<span class="sd">            None, unweighted top-solution percentiles are returned.</span>
+<span class="sd">        seed (int or None): random seed.</span>
+<span class="sd">        verbose (bool): print progress and best losses.</span>
+<span class="sd">        T_prior (dict or None): Gaussian prior on temperature for each</span>
+<span class="sd">            component, keyed by component label.  Each value is a tuple</span>
+<span class="sd">            (T_center, T_std) in Kelvin.  Example::</span>
+
+<span class="sd">                T_prior = {</span>
+<span class="sd">                    &#39;H2O_warm&#39;: (400.0, 100.0),</span>
+<span class="sd">                    &#39;H2O_hot&#39;:  (800.0, 100.0),</span>
+<span class="sd">                }</span>
+
+<span class="sd">            The prior is added to the SSE as a penalty term scaled by</span>
+<span class="sd">            ``sigma**2``, so both data and prior are in the same Jy² units:</span>
+
+<span class="sd">                loss = SSE + sigma² × Σ ((T_i − T0_i) / σ_Ti)²</span>
+
+<span class="sd">            ``sigma`` must be provided when ``T_prior`` is set; if it is None</span>
+<span class="sd">            the prior term is skipped with a warning.</span>
+<span class="sd">        T_prior_log10 (bool): if True, the prior is applied in log10(T) space</span>
+<span class="sd">            and the values in ``T_prior`` are interpreted as (log10_T_center,</span>
+<span class="sd">            log10_T_std).  Example::</span>
+
+<span class="sd">                T_prior = {</span>
+<span class="sd">                    &#39;H2O_warm&#39;: (2.6, 0.2),   # log10(T_warm) ~ N(2.6, 0.2)</span>
+<span class="sd">                    &#39;H2O_hot&#39;:  (2.9, 0.1),   # log10(T_hot)  ~ N(2.9, 0.1)</span>
+<span class="sd">                }</span>
+<span class="sd">                T_prior_log10 = True</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict with keys:</span>
+<span class="sd">            &#39;components&#39;       : list of component metadata.</span>
+<span class="sd">            &#39;params&#39;           : label -&gt; {&#39;T&#39;, &#39;logN&#39;, &#39;A&#39;, &#39;log10A&#39;, &#39;model_mol&#39;}.</span>
+<span class="sd">            &#39;model_flux&#39;       : total model flux on obs_wav.</span>
+<span class="sd">            &#39;component_fluxes&#39; : label -&gt; model flux on obs_wav.</span>
+<span class="sd">            &#39;residual&#39;         : obs_flux - model_flux.</span>
+<span class="sd">            &#39;fit_ranges&#39;       : actual joint ranges used.</span>
+<span class="sd">            &#39;top_list&#39;         : ranked refined solutions.</span>
+<span class="sd">            &#39;global_top&#39;       : best unrefined global candidates.</span>
+<span class="sd">            &#39;uncertainty&#39;      : label -&gt; parameter percentile summary.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">h2o_components</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;h2o_components must be 1 or 2&#39;</span><span class="p">)</span>
+
+    <span class="n">obs_wav</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">obs_flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">obs_flux</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">T_bounds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">T_bounds</span> <span class="o">=</span> <span class="n">_DEFAULT_T_BOUNDS</span>
+    <span class="k">if</span> <span class="n">logN_bounds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logN_bounds</span> <span class="o">=</span> <span class="n">_DEFAULT_LOGN_BOUNDS</span>
+    <span class="k">if</span> <span class="n">loga_bounds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">loga_bounds</span> <span class="o">=</span> <span class="n">_DEFAULT_LOGA_BOUNDS</span>
+
+    <span class="n">components</span> <span class="o">=</span> <span class="n">_build_components</span><span class="p">(</span><span class="n">mol</span><span class="p">,</span> <span class="n">h2o_components</span><span class="p">,</span> <span class="n">component_names</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">pretrained</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pretrained has no model for </span><span class="si">{</span><span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">joint_ranges</span> <span class="o">=</span> <span class="n">_fit_ranges_for_components</span><span class="p">(</span><span class="n">fit_ranges</span><span class="p">,</span> <span class="n">components</span><span class="p">)</span>
+    <span class="n">fit_mask</span> <span class="o">=</span> <span class="n">_wav_mask</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">joint_ranges</span><span class="p">)</span>
+    <span class="n">wav_fit</span> <span class="o">=</span> <span class="n">obs_wav</span><span class="p">[</span><span class="n">fit_mask</span><span class="p">]</span>
+    <span class="n">obs_fit</span> <span class="o">=</span> <span class="n">obs_flux</span><span class="p">[</span><span class="n">fit_mask</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">wav_fit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;fit_ranges select zero observed wavelength pixels&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bounds_for</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">bound_spec</span><span class="p">,</span> <span class="n">default</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bound_spec</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">bound_spec</span><span class="p">:</span>
+                <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">bound_spec</span><span class="p">[</span><span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]])</span>
+            <span class="k">if</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">bound_spec</span><span class="p">:</span>
+                <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">bound_spec</span><span class="p">[</span><span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]])</span>
+            <span class="k">return</span> <span class="n">default</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">bound_spec</span><span class="p">)</span>
+
+    <span class="n">nonlinear_bounds</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span><span class="p">:</span>
+        <span class="n">nonlinear_bounds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_bounds_for</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">T_bounds</span><span class="p">,</span> <span class="n">_DEFAULT_T_BOUNDS</span><span class="p">))</span>
+        <span class="n">nonlinear_bounds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_bounds_for</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">logN_bounds</span><span class="p">,</span> <span class="n">_DEFAULT_LOGN_BOUNDS</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">loga_bounds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">A_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">A_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="mf">10.0</span> <span class="o">**</span> <span class="nb">float</span><span class="p">(</span><span class="n">loga_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="mf">10.0</span> <span class="o">**</span> <span class="nb">float</span><span class="p">(</span><span class="n">loga_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_matrix_for</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+        <span class="n">cols</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span><span class="p">]</span>
+            <span class="n">logN</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_mol_flux_on_wav</span><span class="p">(</span><span class="n">pretrained</span><span class="p">[</span><span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]],</span> <span class="n">T</span><span class="p">,</span> <span class="n">logN</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">wav_fit</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">cols</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_solve_amplitudes</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_ordered_water</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">components</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)),</span> <span class="kc">None</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">_matrix_for</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">A_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">lsq_linear</span><span class="p">(</span>
+                <span class="n">M</span><span class="p">,</span>
+                <span class="n">obs_fit</span><span class="p">,</span>
+                <span class="n">bounds</span><span class="o">=</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">),</span> <span class="n">A_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">),</span> <span class="n">A_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">])),</span>
+            <span class="p">)</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">A</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">nnls</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">obs_fit</span><span class="p">)</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">obs_fit</span> <span class="o">-</span> <span class="n">M</span> <span class="o">@</span> <span class="n">A</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">residual</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">loss</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">M</span>
+
+    <span class="k">if</span> <span class="n">T_prior</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">sigma</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">sigma</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  Warning: T_prior supplied but sigma is None or ≤ 0 — prior skipped.&#39;</span><span class="p">)</span>
+    <span class="n">_prior_scale</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigma</span> <span class="o">**</span> <span class="mi">2</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">T_prior</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">sigma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">sigma</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prior_penalty</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sum of (T_i − T0_i)² / σ_Ti² for components with a T prior.</span>
+
+<span class="sd">        When T_prior_log10 is True the penalty is evaluated in log10(T) space</span>
+<span class="sd">        and T_prior values are (log10_T_center, log10_T_std).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">T_prior</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">_prior_scale</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+        <span class="n">penalty</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">T_prior</span><span class="p">:</span>
+                <span class="n">center</span><span class="p">,</span> <span class="n">std</span> <span class="o">=</span> <span class="n">T_prior</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+                <span class="n">T_val</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span><span class="p">]</span>
+                <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">T_val</span><span class="p">,</span> <span class="mf">1e-10</span><span class="p">))</span> <span class="k">if</span> <span class="n">T_prior_log10</span> <span class="k">else</span> <span class="n">T_val</span>
+                <span class="n">penalty</span> <span class="o">+=</span> <span class="p">((</span><span class="n">t</span> <span class="o">-</span> <span class="n">center</span><span class="p">)</span> <span class="o">/</span> <span class="n">std</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="n">penalty</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_penalized_loss</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;SSE + Gaussian prior penalty, both in Jy².&quot;&quot;&quot;</span>
+        <span class="n">sse</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">M</span> <span class="o">=</span> <span class="n">_solve_amplitudes</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sse</span> <span class="o">+</span> <span class="n">_prior_scale</span> <span class="o">*</span> <span class="n">_prior_penalty</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">A</span><span class="p">,</span> <span class="n">M</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_objective</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">loss</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_penalized_loss</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span>
+
+    <span class="n">n_dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">_draw_unit_samples</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dim</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">sample_method</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">_scale_unit_samples</span><span class="p">(</span><span class="n">unit</span><span class="p">,</span> <span class="n">nonlinear_bounds</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">components</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Global nested fit: </span><span class="si">{</span><span class="n">labels</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  components=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span><span class="si">}</span><span class="s1">  nonlinear_dim=</span><span class="si">{</span><span class="n">n_dim</span><span class="si">}</span><span class="s1">  samples=</span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  fit pixels=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">wav_fit</span><span class="p">)</span><span class="si">}</span><span class="s1">  ranges=</span><span class="si">{</span><span class="n">joint_ranges</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">global_results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">samples</span><span class="p">):</span>
+        <span class="n">loss</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_penalized_loss</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">global_results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s1">&#39;loss&#39;</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
+            <span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s1">&#39;x_scaled&#39;</span><span class="p">:</span> <span class="n">unit</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+        <span class="p">})</span>
+
+    <span class="n">global_results</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">])</span>
+    <span class="n">global_candidates</span> <span class="o">=</span> <span class="n">_distinct_solutions</span><span class="p">(</span>
+        <span class="n">global_results</span><span class="p">,</span>
+        <span class="n">n_keep</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">n_refine</span><span class="p">,</span> <span class="n">n_top</span><span class="p">),</span>
+        <span class="n">components</span><span class="o">=</span><span class="n">components</span><span class="p">,</span>
+        <span class="n">min_distance</span><span class="o">=</span><span class="n">distinct_min_distance</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">refine_starts</span> <span class="o">=</span> <span class="n">global_candidates</span><span class="p">[:</span><span class="n">n_refine</span><span class="p">]</span>
+
+    <span class="n">refined</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">cand</span> <span class="ow">in</span> <span class="n">refine_starts</span><span class="p">:</span>
+        <span class="n">opt</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span>
+            <span class="n">_objective</span><span class="p">,</span>
+            <span class="n">cand</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">],</span>
+            <span class="n">method</span><span class="o">=</span><span class="s1">&#39;L-BFGS-B&#39;</span><span class="p">,</span>
+            <span class="n">bounds</span><span class="o">=</span><span class="n">nonlinear_bounds</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">loss</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_penalized_loss</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">scaled</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">-</span> <span class="n">nonlinear_bounds</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span>
+            <span class="p">(</span><span class="n">nonlinear_bounds</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">nonlinear_bounds</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_dim</span><span class="p">)</span>
+        <span class="p">])</span>
+        <span class="n">refined</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s1">&#39;loss&#39;</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
+            <span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="n">opt</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s1">&#39;x_scaled&#39;</span><span class="p">:</span> <span class="n">scaled</span><span class="p">,</span>
+            <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+            <span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">success</span><span class="p">),</span>
+            <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">message</span><span class="p">),</span>
+            <span class="s1">&#39;start_loss&#39;</span><span class="p">:</span> <span class="n">cand</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">],</span>
+        <span class="p">})</span>
+
+    <span class="n">refined</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">])</span>
+    <span class="n">top_refined</span> <span class="o">=</span> <span class="n">_distinct_solutions</span><span class="p">(</span>
+        <span class="n">refined</span><span class="p">,</span>
+        <span class="n">n_keep</span><span class="o">=</span><span class="n">n_top</span><span class="p">,</span>
+        <span class="n">components</span><span class="o">=</span><span class="n">components</span><span class="p">,</span>
+        <span class="n">min_distance</span><span class="o">=</span><span class="n">distinct_min_distance</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">top_refined</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;no valid fitted solution found&#39;</span><span class="p">)</span>
+
+    <span class="n">best</span> <span class="o">=</span> <span class="n">top_refined</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_decode_solution</span><span class="p">(</span><span class="n">sol</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">sol</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">params</span><span class="p">[</span><span class="n">comp</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">sol</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">][</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span><span class="p">]),</span>
+                <span class="s1">&#39;logN&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">sol</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">][</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]),</span>
+                <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="n">A</span><span class="p">,</span>
+                <span class="s1">&#39;log10A&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="mf">1e-300</span><span class="p">))),</span>
+                <span class="s1">&#39;model_mol&#39;</span><span class="p">:</span> <span class="n">comp</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">],</span>
+            <span class="p">}</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;mse_loss&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">sol</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">]),</span>
+            <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">params</span><span class="p">,</span>
+            <span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="n">sol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;success&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="n">sol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;start_loss&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">sol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;start_loss&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="s1">&#39;rank&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">rank</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="n">best_params</span> <span class="o">=</span> <span class="n">_decode_solution</span><span class="p">(</span><span class="n">best</span><span class="p">)[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span>
+    <span class="n">component_fluxes</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">total_flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">best_params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">_mol_flux_on_wav</span><span class="p">(</span>
+            <span class="n">pretrained</span><span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">]],</span>
+            <span class="n">p</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">],</span>
+            <span class="n">p</span><span class="p">[</span><span class="s1">&#39;logN&#39;</span><span class="p">],</span>
+            <span class="n">p</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">],</span>
+            <span class="n">obs_wav</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">component_fluxes</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">flux</span>
+        <span class="n">total_flux</span> <span class="o">+=</span> <span class="n">flux</span>
+
+    <span class="n">top_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">_decode_solution</span><span class="p">(</span><span class="n">sol</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">sol</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">top_refined</span><span class="p">)]</span>
+    <span class="n">global_top</span> <span class="o">=</span> <span class="p">[</span><span class="n">_decode_solution</span><span class="p">(</span><span class="n">sol</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                  <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">sol</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">global_candidates</span><span class="p">[:</span><span class="n">n_top</span><span class="p">])]</span>
+    <span class="n">uncertainty</span> <span class="o">=</span> <span class="n">_top_list_uncertainty</span><span class="p">(</span><span class="n">top_list</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="n">sigma</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  best SSE=</span><span class="si">{</span><span class="n">best</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.6g</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">best_params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  </span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s1">8s</span><span class="si">}</span><span class="s1"> T=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">  logN=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;logN&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">  &#39;</span>
+                  <span class="sa">f</span><span class="s1">&#39;log10A=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;log10A&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;mol&#39;</span><span class="p">:</span> <span class="n">mol</span><span class="p">,</span>
+        <span class="s1">&#39;components&#39;</span><span class="p">:</span> <span class="n">components</span><span class="p">,</span>
+        <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">best_params</span><span class="p">,</span>
+        <span class="s1">&#39;model_flux&#39;</span><span class="p">:</span> <span class="n">total_flux</span><span class="p">,</span>
+        <span class="s1">&#39;component_fluxes&#39;</span><span class="p">:</span> <span class="n">component_fluxes</span><span class="p">,</span>
+        <span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="n">obs_flux</span> <span class="o">-</span> <span class="n">total_flux</span><span class="p">,</span>
+        <span class="s1">&#39;fit_ranges&#39;</span><span class="p">:</span> <span class="n">joint_ranges</span><span class="p">,</span>
+        <span class="s1">&#39;top_list&#39;</span><span class="p">:</span> <span class="n">top_list</span><span class="p">,</span>
+        <span class="s1">&#39;global_top&#39;</span><span class="p">:</span> <span class="n">global_top</span><span class="p">,</span>
+        <span class="s1">&#39;uncertainty&#39;</span><span class="p">:</span> <span class="n">uncertainty</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="load_observed_spectrum"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.load_observed_spectrum">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">load_observed_spectrum</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="n">wav_col</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">flux_col</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load an observed spectrum and remove NaN/blank flux pixels.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path (str): input CSV or text file.</span>
+<span class="sd">        skiprows (int): number of header rows to skip.</span>
+<span class="sd">        delimiter (str): file delimiter.</span>
+<span class="sd">        wav_col (int): wavelength column index.</span>
+<span class="sd">        flux_col (int): flux column index.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[np.ndarray, np.ndarray]: wavelength and flux arrays.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="n">skiprows</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="n">delimiter</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;str&#39;</span><span class="p">)</span>
+    <span class="n">wav</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">wav_col</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">])</span>
+    <span class="n">flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">flux_col</span><span class="p">])</span> <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="n">flux_col</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span>
+    <span class="p">])</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">wav</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">wav</span><span class="p">[</span><span class="n">valid</span><span class="p">],</span> <span class="n">flux</span><span class="p">[</span><span class="n">valid</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="save_fit_outputs"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.save_fit_outputs">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">save_fit_outputs</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="n">output_prefix</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Save fitted spectrum, best parameters, and top solutions to CSV files.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        result (dict): result returned by fit_molecules, with obs_wav/obs_flux</span>
+<span class="sd">            added by the caller.</span>
+<span class="sd">        output_dir (str): directory for output CSV files.</span>
+<span class="sd">        output_prefix (str): filename prefix.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: output kind -&gt; saved path.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">spectrum_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+        <span class="s1">&#39;wave&#39;</span><span class="p">:</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;obs_wav&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;flux&#39;</span><span class="p">:</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;obs_flux&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;model&#39;</span><span class="p">:</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;model_flux&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;residual&#39;</span><span class="p">],</span>
+    <span class="p">})</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">flux</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;component_fluxes&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">spectrum_df</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">_model&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">flux</span>
+    <span class="n">spectrum_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">output_prefix</span><span class="si">}</span><span class="s1">_fit_spectrum.csv&#39;</span><span class="p">)</span>
+    <span class="n">spectrum_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">spectrum_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">param_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;uncertainty&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">u_T</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">u_logN</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;logN&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">u_log10A</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">param_rows</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s1">&#39;component&#39;</span><span class="p">:</span> <span class="n">label</span><span class="p">,</span>
+            <span class="s1">&#39;model_mol&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;model_mol&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;T_minus&#39;</span><span class="p">:</span> <span class="n">u_T</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;minus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+            <span class="s1">&#39;T_plus&#39;</span><span class="p">:</span> <span class="n">u_T</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;plus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+            <span class="s1">&#39;logN&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;logN&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;logN_minus&#39;</span><span class="p">:</span> <span class="n">u_logN</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;minus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+            <span class="s1">&#39;logN_plus&#39;</span><span class="p">:</span> <span class="n">u_logN</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;plus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+            <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;log10A&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;log10A&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;log10A_minus&#39;</span><span class="p">:</span> <span class="n">u_log10A</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;minus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+            <span class="s1">&#39;log10A_plus&#39;</span><span class="p">:</span> <span class="n">u_log10A</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;plus&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+        <span class="p">})</span>
+    <span class="n">params_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">output_prefix</span><span class="si">}</span><span class="s1">_fit_params.csv&#39;</span><span class="p">)</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">param_rows</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">params_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">top_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">sol</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;top_list&#39;</span><span class="p">]:</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;rank&#39;</span><span class="p">:</span> <span class="n">sol</span><span class="p">[</span><span class="s1">&#39;rank&#39;</span><span class="p">],</span> <span class="s1">&#39;mse_loss&#39;</span><span class="p">:</span> <span class="n">sol</span><span class="p">[</span><span class="s1">&#39;mse_loss&#39;</span><span class="p">]}</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">sol</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">_T&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">]</span>
+            <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">_logN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;logN&#39;</span><span class="p">]</span>
+            <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">_log10A&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;log10A&#39;</span><span class="p">]</span>
+        <span class="n">top_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+    <span class="n">top_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">output_prefix</span><span class="si">}</span><span class="s1">_fit_top.csv&#39;</span><span class="p">)</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">top_rows</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">top_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;spectrum&#39;</span><span class="p">:</span> <span class="n">spectrum_path</span><span class="p">,</span>
+        <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">params_path</span><span class="p">,</span>
+        <span class="s1">&#39;top&#39;</span><span class="p">:</span> <span class="n">top_path</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="detect_stage_molecules"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.detect_stage_molecules">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">detect_stage_molecules</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">sigma_noise</span><span class="p">,</span>
+                            <span class="n">screening</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sigma_factor</span><span class="o">=</span><span class="mf">3.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the subset of molecules in stage[&#39;mol&#39;] that pass a peak detection test.</span>
+
+<span class="sd">    For single-molecule stages (detect_peaks is a list of (lo, hi) ranges): the</span>
+<span class="sd">    stage passes if the maximum flux in any listed window exceeds the threshold.</span>
+<span class="sd">    For multi-molecule stages (detect_peaks is a dict {mol: (lo, hi)}): each</span>
+<span class="sd">    molecule is checked independently; only detected ones are returned.</span>
+<span class="sd">    If screening is False, or detect_peaks is absent/None, all molecules are</span>
+<span class="sd">    returned without checking.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        obs_wav (np.ndarray): wavelength axis in µm (typically the running residual).</span>
+<span class="sd">        obs_flux (np.ndarray): flux to check for detections.</span>
+<span class="sd">        stage (dict): stage config dict with keys &#39;mol&#39; and optionally &#39;detect_peaks&#39;.</span>
+<span class="sd">        sigma_noise (float or None): per-pixel noise std in Jy; if None, screening</span>
+<span class="sd">            is skipped regardless of the screening flag.</span>
+<span class="sd">        screening (bool): master toggle; pass DETECTION_SCREENING from the script.</span>
+<span class="sd">        sigma_factor (float): detection threshold = sigma_factor × sigma_noise.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[str]: molecule names that passed detection (subset of stage[&#39;mol&#39;]).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mols</span>         <span class="o">=</span> <span class="n">_as_list</span><span class="p">(</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;mol&#39;</span><span class="p">])</span>
+    <span class="n">detect_peaks</span> <span class="o">=</span> <span class="n">stage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;detect_peaks&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">screening</span> <span class="ow">or</span> <span class="n">detect_peaks</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">sigma_noise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">mols</span>
+
+    <span class="n">thr</span> <span class="o">=</span> <span class="n">sigma_factor</span> <span class="o">*</span> <span class="n">sigma_noise</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">detect_peaks</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">detected</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">mols</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">mol</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">detect_peaks</span><span class="p">:</span>
+                <span class="n">detected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mol</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">lo</span><span class="p">,</span> <span class="n">hi</span> <span class="o">=</span> <span class="n">detect_peaks</span><span class="p">[</span><span class="n">mol</span><span class="p">]</span>
+            <span class="n">mask</span>   <span class="o">=</span> <span class="p">(</span><span class="n">obs_wav</span> <span class="o">&gt;=</span> <span class="n">lo</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">obs_wav</span> <span class="o">&lt;=</span> <span class="n">hi</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">(</span><span class="n">obs_flux</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span> <span class="o">&gt;</span> <span class="n">thr</span><span class="p">:</span>
+                <span class="n">detected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mol</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  [</span><span class="si">{</span><span class="n">mol</span><span class="si">}</span><span class="s1">] not detected (peak &lt; </span><span class="si">{</span><span class="n">sigma_factor</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">σ) — excluded&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">detected</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">lo</span><span class="p">,</span> <span class="n">hi</span> <span class="ow">in</span> <span class="n">detect_peaks</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">obs_wav</span> <span class="o">&gt;=</span> <span class="n">lo</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">obs_wav</span> <span class="o">&lt;=</span> <span class="n">hi</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">(</span><span class="n">obs_flux</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span> <span class="o">&gt;</span> <span class="n">thr</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">mols</span>
+        <span class="n">mol_str</span> <span class="o">=</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">mols</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  [</span><span class="si">{</span><span class="n">mol_str</span><span class="si">}</span><span class="s1">] not detected (all peaks &lt; </span><span class="si">{</span><span class="n">sigma_factor</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">σ) — stage skipped&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+
+
+<div class="viewcode-block" id="save_running_spectrum"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.save_running_spectrum">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">save_running_spectrum</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">residual</span><span class="p">,</span> <span class="n">cumulative_model</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Save the running residual and cumulative model after a fitting stage.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        obs_wav (np.ndarray): wavelength axis in µm.</span>
+<span class="sd">        residual (np.ndarray): current running residual (obs minus all stages so far).</span>
+<span class="sd">        cumulative_model (np.ndarray): sum of all stage model fluxes fitted so far.</span>
+<span class="sd">        output_dir (str): output directory (created if missing).</span>
+<span class="sd">        prefix (str): filename prefix; file is saved as {prefix}_running.csv.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: path to the saved CSV.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s1">_running.csv&#39;</span><span class="p">)</span>
+    <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+        <span class="s1">&#39;wave&#39;</span><span class="p">:</span>             <span class="n">obs_wav</span><span class="p">,</span>
+        <span class="s1">&#39;residual&#39;</span><span class="p">:</span>         <span class="n">residual</span><span class="p">,</span>
+        <span class="s1">&#39;cumulative_model&#39;</span><span class="p">:</span> <span class="n">cumulative_model</span><span class="p">,</span>
+    <span class="p">})</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">path</span></div>
+
+
+<div class="viewcode-block" id="print_fit_params"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.print_fit_params">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">print_fit_params</span><span class="p">(</span><span class="n">fit</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print best-fit parameters with ± uncertainties for all components in a fit result.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fit (dict): result dict returned by fit_molecules.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">fit</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">u</span>        <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;uncertainty&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">u_T</span>      <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="p">{})</span>
+        <span class="n">u_logN</span>   <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="p">{})</span>
+        <span class="n">u_log10A</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;    </span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s1">14s</span><span class="si">}</span><span class="s1"> &#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;T=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1"> (+</span><span class="si">{</span><span class="n">u_T</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;plus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">/&#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;-</span><span class="si">{</span><span class="n">u_T</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;minus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">) K  &#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;logN=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;logN&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1"> (+</span><span class="si">{</span><span class="n">u_logN</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;plus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">/&#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;-</span><span class="si">{</span><span class="n">u_logN</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;minus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">)  &#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;log10A=</span><span class="si">{</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;log10A&quot;</span><span class="p">]</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1"> (+</span><span class="si">{</span><span class="n">u_log10A</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;plus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">/&#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;-</span><span class="si">{</span><span class="n">u_log10A</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;minus&quot;</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">))</span><span class="si">:</span><span class="s1">.3f</span><span class="si">}</span><span class="s1">)&#39;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="save_fitted_comparison"><a class="viewcode-back" href="../../api/fitting.html#diskmelts.fitting.save_fitted_comparison">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">save_fitted_comparison</span><span class="p">(</span><span class="n">csv_path</span><span class="p">,</span> <span class="n">source_name</span><span class="p">,</span> <span class="n">all_fits</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Upsert one row of best-fit parameters into a comparison CSV.</span>
+
+<span class="sd">    The CSV schema matches Parameter_Comparison.csv (log10 units for N and A,</span>
+<span class="sd">    K for T).  If the file does not exist it is created.  If *source_name* is</span>
+<span class="sd">    already present its values are updated in-place; otherwise a new row is</span>
+<span class="sd">    appended.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        csv_path (str): path to the comparison CSV.</span>
+<span class="sd">        source_name (str): identifier for this source (used as the key).</span>
+<span class="sd">        all_fits (dict): stage-name → fit-result dict from the fitting loop.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">all_params</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">all_unc</span>    <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">fit</span> <span class="ow">in</span> <span class="n">all_fits</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">all_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">fit</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">])</span>
+        <span class="n">all_unc</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">fit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;uncertainty&#39;</span><span class="p">,</span> <span class="p">{}))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_v</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">comp</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">all_params</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;&#39;</span>
+        <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">all_params</span><span class="p">[</span><span class="n">comp</span><span class="p">][</span><span class="n">key</span><span class="p">],</span> <span class="mi">4</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_e</span><span class="p">(</span><span class="n">comp</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">which</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">comp</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">all_unc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;&#39;</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">all_unc</span><span class="p">[</span><span class="n">comp</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">which</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span>
+
+    <span class="n">row</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;Source&#39;</span><span class="p">:</span>               <span class="n">source_name</span><span class="p">,</span>
+        <span class="s1">&#39;H2O_N_warm&#39;</span><span class="p">:</span>           <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_N_warm_err_low&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_N_warm_err_high&#39;</span><span class="p">:</span>  <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_N_hot&#39;</span><span class="p">:</span>            <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;logN&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_N_hot_err_low&#39;</span><span class="p">:</span>    <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_N_hot_err_high&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_warm&#39;</span><span class="p">:</span>           <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_warm_err_low&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_warm_err_high&#39;</span><span class="p">:</span>  <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_hot&#39;</span><span class="p">:</span>            <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;T&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_hot_err_low&#39;</span><span class="p">:</span>    <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_T_hot_err_high&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_warm&#39;</span><span class="p">:</span>           <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_warm_err_low&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_warm_err_high&#39;</span><span class="p">:</span>  <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_hot&#39;</span><span class="p">:</span>            <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;log10A&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_hot_err_low&#39;</span><span class="p">:</span>    <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;H2O_A_hot_err_high&#39;</span><span class="p">:</span>   <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;H2O_hot&#39;</span><span class="p">,</span>  <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_N&#39;</span><span class="p">:</span>               <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_N_err_low&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_N_err_high&#39;</span><span class="p">:</span>      <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_T&#39;</span><span class="p">:</span>               <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_T_err_low&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_T_err_high&#39;</span><span class="p">:</span>      <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_A&#39;</span><span class="p">:</span>               <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_A_err_low&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2_A_err_high&#39;</span><span class="p">:</span>      <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_N&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_N_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_N_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_T&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_T_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_T_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_A&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_A_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;HCN_A_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;HCN&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_N&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_N_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_N_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;logN&#39;</span><span class="p">,</span>   <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_T&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_T_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_T_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">,</span>      <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_A&#39;</span><span class="p">:</span>                <span class="n">_v</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_A_err_low&#39;</span><span class="p">:</span>        <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;minus&#39;</span><span class="p">),</span>
+        <span class="s1">&#39;CO2_A_err_high&#39;</span><span class="p">:</span>       <span class="n">_e</span><span class="p">(</span><span class="s1">&#39;CO2&#39;</span><span class="p">,</span> <span class="s1">&#39;log10A&#39;</span><span class="p">,</span> <span class="s1">&#39;plus&#39;</span><span class="p">),</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">csv_path</span><span class="p">):</span>
+        <span class="n">df</span>   <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">csv_path</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;Source&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">source_name</span>
+        <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  Updated existing row for </span><span class="si">{</span><span class="n">source_name</span><span class="si">!r}</span><span class="s1"> in </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">csv_path</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">([</span><span class="n">row</span><span class="p">])],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  Appended new row for </span><span class="si">{</span><span class="n">source_name</span><span class="si">!r}</span><span class="s1"> to </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">csv_path</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">([</span><span class="n">row</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;  Created </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">csv_path</span><span class="p">)</span><span class="si">}</span><span class="s1"> with first row for </span><span class="si">{</span><span class="n">source_name</span><span class="si">!r}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">csv_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

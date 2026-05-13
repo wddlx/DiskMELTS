@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>diskmelts.validation &mdash; DiskMELTS 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="diskmelts.plotting" href="plotting.html" />
+    <link rel="prev" title="diskmelts.fitting" href="fitting.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DiskMELTS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="trainmodel.html">diskmelts.trainmodel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fitting.html">diskmelts.fitting</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">diskmelts.validation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.validation.validate_nt"><code class="docutils literal notranslate"><span class="pre">validate_nt()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.validation.validate_nt_holdout"><code class="docutils literal notranslate"><span class="pre">validate_nt_holdout()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#diskmelts.validation.validate_full"><code class="docutils literal notranslate"><span class="pre">validate_full()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">diskmelts.plotting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DiskMELTS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">diskmelts.validation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/validation.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="diskmelts-validation">
+<h1>diskmelts.validation<a class="headerlink" href="#diskmelts-validation" title="Permalink to this heading"></a></h1>
+<p>Validation functions for pretrained forward models.</p>
+<p>Two complementary strategies are provided:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">validate_nt</span></code></strong> — checks $(T, \log N)$ recovery on spectra the model
+was trained on (in-distribution test).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">validate_nt_holdout</span></code></strong> — checks $(T, \log N)$ recovery on grid points
+that were withheld from training (out-of-distribution test).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">validate_full</span></code></strong> — checks $(T, \log N, A)$ recovery on synthetic
+spectra with randomly drawn $A$, testing the complete fitting pipeline.</p></li>
+</ul>
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.validation.validate_nt">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.validation.</span></span><span class="sig-name descname"><span class="pre">validate_nt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frac</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(200,</span> <span class="pre">1400)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(14.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_starts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.03</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/validation.html#validate_nt"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.validation.validate_nt" title="Permalink to this definition"></a></dt>
+<dd><p>Validate T and logN retrieval on pretrain grid spectra with A=1.</p>
+<p>Uses the same gradient-based Adam optimizer as the NT-only fitter: jointly
+matches the peak-normalised spectral shape (net_shape output) and the
+log10(peak flux) (net_peak output).  No A is fitted.  This works directly
+in the two-MLP representation space and is much more accurate for NT-only
+retrieval than using fit_nested on physical flux.</p>
+<p>Call once per molecule.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>pretrain_csv</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – path to the pretrain CSV from generate_pre_training_set</p></li>
+<li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm; must align with the model
+wavelength grid (pretrained[mol][‘wav’])</p></li>
+<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – rows to validate; if None uses frac (default None)</p></li>
+<li><p><strong>frac</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – fraction of rows when n_samples is None (default 0.05)</p></li>
+<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K (default (200, 1400))</p></li>
+<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) (default (14, 19))</p></li>
+<li><p><strong>n_starts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random starting points for Adam optimizer (default 20)</p></li>
+<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Adam gradient steps per start (default 300)</p></li>
+<li><p><strong>lr</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam learning rate (default 0.03)</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random seed for row sampling (default 42)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>‘T_true’    : np.ndarray — grid temperatures (K)
+‘T_pred’    : np.ndarray — recovered temperatures (K)
+‘logN_true’ : np.ndarray — grid log10 column densities
+‘logN_pred’ : np.ndarray — recovered log10 column densities</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.validation.validate_nt_holdout">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.validation.</span></span><span class="sig-name descname"><span class="pre">validate_nt_holdout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">models</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holdout_keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(200,</span> <span class="pre">1400)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(14.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_starts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.03</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/validation.html#validate_nt_holdout"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.validation.validate_nt_holdout" title="Permalink to this definition"></a></dt>
+<dd><p>Validate T and logN retrieval on grid points that were withheld from the
+pretrain CSV (unseen during training).</p>
+<p>For each holdout (T, logN) key the physical flux is taken directly from
+the model grid, peak-normalised, and passed to the Adam-based NT optimizer.
+This gives an honest estimate of generalisation to unseen grid points.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>models</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_model_grid for this molecule,
+keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
+<li><p><strong>holdout_keys</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a>) – list of (T, logN) tuples that were excluded from
+the pretrain CSV</p></li>
+<li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm; must align with the model
+wavelength grid (pretrained[mol][‘wav’])</p></li>
+<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K (default (200, 1400))</p></li>
+<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) (default (14, 19))</p></li>
+<li><p><strong>n_starts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random starting points for Adam optimizer (default 20)</p></li>
+<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Adam gradient steps per start (default 300)</p></li>
+<li><p><strong>lr</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam learning rate (default 0.03)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>‘T_true’    : np.ndarray — grid temperatures (K)
+‘T_pred’    : np.ndarray — recovered temperatures (K)
+‘logN_true’ : np.ndarray — grid log10 column densities
+‘logN_pred’ : np.ndarray — recovered log10 column densities</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.validation.validate_full">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.validation.</span></span><span class="sig-name descname"><span class="pre">validate_full</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">models</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_A_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(-2.0,</span> <span class="pre">2.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(200,</span> <span class="pre">1400)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(14.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loga_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(-2.0,</span> <span class="pre">2.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_restarts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/validation.html#validate_full"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.validation.validate_full" title="Permalink to this definition"></a></dt>
+<dd><p>Validate T, logN, and A retrieval on synthetic spectra with random A.</p>
+<p>Randomly draws (T, logN) grid points and A values, constructs the
+corresponding physical spectrum with optional noise, then runs fit_nested
+to recover all three parameters.  This tests the full fitting pipeline.</p>
+<p>Call once per molecule.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>models</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_model_grid for this molecule,
+keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
+<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm passed to fit_nested</p></li>
+<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of synthetic spectra to generate (default 30)</p></li>
+<li><p><strong>log_A_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (log10A_min, log10A_max) for uniform A draw</p></li>
+<li><p><strong>noise_scale</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Gaussian noise std as fraction of peak flux;
+0.0 for noise-free spectra (default 0.001)</p></li>
+<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K passed to fit_nested</p></li>
+<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) passed to fit_nested</p></li>
+<li><p><strong>loga_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (log10A_min, log10A_max) for fitting search range
+(default (-2, 2)); independent of log_A_range</p></li>
+<li><p><strong>n_restarts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random restarts per spectrum in fit_nested (default 50)</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random seed (default 42)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>‘T_true’       : np.ndarray — true temperatures (K)
+‘T_pred’       : np.ndarray — recovered temperatures (K)
+‘logN_true’    : np.ndarray — true log10 column densities
+‘logN_pred’    : np.ndarray — recovered log10 column densities
+‘log10A_true’  : np.ndarray — true log10 scaling factors
+‘log10A_pred’  : np.ndarray — recovered log10 scaling factors
+‘log10NA_true’ : np.ndarray — logN + log10A (true)
+‘log10NA_pred’ : np.ndarray — logN + log10A (predicted)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fitting.html" class="btn btn-neutral float-left" title="diskmelts.fitting" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plotting.html" class="btn btn-neutral float-right" title="diskmelts.plotting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
