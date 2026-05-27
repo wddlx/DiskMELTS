@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Paper/paper.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "paper"
+              "title": "README"
             }
           }
         ]
@@ -185,6 +185,9 @@
   },
   "active": "268549c81611c564",
   "lastOpenFiles": [
+    "Paper/paper.md",
+    "examples/realobs_validation.py",
+    "Realobs_data/Consub_data.zip",
     "src/diskmelts/__pycache__/plotting.cpython-311.pyc",
     "src/diskmelts/__pycache__/validation.cpython-311.pyc",
     "src/diskmelts/__pycache__/fitting.cpython-311.pyc",
@@ -193,9 +196,6 @@
     "src/diskmelts.egg-info/top_level.txt",
     "src/diskmelts.egg-info/requires.txt",
     "src/diskmelts.egg-info/dependency_links.txt",
-    "src/diskmelts.egg-info/SOURCES.txt",
-    "src/diskmelts.egg-info/PKG-INFO",
-    "src/diskmelts.egg-info",
     "docs/source/api/validation.md",
     "docs/source/api/trainmodel.md",
     "docs/source/api/plotting.md",
