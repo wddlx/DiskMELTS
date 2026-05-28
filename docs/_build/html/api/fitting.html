@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>diskmelts.fitting &mdash; DiskMELTS 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="diskmelts.validation" href="validation.html" />
+    <link rel="prev" title="diskmelts.trainmodel" href="trainmodel.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DiskMELTS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="trainmodel.html">diskmelts.trainmodel</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">diskmelts.fitting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#loading-models">Loading models</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.load_models"><code class="docutils literal notranslate"><span class="pre">load_models()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-spectra">Generating spectra</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.generate_spectrum"><code class="docutils literal notranslate"><span class="pre">generate_spectrum()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#fitting">Fitting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.fit_molecules"><code class="docutils literal notranslate"><span class="pre">fit_molecules()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.fit_nested"><code class="docutils literal notranslate"><span class="pre">fit_nested()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#i-o-helpers">I/O helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.load_observed_spectrum"><code class="docutils literal notranslate"><span class="pre">load_observed_spectrum()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.detect_stage_molecules"><code class="docutils literal notranslate"><span class="pre">detect_stage_molecules()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.save_fit_outputs"><code class="docutils literal notranslate"><span class="pre">save_fit_outputs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.save_running_spectrum"><code class="docutils literal notranslate"><span class="pre">save_running_spectrum()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.print_fit_params"><code class="docutils literal notranslate"><span class="pre">print_fit_params()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diskmelts.fitting.save_fitted_comparison"><code class="docutils literal notranslate"><span class="pre">save_fitted_comparison()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="validation.html">diskmelts.validation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plotting.html">diskmelts.plotting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DiskMELTS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">diskmelts.fitting</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/fitting.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="diskmelts-fitting">
+<h1>diskmelts.fitting<a class="headerlink" href="#diskmelts-fitting" title="Permalink to this heading"></a></h1>
+<p>Spectral fitting with pretrained forward surrogate models.</p>
+<p>The main entry point for most users is <code class="docutils literal notranslate"><span class="pre">fit_molecules</span></code>, which runs a
+global Sobol search followed by local L-BFGS-B refinement.
+<code class="docutils literal notranslate"><span class="pre">fit_nested</span></code> is a simpler single-molecule fitter with random restarts.</p>
+<p><strong>Forward model convention:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>flux(T, logN, A) = A × peak(T, logN) × shape(T, logN)
+</pre></div>
+</div>
+<section id="loading-models">
+<h2>Loading models<a class="headerlink" href="#loading-models" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.load_models">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">load_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv_paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#load_models"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.load_models" title="Permalink to this definition"></a></dt>
+<dd><p>Load pretrained per-molecule forward models from disk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_paths</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – mol -&gt; path to the .pt checkpoint file</p></li>
+<li><p><strong>pretrain_csv_paths</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – mol -&gt; path to the pretrain CSV used during
+training (needed to reconstruct scalers and
+wavelength axis)</p></li>
+<li><p><strong>wav_ranges</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – mol -&gt; (lo_µm, hi_µm); must match wav_range used
+in trainmodel.pretrain_forward_model</p></li>
+<li><p><strong>n_pca</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – number of PCA components; must match what
+was used during training. Pass a dict
+{mol: n} for per-molecule values, or a
+single int for all molecules.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> or </em><em>None</em>) – auto-selects CUDA if available</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>mol -&gt; pretrained dict with keys</dt><dd><p>’net_shape’, ‘net_peak’, ‘xp_sc’, ‘yp_sc_shape’,
+‘yp_sc_peak’, ‘pca’, ‘wav’</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<hr class="docutils" />
+<section id="generating-spectra">
+<h2>Generating spectra<a class="headerlink" href="#generating-spectra" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.generate_spectrum">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">generate_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained_mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_wav</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#generate_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.generate_spectrum" title="Permalink to this definition"></a></dt>
+<dd><p>Generate a model spectrum for one molecule using the two-MLP forward model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>T</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – temperature in K</p></li>
+<li><p><strong>logN</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – log10 column density</p></li>
+<li><p><strong>A</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – linear area-scaling factor</p></li>
+<li><p><strong>pretrained_mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – single-molecule pretrained dict, e.g. pretrained[‘H2O’]</p></li>
+<li><p><strong>obs_wav</strong> (<em>np.ndarray</em><em> or </em><em>None</em>) – output wavelength grid in µm; if None,
+returns flux on the model’s native grid</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>model flux in Jy on obs_wav (or native grid if None)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<hr class="docutils" />
+<section id="fitting">
+<h2>Fitting<a class="headerlink" href="#fitting" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.fit_molecules">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">fit_molecules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_wav</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h2o_components</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">component_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loga_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'sobol'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_refine</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_top</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distinct_min_distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.03</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_prior</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_prior_log10</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#fit_molecules"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.fit_molecules" title="Permalink to this definition"></a></dt>
+<dd><p>Fit one or more selected molecules with global screening + local optimisation.</p>
+<p>Nonlinear parameters are (T, logN) for every fitted component.  Linear
+amplitudes A are solved together at every trial.  This is usually better
+than pure random L-BFGS-B restarts because the initial candidates cover the
+allowed parameter volume more evenly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_wav</strong> (<em>np.ndarray</em>) – observed wavelength axis in µm.</p></li>
+<li><p><strong>obs_flux</strong> (<em>np.ndarray</em>) – observed flux in Jy.</p></li>
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – molecule(s) to fit, e.g. ‘H2O’ or
+[‘C2H2’, ‘HCN’, ‘CO2’].</p></li>
+<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – mol -&gt; pretrained surrogate dict from load_models.</p></li>
+<li><p><strong>fit_ranges</strong> – shared (lo, hi), shared list of ranges, or dict mapping
+molecule/component labels to ranges.  Dict ranges are unioned for a
+joint fit.</p></li>
+<li><p><strong>h2o_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – 1 or 2.  If 2 and molecules contains ‘H2O’, two
+H2O components are fitted using the same pretrained[‘H2O’] model.</p></li>
+<li><p><strong>component_names</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] or </em><em>None</em>) – optional custom labels for fitted
+components.  Useful for names like [‘H2O_warm’, ‘H2O_hot’].</p></li>
+<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – default (200, 1400).  A dict can use
+molecule names or component labels.</p></li>
+<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – default (14, 19).  A dict can use
+molecule names or component labels.</p></li>
+<li><p><strong>loga_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – bounds on log10(A).  None means A &gt;= 0
+with no upper bound; otherwise bounded least squares is used.</p></li>
+<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of global screening samples.</p></li>
+<li><p><strong>sample_method</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – ‘sobol’, ‘latin_hypercube’, or ‘random’.</p></li>
+<li><p><strong>n_refine</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of distinct global candidates to refine locally.</p></li>
+<li><p><strong>n_top</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of ranked refined solutions to return.</p></li>
+<li><p><strong>distinct_min_distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – normalized distance used to avoid
+refining many nearly identical global candidates.</p></li>
+<li><p><strong>sigma</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>None</em>) – optional noise std in Jy.  If provided,
+top-solution uncertainties are likelihood-weighted by SSE.  If
+None, unweighted top-solution percentiles are returned.</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – random seed.</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – print progress and best losses.</p></li>
+<li><p><strong>T_prior</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – <p>Gaussian prior on temperature for each
+component, keyed by component label.  Each value is a tuple
+(T_center, T_std) in Kelvin.  Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">T_prior</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;H2O_warm&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">400.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+    <span class="s1">&#39;H2O_hot&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">800.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The prior is added to the SSE as a penalty term scaled by
+<code class="docutils literal notranslate"><span class="pre">sigma**2</span></code>, so both data and prior are in the same Jy² units:</p>
+<blockquote>
+<div><p>loss = SSE + sigma² × Σ ((T_i − T0_i) / σ_Ti)²</p>
+</div></blockquote>
+<p><code class="docutils literal notranslate"><span class="pre">sigma</span></code> must be provided when <code class="docutils literal notranslate"><span class="pre">T_prior</span></code> is set; if it is None
+the prior term is skipped with a warning.</p>
+</p></li>
+<li><p><strong>T_prior_log10</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – <p>if True, the prior is applied in log10(T) space
+and the values in <code class="docutils literal notranslate"><span class="pre">T_prior</span></code> are interpreted as (log10_T_center,
+log10_T_std).  Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">T_prior</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;H2O_warm&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">2.6</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span>   <span class="c1"># log10(T_warm) ~ N(2.6, 0.2)</span>
+    <span class="s1">&#39;H2O_hot&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">2.9</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">),</span>   <span class="c1"># log10(T_hot)  ~ N(2.9, 0.1)</span>
+<span class="p">}</span>
+<span class="n">T_prior_log10</span> <span class="o">=</span> <span class="kc">True</span>
+</pre></div>
+</div>
+</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>‘components’       : list of component metadata.
+‘params’           : label -&gt; {‘T’, ‘logN’, ‘A’, ‘log10A’, ‘model_mol’}.
+‘model_flux’       : total model flux on obs_wav.
+‘component_fluxes’ : label -&gt; model flux on obs_wav.
+‘residual’         : obs_flux - model_flux.
+‘fit_ranges’       : actual joint ranges used.
+‘top_list’         : ranked refined solutions.
+‘global_top’       : best unrefined global candidates.
+‘uncertainty’      : label -&gt; parameter percentile summary.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict with keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.fit_nested">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">fit_nested</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_wav</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logN_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loga_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_restarts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_top</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#fit_nested"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.fit_nested" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieve (T, logN, A) for one molecule via nested L-BFGS-B + NNLS optimisation.</p>
+<p>Outer loop: scipy L-BFGS-B over (T, logN).
+Inner loop: scipy NNLS solves for A (enforces A ≥ 0).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_wav</strong> (<em>np.ndarray</em>) – observed wavelength axis in µm</p></li>
+<li><p><strong>obs_flux</strong> (<em>np.ndarray</em>) – observed flux in Jy</p></li>
+<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models</p></li>
+<li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), (lo2,hi2)] µm</p></li>
+<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – (T_min, T_max) K (default (200, 1400))</p></li>
+<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – (logN_min, logN_max) (default (14, 19))</p></li>
+<li><p><strong>loga_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – (log10A_min, log10A_max) (default None = no upper limit)</p></li>
+<li><p><strong>n_restarts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of random L-BFGS-B restarts (default 20)</p></li>
+<li><p><strong>n_top</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – if &gt; 1, include top-n restart solutions in ‘top_list’</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – random seed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>‘params’     : {‘T’, ‘logN’, ‘A’} — best-fit parameters
+‘model_flux’ : np.ndarray on obs_wav — model spectrum
+‘residual’   : np.ndarray on obs_wav — obs_flux minus model_flux
+‘top_list’   : list of dicts (only present when n_top &gt; 1)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<hr class="docutils" />
+<section id="i-o-helpers">
+<h2>I/O helpers<a class="headerlink" href="#i-o-helpers" title="Permalink to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.load_observed_spectrum">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">load_observed_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skiprows</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delimiter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">','</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flux_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#load_observed_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.load_observed_spectrum" title="Permalink to this definition"></a></dt>
+<dd><p>Load an observed spectrum and remove NaN/blank flux pixels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – input CSV or text file.</p></li>
+<li><p><strong>skiprows</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of header rows to skip.</p></li>
+<li><p><strong>delimiter</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – file delimiter.</p></li>
+<li><p><strong>wav_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – wavelength column index.</p></li>
+<li><p><strong>flux_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – flux column index.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>wavelength and flux arrays.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[np.ndarray, np.ndarray]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.detect_stage_molecules">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">detect_stage_molecules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_wav</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stage</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma_noise</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">screening</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#detect_stage_molecules"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.detect_stage_molecules" title="Permalink to this definition"></a></dt>
+<dd><p>Return the subset of molecules in stage[‘mol’] that pass a peak detection test.</p>
+<p>For single-molecule stages (detect_peaks is a list of (lo, hi) ranges): the
+stage passes if the maximum flux in any listed window exceeds the threshold.
+For multi-molecule stages (detect_peaks is a dict {mol: (lo, hi)}): each
+molecule is checked independently; only detected ones are returned.
+If screening is False, or detect_peaks is absent/None, all molecules are
+returned without checking.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_wav</strong> (<em>np.ndarray</em>) – wavelength axis in µm (typically the running residual).</p></li>
+<li><p><strong>obs_flux</strong> (<em>np.ndarray</em>) – flux to check for detections.</p></li>
+<li><p><strong>stage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – stage config dict with keys ‘mol’ and optionally ‘detect_peaks’.</p></li>
+<li><p><strong>sigma_noise</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>None</em>) – per-pixel noise std in Jy; if None, screening
+is skipped regardless of the screening flag.</p></li>
+<li><p><strong>screening</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – master toggle; pass DETECTION_SCREENING from the script.</p></li>
+<li><p><strong>sigma_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – detection threshold = sigma_factor × sigma_noise.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>molecule names that passed detection (subset of stage[‘mol’]).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.save_fit_outputs">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">save_fit_outputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_prefix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#save_fit_outputs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.save_fit_outputs" title="Permalink to this definition"></a></dt>
+<dd><p>Save fitted spectrum, best parameters, and top solutions to CSV files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>result</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – result returned by fit_molecules, with obs_wav/obs_flux
+added by the caller.</p></li>
+<li><p><strong>output_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – directory for output CSV files.</p></li>
+<li><p><strong>output_prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – filename prefix.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>output kind -&gt; saved path.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.save_running_spectrum">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">save_running_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_wav</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">residual</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cumulative_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#save_running_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.save_running_spectrum" title="Permalink to this definition"></a></dt>
+<dd><p>Save the running residual and cumulative model after a fitting stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_wav</strong> (<em>np.ndarray</em>) – wavelength axis in µm.</p></li>
+<li><p><strong>residual</strong> (<em>np.ndarray</em>) – current running residual (obs minus all stages so far).</p></li>
+<li><p><strong>cumulative_model</strong> (<em>np.ndarray</em>) – sum of all stage model fluxes fitted so far.</p></li>
+<li><p><strong>output_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – output directory (created if missing).</p></li>
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – filename prefix; file is saved as {prefix}_running.csv.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>path to the saved CSV.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.print_fit_params">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">print_fit_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#print_fit_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.print_fit_params" title="Permalink to this definition"></a></dt>
+<dd><p>Print best-fit parameters with ± uncertainties for all components in a fit result.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fit</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – result dict returned by fit_molecules.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<hr class="docutils" />
+<dl class="py function">
+<dt class="sig sig-object py" id="diskmelts.fitting.save_fitted_comparison">
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">save_fitted_comparison</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_fits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#save_fitted_comparison"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.save_fitted_comparison" title="Permalink to this definition"></a></dt>
+<dd><p>Upsert one row of best-fit parameters into a comparison CSV.</p>
+<p>The CSV schema matches Parameter_Comparison.csv (log10 units for N and A,
+K for T).  If the file does not exist it is created.  If <em>source_name</em> is
+already present its values are updated in-place; otherwise a new row is
+appended.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>csv_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – path to the comparison CSV.</p></li>
+<li><p><strong>source_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – identifier for this source (used as the key).</p></li>
+<li><p><strong>all_fits</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – stage-name → fit-result dict from the fitting loop.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="trainmodel.html" class="btn btn-neutral float-left" title="diskmelts.trainmodel" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="validation.html" class="btn btn-neutral float-right" title="diskmelts.validation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diskmelts"
+version = "0.1.0"
+description = "Machine-learning Enabled Line fitting Tool for Spectra of protoplanetary disks"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Chengyan Xie" },
+    { name = "Dingshan Deng" },
+]
+keywords = ["astronomy", "protoplanetary disks", "JWST", "spectral fitting", "machine learning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "torch",
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "sphinx", "sphinx-rtd-theme", "myst-parser"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

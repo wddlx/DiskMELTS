@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Paper/paper.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "paper"
+              "title": "README"
             }
           }
         ]
@@ -185,6 +185,34 @@
   },
   "active": "268549c81611c564",
   "lastOpenFiles": [
-    "readthedocs.yaml"
+    "Paper/paper.md",
+    "examples/realobs_validation.py",
+    "Realobs_data/Consub_data.zip",
+    "src/diskmelts/__pycache__/plotting.cpython-311.pyc",
+    "src/diskmelts/__pycache__/validation.cpython-311.pyc",
+    "src/diskmelts/__pycache__/fitting.cpython-311.pyc",
+    "src/diskmelts/__pycache__/trainmodel.cpython-311.pyc",
+    "src/diskmelts/__pycache__/__init__.cpython-311.pyc",
+    "src/diskmelts.egg-info/top_level.txt",
+    "src/diskmelts.egg-info/requires.txt",
+    "src/diskmelts.egg-info/dependency_links.txt",
+    "docs/source/api/validation.md",
+    "docs/source/api/trainmodel.md",
+    "docs/source/api/plotting.md",
+    "docs/source/api/fitting.md",
+    "docs/source/quickstart.md",
+    "docs/source/installation.md",
+    "docs/source/index.md",
+    "docs/_build/html/_static/css/fonts/fontawesome-webfont.svg",
+    "docs/_build/html/_static/plus.png",
+    "docs/_build/html/_static/minus.png",
+    "docs/_build/html/_static/file.png",
+    "docs/api/plotting.md",
+    "docs/api/validation.md",
+    "docs/api/fitting.md",
+    "docs/api/trainmodel.md",
+    "docs/quickstart.md",
+    "docs/installation.md",
+    "docs/index.md"
   ]
 }
