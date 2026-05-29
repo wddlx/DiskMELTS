@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "Paper/paper.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "paper"
             }
           }
         ]
@@ -185,6 +185,9 @@
   },
   "active": "268549c81611c564",
   "lastOpenFiles": [
+    "README.md",
+    "docs/_build/html/_sources/training.md.txt",
+    "docs/_build/html/training.html",
     "Realobs_data/Consub_data/j16153456_v9.0_contsub_RVcorr.csv",
     "Realobs_data/Consub_data/j16153220_v9.0_contsub_RVcorr.csv",
     "Realobs_data/Consub_data/j16142029_v9.0_contsub_RVcorr.csv",
@@ -193,9 +196,6 @@
     "Realobs_data/Consub_data/j16075796_v9.0_contsub_RVcorr.csv",
     "Realobs_data/Consub_data/j16064385_v9.0_contsub_RVcorr.csv",
     "Realobs_data/Consub_data/IQTau_1d_v8.2_csub.csv",
-    "Realobs_data/Consub_data/HPTau_1d_v8.2_csub.csv",
-    "Realobs_data/Consub_data/GQLup_1d_v8.2_csub.csv",
-    "Realobs_data/Consub_data/GKTau_1d_v8.2_csub.csv",
     "docs/source/training.md",
     "docs/source/quickstart.md",
     "Paper/paper.md",

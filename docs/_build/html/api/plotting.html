@@ -110,24 +110,24 @@ The bottom panel shows the residual with a ±1σ band and reduced χ².</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>obs_wav</strong> (<em>np.ndarray</em>) – observed wavelength axis in µm</p></li>
 <li><p><strong>obs_flux</strong> (<em>np.ndarray</em>) – observed flux in Jy</p></li>
-<li><p><strong>results</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>]</em>) – one result dict from fit_nested / fit_molecules,
+<li><p><strong>results</strong> (<em>dict</em><em> or </em><em>list</em><em>[</em><em>dict</em><em>]</em>) – one result dict from fit_nested / fit_molecules,
 or a list of such dicts.
 Each dict must contain ‘model_flux’.
 ‘mol’ key is used for legend labels.
 ‘sigma’ key (if present) is used for χ².</p></li>
-<li><p><strong>sigma</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>None</em>) – noise std (Jy) for χ² and ±1σ band; overrides
+<li><p><strong>sigma</strong> (<em>float</em><em> or </em><em>None</em>) – noise std (Jy) for χ² and ±1σ band; overrides
 any sigma stored in results; if neither is
 available it is estimated from the residual std</p></li>
 <li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm — shaded in both panels</p></li>
-<li><p><strong>wav_plot_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em> or </em><em>None</em>) – (lo_µm, hi_µm) x-axis range; defaults
+<li><p><strong>wav_plot_range</strong> (<em>tuple</em><em> or </em><em>None</em>) – (lo_µm, hi_µm) x-axis range; defaults
 to full observed wavelength range</p></li>
-<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – source name used in the figure title</p></li>
-<li><p><strong>save_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em>) – file path to save figure (PNG/PDF); if None the
+<li><p><strong>name</strong> (<em>str</em>) – source name used in the figure title</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em> or </em><em>None</em>) – file path to save figure (PNG/PDF); if None the
 figure is returned without saving</p></li>
-<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – label -&gt; {‘T’, ‘logN’, ‘log10A’, …} from
+<li><p><strong>params</strong> (<em>dict</em><em> or </em><em>None</em>) – label -&gt; {‘T’, ‘logN’, ‘log10A’, …} from
 fit_molecules result[‘params’].  When provided, a
 parameter text box with best-fit values is drawn.</p></li>
-<li><p><strong>uncertainty</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em> or </em><em>None</em>) – label -&gt; {‘T’: {‘minus’, ‘plus’}, …} from
+<li><p><strong>uncertainty</strong> (<em>dict</em><em> or </em><em>None</em>) – label -&gt; {‘T’: {‘minus’, ‘plus’}, …} from
 fit_molecules result[‘uncertainty’].  Combined
 with params to show ± errorbars in the text box.</p></li>
 </ul>
@@ -155,9 +155,9 @@ validate_full output (keys T, logN, log10A, NA)  → 1 × 4 panels</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name; used in the figure title</p></li>
-<li><p><strong>val_results</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of validate_nt or validate_full</p></li>
-<li><p><strong>save_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em>) – file path to save figure; returned without
+<li><p><strong>mol</strong> (<em>str</em>) – molecule name; used in the figure title</p></li>
+<li><p><strong>val_results</strong> (<em>dict</em>) – output of validate_nt or validate_full</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em> or </em><em>None</em>) – file path to save figure; returned without
 saving if None</p></li>
 </ul>
 </dd>
@@ -178,10 +178,10 @@ Outlier masks are computed independently per row.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name; used in the figure title</p></li>
-<li><p><strong>val_pretrain</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of validate_nt for in-pretrain grid points</p></li>
-<li><p><strong>val_holdout</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of validate_nt_holdout for unseen grid points</p></li>
-<li><p><strong>save_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em>) – file path to save figure; returned without
+<li><p><strong>mol</strong> (<em>str</em>) – molecule name; used in the figure title</p></li>
+<li><p><strong>val_pretrain</strong> (<em>dict</em>) – output of validate_nt for in-pretrain grid points</p></li>
+<li><p><strong>val_holdout</strong> (<em>dict</em>) – output of validate_nt_holdout for unseen grid points</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em> or </em><em>None</em>) – file path to save figure; returned without
 saving if None</p></li>
 </ul>
 </dd>

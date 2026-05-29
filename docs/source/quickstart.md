@@ -1,8 +1,7 @@
 # Quick Start
 
 DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
-models. Training new surrogates is optional and is covered in
-{doc}`training`.
+models. This page shows the standard fitting workflow for observed data.
 
 ## 1. Load the pretrained models
 

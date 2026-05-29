@@ -1,155 +1,120 @@
 # Quick Start
 
-## Workflow overview
+DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
+models. This page shows the standard fitting workflow for observed data.
 
-DiskMELTS has two main workflows:
+## 1. Load the pretrained models
 
-1. **Train** a forward surrogate for each molecule (done once per molecule).
-2. **Fit** a real observed spectrum using the trained surrogates.
-
-A ready-to-run example script is provided for each:
-
-| Task | Script |
-|---|---|
-| Train + validate | `examples/dev_v1_pt_validation.py` |
-| Fit a real spectrum | `examples/dev_v1_realobs.py` |
-
----
-
-## 1. Train a forward model
+The model checkpoint (`.pt`) and its matching pretrain CSV must be kept
+together. The checkpoint stores the neural-network weights, while the pretrain
+CSV provides the wavelength grid and input scaling metadata used when the model
+was trained.
 
 ```python
-import numpy as np
-from diskmelts import load_model_grid, generate_pre_training_set, pretrain_forward_model
-
-# Load the slab-model grid for H2O
-models = load_model_grid('Model_grids/H2O')
-wav_grid = next(iter(models.values()))['wavelength']
-
-# Build the pretrain CSV (one row per grid point)
-generate_pre_training_set(
-    mol='H2O',
-    models=models,
-    output_path='Pretrain_grid/pretrain_H2O_11to19.csv',
-    wav_out=wav_grid,
-)
-
-# Train the two-MLP forward model (or load if checkpoint exists)
-pretrained = pretrain_forward_model(
-    mol='H2O',
-    pretrain_csv='Pretrain_grid/pretrain_H2O_11to19.csv',
-    wav_range=(11.0, 19.0),
-    model_path='Trained_model/net_H2O_forward_11to19.pt',
-    n_pca=21,
-)
-```
-
-Per-molecule defaults:
-
-| Molecule | `wav_range` (µm) | `fit_ranges` (µm) | `n_pca` |
-|---|---|---|---|
-| H2O | 11–19 | [(11,12), (16.5,18.5)] | 21 |
-| C2H2 | 11–17.5 | (12, 16.5) | 15 |
-| HCN | 11–17.5 | (12, 17.0) | 15 |
-| CO2 | 11–17.5 | (12, 16.5) | 15 |
-
----
-
-## 2. Validate the forward model
-
-```python
-from diskmelts import load_models, validate_nt, validate_nt_holdout, plot_validation_split
+from diskmelts import load_models
 
 pretrained = load_models(
-    model_paths       = {'H2O': 'Trained_model/net_H2O_forward_11to19.pt'},
-    pretrain_csv_paths= {'H2O': 'Pretrain_grid/pretrain_H2O_11to19.csv'},
-    wav_ranges        = {'H2O': (11.0, 19.0)},
-    n_pca             = {'H2O': 21},
+    model_paths={
+        'H2O':  'Trained_model/net_H2O_forward_11to19.pt',
+        'C2H2': 'Trained_model/net_C2H2_forward_11to19.pt',
+        'HCN':  'Trained_model/net_HCN_forward_11to19.pt',
+        'CO2':  'Trained_model/net_CO2_forward_11to19.pt',
+    },
+    pretrain_csv_paths={
+        'H2O':  'Pretrain_grid/pretrain_H2O_11to19.csv',
+        'C2H2': 'Pretrain_grid/pretrain_C2H2_11to19.csv',
+        'HCN':  'Pretrain_grid/pretrain_HCN_11to19.csv',
+        'CO2':  'Pretrain_grid/pretrain_CO2_11to19.csv',
+    },
+    wav_ranges={
+        'H2O':  (11.0, 19.0),
+        'C2H2': (12.0, 16.5),
+        'HCN':  (12.0, 17.0),
+        'CO2':  (12.0, 16.5),
+    },
+    n_pca={
+        'H2O': 21,
+        'C2H2': 15,
+        'HCN': 15,
+        'CO2': 15,
+    },
 )
-
-# NT validation on in-pretrain rows (A = 1 fixed)
-nt_pretrain = validate_nt(
-    'H2O', pretrained,
-    pretrain_csv='Pretrain_grid/pretrain_H2O_11to19.csv',
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-)
-
-# NT validation on held-out grid points (unseen during training)
-nt_holdout = validate_nt_holdout(
-    'H2O', pretrained, models, holdout_keys,
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-)
-
-plot_validation_split('H2O', nt_pretrain, nt_holdout,
-                      save_path='figures/val_H2O_split.png')
 ```
 
----
+## 2. Load a spectrum
 
-## 3. Fit a real spectrum
-
-The recommended entry point is `examples/dev_v1_realobs.py`.
-Edit the `CONFIGURATION` block at the top, then run from the repo root:
-
-```bash
-python examples/dev_v1_realobs.py
-```
-
-Key configuration variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `INPUT_PATH` | — | Path to continuum-subtracted CSV |
-| `NAME` | — | Source name for filenames and plot title |
-| `N_SAMPLES` | 20000 | Sobol samples for global search |
-| `N_REFINE` | 32 | Candidates passed to L-BFGS-B |
-| `N_TOP` | 20 | Solutions kept for uncertainty estimation |
-| `DETECTION_SCREENING` | `True` | Skip molecules below 3σ |
-| `STAGES` | list of dicts | Ordered fit stages |
-
-Or call `fit_molecules` directly in a script or notebook:
+If your continuum-subtracted spectrum is a simple CSV, use the built-in helper:
 
 ```python
-from diskmelts import load_models, load_observed_spectrum, fit_molecules, plot_fit
-
-pretrained = load_models(
-    model_paths       = {'H2O': 'Trained_model/net_H2O_forward_11to19.pt'},
-    pretrain_csv_paths= {'H2O': 'Pretrain_grid/pretrain_H2O_11to19.csv'},
-    wav_ranges        = {'H2O': (11.0, 19.0)},
-    n_pca             = {'H2O': 21},
-)
+from diskmelts import load_observed_spectrum
 
 obs_wav, obs_flux = load_observed_spectrum('Realobs_data/Consub_data/my_source.csv')
+```
 
-fit = fit_molecules(
-    obs_wav, obs_flux,
+You can also read the spectrum with your own code. The fitting functions only
+need two one-dimensional arrays: `obs_wav` in microns and `obs_flux` in Jy.
+
+## 3. Fit H2O
+
+```python
+from diskmelts import fit_molecules, plot_fit
+
+fit_h2o = fit_molecules(
+    obs_wav,
+    obs_flux,
     mol='H2O',
     pretrained=pretrained,
     fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-    h2o_components=2,
-    component_names=['H2O_warm', 'H2O_hot'],
+    h2o_components=1,
     n_samples=20000,
-    sigma=0.001,   # noise std in Jy for uncertainty weighting
+    n_refine=32,
+    n_top=20,
+    sigma=0.001,
+    seed=42,
 )
 
-plot_fit(obs_wav, obs_flux, fit,
-         fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-         name='MySource',
-         save_path='figures/myfit.png',
-         params=fit['params'],
-         uncertainty=fit['uncertainty'])
+plot_fit(
+    obs_wav,
+    obs_flux,
+    fit_h2o,
+    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
+    name='my_source',
+    save_path='figures/my_source_h2o.png',
+    params=fit_h2o['params'],
+    uncertainty=fit_h2o['uncertainty'],
+)
 ```
 
-### Two-component H2O
+## 4. Fit C-bearing molecules
 
-Set `h2o_components=2` and `component_names=['H2O_warm', 'H2O_hot']` to fit
-two water components simultaneously using the same pretrained H2O surrogate.
-Use `T_prior` with `T_prior_log10=True` to apply log-temperature Gaussian
-priors that help separate the two components:
+After subtracting water, C$_2$H$_2$, HCN, and CO$_2$ are usually fitted on the
+residual spectrum. The example below fits C$_2$H$_2$ and HCN together.
 
 ```python
-fit = fit_molecules(
-    obs_wav, obs_flux,
+residual_after_h2o = obs_flux - fit_h2o['model_flux']
+
+fit_c = fit_molecules(
+    obs_wav,
+    residual_after_h2o,
+    mol=['C2H2', 'HCN'],
+    pretrained=pretrained,
+    fit_ranges=(12.0, 16.5),
+    n_samples=20000,
+    n_refine=32,
+    n_top=20,
+    sigma=0.001,
+    seed=42,
+)
+```
+
+## Two-component H2O
+
+To fit warm and hot water components simultaneously, set `h2o_components=2`.
+
+```python
+fit_h2o_two = fit_molecules(
+    obs_wav,
+    obs_flux,
     mol='H2O',
     pretrained=pretrained,
     fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
@@ -161,14 +126,13 @@ fit = fit_molecules(
 )
 ```
 
----
+## Example script
 
-## Forward model convention
+For a complete staged workflow, start from:
 
+```bash
+python examples/dev_v1_realobs.py
 ```
-flux(T, logN, A) = A × peak(T, logN) × shape(T, logN)
-```
 
-The linear amplitude `A` is solved analytically with NNLS (or `lsq_linear`
-when bounds are set) after the nonlinear `(T, logN)` Sobol search, making
-the optimisation much faster than treating `A` as a free nonlinear parameter.
+Edit the configuration block at the top of that script for your source name,
+input spectrum path, molecules, wavelength masks, and output directory.
