@@ -2,21 +2,26 @@
 
 **Machine-learning Enabled Line fitting Tool for Spectra**
 
-DiskMELTS is a neural surrogate-assisted framework for retrieving molecular gas
-parameters — temperature ($T$), column density ($\log N$), and emitting area ($A$) —
-from JWST mid-IR spectra (11–19 µm) of protoplanetary disks.
+DiskMELTS is a neural surrogate-assisted fitting package for retrieving
+molecular gas parameters — temperature ($T$), column density ($\log N$), and
+emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
+
+Most users should start by loading the provided pretrained models and fitting
+their own continuum-subtracted spectra. Training new models is available as an
+advanced workflow for users with custom slab-model grids.
 
 ---
 
 ## How it works
 
-Each molecule is represented by two small MLPs trained on slab-model grids:
+Each pretrained molecule is represented by two small MLPs trained on slab-model
+grids:
 
 - `net_shape` : $(T, \log N)$ → peak-normalised spectral shape (via PCA)
 - `net_peak`  : $(T, \log N)$ → $\log_{10}(\text{peak flux})$
 
-Retrieval is done by optimisation through the forward models, not by inverting
-them, which keeps the problem well-posed for any combination of molecules.
+Retrieval is done by optimization through the forward models, with the linear
+area scaling solved analytically during the fit.
 
 ---
 
@@ -26,6 +31,7 @@ them, which keeps the problem well-posed for any combination of molecules.
 
 installation
 quickstart
+training
 ```
 
 ```{toctree}

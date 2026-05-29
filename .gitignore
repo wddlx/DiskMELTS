@@ -74,4 +74,4 @@ latex/*.synctex.gz
 # Training set
 Model_grids/
 Pretrain_grid/
-Realobs_data/
+Realobs_data/Consub_data0/

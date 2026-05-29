@@ -1,0 +1,30 @@
+name: diskmelts
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24.0
+  - setuptools>=61.0
+
+  # Runtime dependencies from pyproject.toml and source imports.
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - pytorch
+  - matplotlib
+
+  # Useful for examples and notebooks.
+  - jupyterlab
+  - ipykernel
+
+  # Development, testing, and documentation.
+  - pytest
+  - sphinx>=7.0
+  - sphinx-rtd-theme
+  - myst-parser
+
+  # Install the local package in editable mode when creating the environment
+  # from the repository root.
+  - pip:
+      - -e .
