@@ -7,8 +7,7 @@ molecular gas parameters — temperature ($T$), column density ($\log N$), and
 emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
 
 Most users should start by loading the provided pretrained models and fitting
-their own continuum-subtracted spectra. Training new models is available as an
-advanced workflow for users with custom slab-model grids.
+their own continuum-subtracted spectra.
 
 ---
 
@@ -31,7 +30,6 @@ area scaling solved analytically during the fit.
 
 installation
 quickstart
-training
 ```
 
 ```{toctree}

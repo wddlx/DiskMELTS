@@ -6,7 +6,7 @@ dependencies:
   - pip>=24.0
   - setuptools>=61.0
 
-  # Runtime dependencies from pyproject.toml and source imports.
+  # Runtime dependencies for fitting with pretrained models.
   - numpy
   - pandas
   - scipy

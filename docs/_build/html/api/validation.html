@@ -112,19 +112,19 @@ retrieval than using fit_nested on physical flux.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
-<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
-<li><p><strong>pretrain_csv</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – path to the pretrain CSV from generate_pre_training_set</p></li>
+<li><p><strong>mol</strong> (<em>str</em>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>pretrained</strong> (<em>dict</em>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>pretrain_csv</strong> (<em>str</em>) – path to the pretrain CSV from generate_pre_training_set</p></li>
 <li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm; must align with the model
 wavelength grid (pretrained[mol][‘wav’])</p></li>
-<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em>) – rows to validate; if None uses frac (default None)</p></li>
-<li><p><strong>frac</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – fraction of rows when n_samples is None (default 0.05)</p></li>
-<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K (default (200, 1400))</p></li>
-<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) (default (14, 19))</p></li>
-<li><p><strong>n_starts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random starting points for Adam optimizer (default 20)</p></li>
-<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Adam gradient steps per start (default 300)</p></li>
-<li><p><strong>lr</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam learning rate (default 0.03)</p></li>
-<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random seed for row sampling (default 42)</p></li>
+<li><p><strong>n_samples</strong> (<em>int</em><em> or </em><em>None</em>) – rows to validate; if None uses frac (default None)</p></li>
+<li><p><strong>frac</strong> (<em>float</em>) – fraction of rows when n_samples is None (default 0.05)</p></li>
+<li><p><strong>T_bounds</strong> (<em>tuple</em>) – (T_min, T_max) K (default (200, 1400))</p></li>
+<li><p><strong>logN_bounds</strong> (<em>tuple</em>) – (logN_min, logN_max) (default (14, 19))</p></li>
+<li><p><strong>n_starts</strong> (<em>int</em>) – random starting points for Adam optimizer (default 20)</p></li>
+<li><p><strong>n_steps</strong> (<em>int</em>) – Adam gradient steps per start (default 300)</p></li>
+<li><p><strong>lr</strong> (<em>float</em>) – Adam learning rate (default 0.03)</p></li>
+<li><p><strong>seed</strong> (<em>int</em>) – random seed for row sampling (default 42)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -134,7 +134,7 @@ wavelength grid (pretrained[mol][‘wav’])</p></li>
 ‘logN_pred’ : np.ndarray — recovered log10 column densities</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+<dd class="field-odd"><p>(dict) with keys</p>
 </dd>
 </dl>
 </dd></dl>
@@ -151,19 +151,19 @@ This gives an honest estimate of generalisation to unseen grid points.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
-<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
-<li><p><strong>models</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_model_grid for this molecule,
+<li><p><strong>mol</strong> (<em>str</em>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>pretrained</strong> (<em>dict</em>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>models</strong> (<em>dict</em>) – output of load_model_grid for this molecule,
 keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
-<li><p><strong>holdout_keys</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a>) – list of (T, logN) tuples that were excluded from
+<li><p><strong>holdout_keys</strong> (<em>list</em>) – list of (T, logN) tuples that were excluded from
 the pretrain CSV</p></li>
 <li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm; must align with the model
 wavelength grid (pretrained[mol][‘wav’])</p></li>
-<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K (default (200, 1400))</p></li>
-<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) (default (14, 19))</p></li>
-<li><p><strong>n_starts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random starting points for Adam optimizer (default 20)</p></li>
-<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Adam gradient steps per start (default 300)</p></li>
-<li><p><strong>lr</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Adam learning rate (default 0.03)</p></li>
+<li><p><strong>T_bounds</strong> (<em>tuple</em>) – (T_min, T_max) K (default (200, 1400))</p></li>
+<li><p><strong>logN_bounds</strong> (<em>tuple</em>) – (logN_min, logN_max) (default (14, 19))</p></li>
+<li><p><strong>n_starts</strong> (<em>int</em>) – random starting points for Adam optimizer (default 20)</p></li>
+<li><p><strong>n_steps</strong> (<em>int</em>) – Adam gradient steps per start (default 300)</p></li>
+<li><p><strong>lr</strong> (<em>float</em>) – Adam learning rate (default 0.03)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -173,7 +173,7 @@ wavelength grid (pretrained[mol][‘wav’])</p></li>
 ‘logN_pred’ : np.ndarray — recovered log10 column densities</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+<dd class="field-odd"><p>(dict) with keys</p>
 </dd>
 </dl>
 </dd></dl>
@@ -190,21 +190,21 @@ to recover all three parameters.  This tests the full fitting pipeline.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mol</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
-<li><p><strong>models</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_model_grid for this molecule,
+<li><p><strong>mol</strong> (<em>str</em>) – molecule name, e.g. ‘H2O’, ‘C2H2’</p></li>
+<li><p><strong>models</strong> (<em>dict</em>) – output of load_model_grid for this molecule,
 keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
-<li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – output of load_models (keyed by mol name)</p></li>
+<li><p><strong>pretrained</strong> (<em>dict</em>) – output of load_models (keyed by mol name)</p></li>
 <li><p><strong>fit_ranges</strong> – (lo, hi) or [(lo1,hi1), …] µm passed to fit_nested</p></li>
-<li><p><strong>n_samples</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – number of synthetic spectra to generate (default 30)</p></li>
-<li><p><strong>log_A_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (log10A_min, log10A_max) for uniform A draw</p></li>
-<li><p><strong>noise_scale</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Gaussian noise std as fraction of peak flux;
+<li><p><strong>n_samples</strong> (<em>int</em>) – number of synthetic spectra to generate (default 30)</p></li>
+<li><p><strong>log_A_range</strong> (<em>tuple</em>) – (log10A_min, log10A_max) for uniform A draw</p></li>
+<li><p><strong>noise_scale</strong> (<em>float</em>) – Gaussian noise std as fraction of peak flux;
 0.0 for noise-free spectra (default 0.001)</p></li>
-<li><p><strong>T_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (T_min, T_max) K passed to fit_nested</p></li>
-<li><p><strong>logN_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (logN_min, logN_max) passed to fit_nested</p></li>
-<li><p><strong>loga_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – (log10A_min, log10A_max) for fitting search range
+<li><p><strong>T_bounds</strong> (<em>tuple</em>) – (T_min, T_max) K passed to fit_nested</p></li>
+<li><p><strong>logN_bounds</strong> (<em>tuple</em>) – (logN_min, logN_max) passed to fit_nested</p></li>
+<li><p><strong>loga_bounds</strong> (<em>tuple</em>) – (log10A_min, log10A_max) for fitting search range
 (default (-2, 2)); independent of log_A_range</p></li>
-<li><p><strong>n_restarts</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random restarts per spectrum in fit_nested (default 50)</p></li>
-<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – random seed (default 42)</p></li>
+<li><p><strong>n_restarts</strong> (<em>int</em>) – random restarts per spectrum in fit_nested (default 50)</p></li>
+<li><p><strong>seed</strong> (<em>int</em>) – random seed (default 42)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -218,7 +218,7 @@ keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
 ‘log10NA_pred’ : np.ndarray — logN + log10A (predicted)</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>) with keys</p>
+<dd class="field-odd"><p>(dict) with keys</p>
 </dd>
 </dl>
 </dd></dl>
