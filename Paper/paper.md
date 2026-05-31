@@ -28,7 +28,7 @@ Extracting physical parameters from these spectra commonly requires fitting loca
 
 These tools represent the current state of the art, but even accelerated slab-model fitting can require tens of minutes to several hours per source when the $(T, N, A)$ parameter space is explored thoroughly, and potentially days for full Bayesian posterior sampling. For JWST surveys targeting tens to hundreds of disks, this cost becomes a major bottleneck, especially when multiple molecules must be fitted and subtracted sequentially.
 
-`DiskMELTS` addresses this bottleneck by replacing the radiative-transfer forward model with pretrained neural-network surrogates. A complete retrieval for one molecule in one source typically runs in under one minute on a standard laptop CPU, more than three orders of magnitude faster than conventional approaches while preserving accuracy comparable to classical LTE slab-model fits. The default distribution provides surrogate models for H$_2$O, C$_2$H$_2$, HCN, and CO$_2$ over the $11$--$19\,\mu$m MIRI range, covering $T = 100$--$1400$ K and $\log_{10}(N/{\mathrm{cm}}^{-2}) = 13$--$19$.
+`DiskMELTS` addresses this bottleneck by replacing the radiative-transfer forward model with pretrained neural-network surrogates. A complete retrieval for one molecule in one source typically runs in under one minute on a standard laptop CPU, more than three orders of magnitude faster than conventional approaches while preserving accuracy comparable to classical LTE slab-model fits. The default distribution provides surrogate models for H$_2$O over the $11$--$19\,\mu$m MIRI range, the main C-bearing molecules (C$_2$H$_2$, HCN, CO$_2$) and two main isotopes ($^{13}CCH_2$, $^{13}CO_2$) over the $12$--$16.5\,\mu$m MIRI range, covering $T = 100$--$1400$ K and $\log_{10}(N/{\mathrm{cm}}^{-2}) = 13$--$19$.
 
 The package is particularly well suited for researchers who wish to (1) rapidly characterize molecular abundances across large statistical samples of disks, (2) isolate and subtract water or other molecular line contamination before measuring atomic or ionic line fluxes, or (3) obtain quick parameter estimates to guide more detailed follow-up analysis.
 
@@ -36,7 +36,7 @@ The package is particularly well suited for researchers who wish to (1) rapidly 
 
 `DiskMELTS` is organized into four Python modules: `trainmodel` for surrogate training and slab-grid utilities, `validation` for synthetic recovery tests, `fitting` for spectral retrieval, and `plotting` for diagnostic figures. The default workflow starts from precomputed LTE slab spectra, trains compact neural surrogates for individual molecules, and then uses those surrogates in a global-to-local optimization procedure for observed spectra.
 
-## Slab model
+## Training set: Slab model
 
 `DiskMELTS` trains its surrogate models on LTE isothermal slab spectra with optical-depth effects, following the same physical assumptions used by IRIS [@Romero24]. Because nearby molecular transitions can overlap in wavelength, the optical depth is summed over all contributing lines,
 
@@ -79,7 +79,7 @@ Retrieval follows a global-to-local search strategy. By default, $20{,}000$ cand
 
 The top distinct candidates are then refined with L-BFGS-B local optimization, again solving amplitudes by NNLS at each function evaluation. The best refined solution provides the point estimate. Uncertainty estimates are derived from the spread of the top-ranked distinct refined solutions, optionally weighted by their likelihood under the assumed noise model.
 
-For observed spectra, `DiskMELTS` applies a sequential fit-and-subtract strategy: H$_2$O is fitted first in wavelength regions where it dominates ($11$--$12\,\mu$m and $16.5$--$18.5\,\mu$m), the best-fit H$_2$O model is subtracted from the observation, and the carbon-bearing molecules (C$_2$H$_2$, HCN, CO$_2$) are then jointly fitted on the residual in the $12$--$16\,\mu$m region. A $3\sigma$ detection screen is applied before each stage so that non-detected molecules are automatically excluded. The sequential order and wavelength masks can be adjusted for individual spectra.
+For observed spectra, `DiskMELTS` applies a sequential fit-and-subtract strategy: H$_2$O is fitted first in wavelength regions where it dominates ($11$--$12\,\mu$m and $16.5$--$18.5\,\mu$m), the best-fit H$_2$O model is subtracted from the observation, and the carbon-bearing molecules (C$_2$H$_2$, HCN, CO$_2$) are then jointly fitted on the residual in the $12$--$16.5\,\mu$m region. A $3\sigma$ detection screen can be applied before each stage so that non-detected molecules are automatically excluded. The sequential order and wavelength masks can be adjusted for individual spectra.
 
 Two-component H$_2$O fits are also supported through the same API. In this mode, the model includes independent warm and hot components with separate $(T,N,A)$ parameters. An ordering constraint, $T_{\mathrm{warm}} \leq T_{\mathrm{hot}}$, reduces label switching, and optional Gaussian temperature penalties can regularize the decomposition when the data do not uniquely separate the two components.
 
@@ -89,11 +89,11 @@ The trained surrogates are validated against held-out slab-model grid points and
 
 $$\Delta F/F = \sum_\lambda |F^{\mathrm{true}}_\lambda-\hat{F}_\lambda| / \sum_\lambda |F^{\mathrm{true}}_\lambda|$$
 
-to quantify flux-level agreement between the surrogate and the original slab model.
+to quantify flux-level agreement between the surrogate and the original slab model. The trained surrogates achieve a maximum $\Delta F / F \lesssim 5\%$ for each of the molecule. 
 
-Applied to real JWST/MIRI spectra, `DiskMELTS` returns molecular parameters broadly consistent with classical LTE slab-model fitting. As in standard slab retrievals, $N$ and $A$ can be strongly degenerate, especially for H$_2$O, while the product $N \times A$, which traces the total number of emitting molecules, is more robustly recovered. For blended C$_2$H$_2$ and HCN emission, multiple parameter combinations can produce comparably good spectra, so the returned parameter uncertainties should be interpreted as including both slab-model degeneracy and surrogate-model approximation error.
+Applied to real JWST/MIRI spectra, `DiskMELTS` returns molecular parameters broadly consistent with classical LTE slab-model fitting. As in standard slab retrievals, $N$ and $A$ can be strongly degenerate, especially for those optically thin emissions, while the product $N \times A$, which traces the total number of emitting molecules, is more robustly recovered. For blended C$_2$H$_2$ and HCN emission, multiple parameter combinations can produce comparably good spectra, so the returned parameter uncertainties should be interpreted as including both slab-model degeneracy and surrogate-model approximation error.
 
-`DiskMELTS` is not limited to the four molecules included in the default distribution. The `trainmodel` module exposes the full training pipeline: grid loading, pretrain CSV generation, and two-MLP training, so that users with their own slab model grids can train surrogate models for any molecule and integrate them directly into the fitting workflow.
+`DiskMELTS` is not limited to the four molecules and 2 isotopes included in the default distribution. The `trainmodel` module exposes the full training pipeline: grid loading, pretrain CSV generation, and two-MLP training, so that users with their own slab model grids can train surrogate models for any molecule and integrate them directly into the fitting workflow.
 
 # Acknowledgements
 
