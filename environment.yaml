@@ -2,21 +2,30 @@ name: diskmelts
 channels:
   - conda-forge
 dependencies:
-  - python = 3.12
-  - pip >= 24.0
-  - setuptools >= 61.0
+  - python=3.11
+  - pip>=24.0
+  - setuptools>=61.0
 
-  # DiskMELTS runtime dependencies
-  - numpy
+  # Runtime dependencies for fitting with pretrained models.
+  - numpy >= 2.0
   - pandas >= 2.0
   - scipy
   - scikit-learn >= 1.4
   - pytorch
   - matplotlib >= 3.8
 
-  # For running example notebooks
+  # Useful for examples and notebooks.
   - jupyter
+  - jupyterlab
+  - ipykernel
 
-  # Install DiskMELTS in editable mode
+  # # Development, testing, and documentation.
+  # - pytest
+  # - sphinx>=7.0
+  # - sphinx-rtd-theme
+  # - myst-parser
+
+  # Install the local package in editable mode when creating the environment
+  # from the repository root.
   - pip:
       - -e .

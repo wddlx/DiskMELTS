@@ -39,7 +39,7 @@ Press `y` to all prompts. This will download a number of packages.
 
 Activate it:
 
-    conda activate diskmelts-stable
+    conda activate diskmelts
 
 Verify everything is installed:
 
@@ -58,5 +58,5 @@ This makes `import diskmelts` available from anywhere in your environment.
 ## Verify
 
 ```bash
-python test.py
+pytest tests/
 ```

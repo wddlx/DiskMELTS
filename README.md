@@ -30,7 +30,7 @@ Press `y` to all prompts. This will download a number of packages.
 
 Activate it:
 
-    conda activate diskmelts-stable
+    conda activate diskmelts
 
 Verify everything is installed:
 
