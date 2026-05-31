@@ -8,12 +8,37 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-```bash
-conda env create -f environment.yaml
-conda activate diskmelts
-```
+### Conda (beginner-friendly)
 
-or install into an existing environment:
+We provide `environment.yaml` as a quick-start option. First, check that you have conda:
+
+    conda --version
+
+If you don't have conda, google how to install it!
+
+Update conda to version 23 or above:
+
+    conda update conda
+
+Press `y` to all prompts.
+
+Create the environment:
+
+    conda env create --file=environment.yaml
+
+Press `y` to all prompts. This will download a number of packages.
+
+Activate it:
+
+    conda activate diskmelts-stable
+
+Verify everything is installed:
+
+    conda list
+
+### Custom environment
+
+Feel free to use your own conda or virtual environment. Install the package with:
 
 ```bash
 pip install -e .
