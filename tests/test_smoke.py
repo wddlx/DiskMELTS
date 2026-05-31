@@ -1,27 +1,19 @@
-"""Pytest smoke tests for the pretrained DiskMELTS fitting workflow.
-
-Run from the repository root:
-
-    pytest test.py
+"""Smoke tests for the pretrained DiskMELTS fitting workflow.
 
 The pretrained fitting test is skipped unless both the H2O checkpoint and its
-matching pretrain CSV are present. This keeps the test useful for source
-checkouts while still exercising the main user workflow in release bundles.
+matching pretrain CSV are present in the repository. This keeps CI fast while
+still exercising the full user workflow when running locally with the model files.
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_import_diskmelts():
@@ -84,7 +76,3 @@ def test_pretrained_h2o_fitting_smoke():
     assert np.isfinite(params["logN"])
     assert np.isfinite(params["A"])
     assert residual_rms < max(1e-20, 0.05 * flux_rms)
-
-
-if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__]))

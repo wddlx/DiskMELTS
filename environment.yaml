@@ -7,22 +7,23 @@ dependencies:
   - setuptools>=61.0
 
   # Runtime dependencies for fitting with pretrained models.
-  - numpy
-  - pandas
+  - numpy >= 2.0
+  - pandas >= 2.0
   - scipy
-  - scikit-learn
+  - scikit-learn >= 1.4
   - pytorch
-  - matplotlib
+  - matplotlib >= 3.8
 
   # Useful for examples and notebooks.
+  - jupyter
   - jupyterlab
   - ipykernel
 
-  # Development, testing, and documentation.
-  - pytest
-  - sphinx>=7.0
-  - sphinx-rtd-theme
-  - myst-parser
+  # # Development, testing, and documentation.
+  # - pytest
+  # - sphinx>=7.0
+  # - sphinx-rtd-theme
+  # - myst-parser
 
   # Install the local package in editable mode when creating the environment
   # from the repository root.

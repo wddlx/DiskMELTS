@@ -34,3 +34,6 @@ dev = ["pytest", "sphinx", "sphinx-rtd-theme", "myst-parser"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
