@@ -4,7 +4,7 @@
 
 | Package | Purpose |
 |---|---|
-| `torch` | MLP training and inference |
+| `torch` | Pretrained model inference and optional training |
 | `numpy` | Array operations |
 | `pandas` | CSV I/O |
 | `scipy` | L-BFGS-B optimiser, NNLS, Sobol sampling |
@@ -27,17 +27,17 @@ This makes `import diskmelts` available from anywhere in your environment.
 
 ## Conda environment (recommended)
 
-If you use Conda, create a dedicated environment first:
+If you use Conda, create the project environment from the repository root:
 
 ```bash
-conda create -n diskmelts python=3.11
+conda env create -f environment.yaml
 conda activate diskmelts
-pip install -e .
 ```
+
+The environment file installs DiskMELTS in editable mode with `pip install -e .`.
 
 ## Verify
 
-```python
-import diskmelts
-print(diskmelts.__version__)   # should print 0.1.0
+```bash
+python test.py
 ```

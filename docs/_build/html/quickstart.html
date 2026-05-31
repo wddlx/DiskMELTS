@@ -49,14 +49,12 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#workflow-overview">Workflow overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#train-a-forward-model">1. Train a forward model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#validate-the-forward-model">2. Validate the forward model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#fit-a-real-spectrum">3. Fit a real spectrum</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#two-component-h2o">Two-component H2O</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#forward-model-convention">Forward model convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#load-the-pretrained-models">1. Load the pretrained models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#load-a-spectrum">2. Load a spectrum</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fit-h2o">3. Fit H2O</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fit-c-bearing-molecules">4. Fit C-bearing molecules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#two-component-h2o">Two-component H2O</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-script">Example script</a></li>
 </ul>
 </li>
 </ul>
@@ -94,207 +92,114 @@
              
   <section id="quick-start">
 <h1>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this heading"></a></h1>
-<section id="workflow-overview">
-<h2>Workflow overview<a class="headerlink" href="#workflow-overview" title="Permalink to this heading"></a></h2>
-<p>DiskMELTS has two main workflows:</p>
-<ol class="arabic simple">
-<li><p><strong>Train</strong> a forward surrogate for each molecule (done once per molecule).</p></li>
-<li><p><strong>Fit</strong> a real observed spectrum using the trained surrogates.</p></li>
-</ol>
-<p>A ready-to-run example script is provided for each:</p>
-<table class="colwidths-auto docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Task</p></th>
-<th class="head"><p>Script</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Train + validate</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">examples/dev_v1_pt_validation.py</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p>Fit a real spectrum</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">examples/dev_v1_realobs.py</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<hr class="docutils" />
-<section id="train-a-forward-model">
-<h2>1. Train a forward model<a class="headerlink" href="#train-a-forward-model" title="Permalink to this heading"></a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_model_grid</span><span class="p">,</span> <span class="n">generate_pre_training_set</span><span class="p">,</span> <span class="n">pretrain_forward_model</span>
-
-<span class="c1"># Load the slab-model grid for H2O</span>
-<span class="n">models</span> <span class="o">=</span> <span class="n">load_model_grid</span><span class="p">(</span><span class="s1">&#39;Model_grids/H2O&#39;</span><span class="p">)</span>
-<span class="n">wav_grid</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">values</span><span class="p">()))[</span><span class="s1">&#39;wavelength&#39;</span><span class="p">]</span>
-
-<span class="c1"># Build the pretrain CSV (one row per grid point)</span>
-<span class="n">generate_pre_training_set</span><span class="p">(</span>
-    <span class="n">mol</span><span class="o">=</span><span class="s1">&#39;H2O&#39;</span><span class="p">,</span>
-    <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
-    <span class="n">output_path</span><span class="o">=</span><span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">,</span>
-    <span class="n">wav_out</span><span class="o">=</span><span class="n">wav_grid</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="c1"># Train the two-MLP forward model (or load if checkpoint exists)</span>
-<span class="n">pretrained</span> <span class="o">=</span> <span class="n">pretrain_forward_model</span><span class="p">(</span>
-    <span class="n">mol</span><span class="o">=</span><span class="s1">&#39;H2O&#39;</span><span class="p">,</span>
-    <span class="n">pretrain_csv</span><span class="o">=</span><span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">,</span>
-    <span class="n">wav_range</span><span class="o">=</span><span class="p">(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">19.0</span><span class="p">),</span>
-    <span class="n">model_path</span><span class="o">=</span><span class="s1">&#39;Trained_model/net_H2O_forward_11to19.pt&#39;</span><span class="p">,</span>
-    <span class="n">n_pca</span><span class="o">=</span><span class="mi">21</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>Per-molecule defaults:</p>
-<table class="colwidths-auto docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Molecule</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">wav_range</span></code> (µm)</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">fit_ranges</span></code> (µm)</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">n_pca</span></code></p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>H2O</p></td>
-<td><p>11–19</p></td>
-<td><p>[(11,12), (16.5,18.5)]</p></td>
-<td><p>21</p></td>
-</tr>
-<tr class="row-odd"><td><p>C2H2</p></td>
-<td><p>11–17.5</p></td>
-<td><p>(12, 16.5)</p></td>
-<td><p>15</p></td>
-</tr>
-<tr class="row-even"><td><p>HCN</p></td>
-<td><p>11–17.5</p></td>
-<td><p>(12, 17.0)</p></td>
-<td><p>15</p></td>
-</tr>
-<tr class="row-odd"><td><p>CO2</p></td>
-<td><p>11–17.5</p></td>
-<td><p>(12, 16.5)</p></td>
-<td><p>15</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<hr class="docutils" />
-<section id="validate-the-forward-model">
-<h2>2. Validate the forward model<a class="headerlink" href="#validate-the-forward-model" title="Permalink to this heading"></a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models</span><span class="p">,</span> <span class="n">validate_nt</span><span class="p">,</span> <span class="n">validate_nt_holdout</span><span class="p">,</span> <span class="n">plot_validation_split</span>
+<p>DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
+models. This page shows the standard fitting workflow for observed data.</p>
+<section id="load-the-pretrained-models">
+<h2>1. Load the pretrained models<a class="headerlink" href="#load-the-pretrained-models" title="Permalink to this heading"></a></h2>
+<p>The model checkpoint (<code class="docutils literal notranslate"><span class="pre">.pt</span></code>) and its matching pretrain CSV must be kept
+together. The checkpoint stores the neural-network weights, while the pretrain
+CSV provides the wavelength grid and input scaling metadata used when the model
+was trained.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models</span>
 
 <span class="n">pretrained</span> <span class="o">=</span> <span class="n">load_models</span><span class="p">(</span>
-    <span class="n">model_paths</span>       <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="s1">&#39;Trained_model/net_H2O_forward_11to19.pt&#39;</span><span class="p">},</span>
-    <span class="n">pretrain_csv_paths</span><span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">},</span>
-    <span class="n">wav_ranges</span>        <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">19.0</span><span class="p">)},</span>
-    <span class="n">n_pca</span>             <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="mi">21</span><span class="p">},</span>
+    <span class="n">model_paths</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span>  <span class="s1">&#39;Trained_model/net_H2O_forward_11to19.pt&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="s1">&#39;Trained_model/net_C2H2_forward_11to19.pt&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="s1">&#39;Trained_model/net_HCN_forward_11to19.pt&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="s1">&#39;Trained_model/net_CO2_forward_11to19.pt&#39;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">pretrain_csv_paths</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="s1">&#39;Pretrain_grid/pretrain_C2H2_11to19.csv&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_HCN_11to19.csv&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_CO2_11to19.csv&#39;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">wav_ranges</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">19.0</span><span class="p">),</span>
+        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">16.5</span><span class="p">),</span>
+        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">17.0</span><span class="p">),</span>
+        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">16.5</span><span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">n_pca</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="mi">21</span><span class="p">,</span>
+        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+    <span class="p">},</span>
 <span class="p">)</span>
-
-<span class="c1"># NT validation on in-pretrain rows (A = 1 fixed)</span>
-<span class="n">nt_pretrain</span> <span class="o">=</span> <span class="n">validate_nt</span><span class="p">(</span>
-    <span class="s1">&#39;H2O&#39;</span><span class="p">,</span> <span class="n">pretrained</span><span class="p">,</span>
-    <span class="n">pretrain_csv</span><span class="o">=</span><span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">,</span>
-    <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
-<span class="p">)</span>
-
-<span class="c1"># NT validation on held-out grid points (unseen during training)</span>
-<span class="n">nt_holdout</span> <span class="o">=</span> <span class="n">validate_nt_holdout</span><span class="p">(</span>
-    <span class="s1">&#39;H2O&#39;</span><span class="p">,</span> <span class="n">pretrained</span><span class="p">,</span> <span class="n">models</span><span class="p">,</span> <span class="n">holdout_keys</span><span class="p">,</span>
-    <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
-<span class="p">)</span>
-
-<span class="n">plot_validation_split</span><span class="p">(</span><span class="s1">&#39;H2O&#39;</span><span class="p">,</span> <span class="n">nt_pretrain</span><span class="p">,</span> <span class="n">nt_holdout</span><span class="p">,</span>
-                      <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;figures/val_H2O_split.png&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<hr class="docutils" />
-<section id="fit-a-real-spectrum">
-<h2>3. Fit a real spectrum<a class="headerlink" href="#fit-a-real-spectrum" title="Permalink to this heading"></a></h2>
-<p>The recommended entry point is <code class="docutils literal notranslate"><span class="pre">examples/dev_v1_realobs.py</span></code>.
-Edit the <code class="docutils literal notranslate"><span class="pre">CONFIGURATION</span></code> block at the top, then run from the repo root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/dev_v1_realobs.py
-</pre></div>
-</div>
-<p>Key configuration variables:</p>
-<table class="colwidths-auto docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Variable</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">INPUT_PATH</span></code></p></td>
-<td><p>—</p></td>
-<td><p>Path to continuum-subtracted CSV</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NAME</span></code></p></td>
-<td><p>—</p></td>
-<td><p>Source name for filenames and plot title</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">N_SAMPLES</span></code></p></td>
-<td><p>20000</p></td>
-<td><p>Sobol samples for global search</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">N_REFINE</span></code></p></td>
-<td><p>32</p></td>
-<td><p>Candidates passed to L-BFGS-B</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">N_TOP</span></code></p></td>
-<td><p>20</p></td>
-<td><p>Solutions kept for uncertainty estimation</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DETECTION_SCREENING</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
-<td><p>Skip molecules below 3σ</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">STAGES</span></code></p></td>
-<td><p>list of dicts</p></td>
-<td><p>Ordered fit stages</p></td>
-</tr>
-</tbody>
-</table>
-<p>Or call <code class="docutils literal notranslate"><span class="pre">fit_molecules</span></code> directly in a script or notebook:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models</span><span class="p">,</span> <span class="n">load_observed_spectrum</span><span class="p">,</span> <span class="n">fit_molecules</span><span class="p">,</span> <span class="n">plot_fit</span>
-
-<span class="n">pretrained</span> <span class="o">=</span> <span class="n">load_models</span><span class="p">(</span>
-    <span class="n">model_paths</span>       <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="s1">&#39;Trained_model/net_H2O_forward_11to19.pt&#39;</span><span class="p">},</span>
-    <span class="n">pretrain_csv_paths</span><span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">},</span>
-    <span class="n">wav_ranges</span>        <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">19.0</span><span class="p">)},</span>
-    <span class="n">n_pca</span>             <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="mi">21</span><span class="p">},</span>
-<span class="p">)</span>
+<section id="load-a-spectrum">
+<h2>2. Load a spectrum<a class="headerlink" href="#load-a-spectrum" title="Permalink to this heading"></a></h2>
+<p>If your continuum-subtracted spectrum is a simple CSV, use the built-in helper:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_observed_spectrum</span>
 
 <span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span> <span class="o">=</span> <span class="n">load_observed_spectrum</span><span class="p">(</span><span class="s1">&#39;Realobs_data/Consub_data/my_source.csv&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>You can also read the spectrum with your own code. The fitting functions only
+need two one-dimensional arrays: <code class="docutils literal notranslate"><span class="pre">obs_wav</span></code> in microns and <code class="docutils literal notranslate"><span class="pre">obs_flux</span></code> in Jy.</p>
+</section>
+<section id="fit-h2o">
+<h2>3. Fit H2O<a class="headerlink" href="#fit-h2o" title="Permalink to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">fit_molecules</span><span class="p">,</span> <span class="n">plot_fit</span>
 
-<span class="n">fit</span> <span class="o">=</span> <span class="n">fit_molecules</span><span class="p">(</span>
-    <span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span><span class="p">,</span>
+<span class="n">fit_h2o</span> <span class="o">=</span> <span class="n">fit_molecules</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">obs_flux</span><span class="p">,</span>
     <span class="n">mol</span><span class="o">=</span><span class="s1">&#39;H2O&#39;</span><span class="p">,</span>
     <span class="n">pretrained</span><span class="o">=</span><span class="n">pretrained</span><span class="p">,</span>
     <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
-    <span class="n">h2o_components</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">component_names</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;H2O_warm&#39;</span><span class="p">,</span> <span class="s1">&#39;H2O_hot&#39;</span><span class="p">],</span>
+    <span class="n">h2o_components</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">n_samples</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span>
-    <span class="n">sigma</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>   <span class="c1"># noise std in Jy for uncertainty weighting</span>
+    <span class="n">n_refine</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">n_top</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">plot_fit</span><span class="p">(</span><span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span>
-         <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
-         <span class="n">name</span><span class="o">=</span><span class="s1">&#39;MySource&#39;</span><span class="p">,</span>
-         <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;figures/myfit.png&#39;</span><span class="p">,</span>
-         <span class="n">params</span><span class="o">=</span><span class="n">fit</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">],</span>
-         <span class="n">uncertainty</span><span class="o">=</span><span class="n">fit</span><span class="p">[</span><span class="s1">&#39;uncertainty&#39;</span><span class="p">])</span>
+<span class="n">plot_fit</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">obs_flux</span><span class="p">,</span>
+    <span class="n">fit_h2o</span><span class="p">,</span>
+    <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
+    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;my_source&#39;</span><span class="p">,</span>
+    <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;figures/my_source_h2o.png&#39;</span><span class="p">,</span>
+    <span class="n">params</span><span class="o">=</span><span class="n">fit_h2o</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">],</span>
+    <span class="n">uncertainty</span><span class="o">=</span><span class="n">fit_h2o</span><span class="p">[</span><span class="s1">&#39;uncertainty&#39;</span><span class="p">],</span>
+<span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="fit-c-bearing-molecules">
+<h2>4. Fit C-bearing molecules<a class="headerlink" href="#fit-c-bearing-molecules" title="Permalink to this heading"></a></h2>
+<p>After subtracting water, C$_2$H$_2$, HCN, and CO$_2$ are usually fitted on the
+residual spectrum. The example below fits C$_2$H$_2$ and HCN together.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">residual_after_h2o</span> <span class="o">=</span> <span class="n">obs_flux</span> <span class="o">-</span> <span class="n">fit_h2o</span><span class="p">[</span><span class="s1">&#39;model_flux&#39;</span><span class="p">]</span>
+
+<span class="n">fit_c</span> <span class="o">=</span> <span class="n">fit_molecules</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">residual_after_h2o</span><span class="p">,</span>
+    <span class="n">mol</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;C2H2&#39;</span><span class="p">,</span> <span class="s1">&#39;HCN&#39;</span><span class="p">],</span>
+    <span class="n">pretrained</span><span class="o">=</span><span class="n">pretrained</span><span class="p">,</span>
+    <span class="n">fit_ranges</span><span class="o">=</span><span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">16.5</span><span class="p">),</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span>
+    <span class="n">n_refine</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">n_top</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
 <section id="two-component-h2o">
-<h3>Two-component H2O<a class="headerlink" href="#two-component-h2o" title="Permalink to this heading"></a></h3>
-<p>Set <code class="docutils literal notranslate"><span class="pre">h2o_components=2</span></code> and <code class="docutils literal notranslate"><span class="pre">component_names=['H2O_warm',</span> <span class="pre">'H2O_hot']</span></code> to fit
-two water components simultaneously using the same pretrained H2O surrogate.
-Use <code class="docutils literal notranslate"><span class="pre">T_prior</span></code> with <code class="docutils literal notranslate"><span class="pre">T_prior_log10=True</span></code> to apply log-temperature Gaussian
-priors that help separate the two components:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fit</span> <span class="o">=</span> <span class="n">fit_molecules</span><span class="p">(</span>
-    <span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span><span class="p">,</span>
+<h2>Two-component H2O<a class="headerlink" href="#two-component-h2o" title="Permalink to this heading"></a></h2>
+<p>To fit warm and hot water components simultaneously, set <code class="docutils literal notranslate"><span class="pre">h2o_components=2</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fit_h2o_two</span> <span class="o">=</span> <span class="n">fit_molecules</span><span class="p">(</span>
+    <span class="n">obs_wav</span><span class="p">,</span>
+    <span class="n">obs_flux</span><span class="p">,</span>
     <span class="n">mol</span><span class="o">=</span><span class="s1">&#39;H2O&#39;</span><span class="p">,</span>
     <span class="n">pretrained</span><span class="o">=</span><span class="n">pretrained</span><span class="p">,</span>
     <span class="n">fit_ranges</span><span class="o">=</span><span class="p">[(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">12.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">16.5</span><span class="p">,</span> <span class="mf">18.5</span><span class="p">)],</span>
@@ -307,16 +212,14 @@ priors that help separate the two components:</p>
 </pre></div>
 </div>
 </section>
-</section>
-<hr class="docutils" />
-<section id="forward-model-convention">
-<h2>Forward model convention<a class="headerlink" href="#forward-model-convention" title="Permalink to this heading"></a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>flux(T, logN, A) = A × peak(T, logN) × shape(T, logN)
+<section id="example-script">
+<h2>Example script<a class="headerlink" href="#example-script" title="Permalink to this heading"></a></h2>
+<p>For a complete staged workflow, start from:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/dev_v1_realobs.py
 </pre></div>
 </div>
-<p>The linear amplitude <code class="docutils literal notranslate"><span class="pre">A</span></code> is solved analytically with NNLS (or <code class="docutils literal notranslate"><span class="pre">lsq_linear</span></code>
-when bounds are set) after the nonlinear <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">logN)</span></code> Sobol search, making
-the optimisation much faster than treating <code class="docutils literal notranslate"><span class="pre">A</span></code> as a free nonlinear parameter.</p>
+<p>Edit the configuration block at the top of that script for your source name,
+input spectrum path, molecules, wavelength masks, and output directory.</p>
 </section>
 </section>
 
