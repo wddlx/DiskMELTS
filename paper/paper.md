@@ -84,7 +84,7 @@ The top distinct candidates are then refined with L-BFGS-B local optimization, a
 
 For observed spectra, `DiskMELTS` applies a sequential fit-and-subtract strategy: H$_2$O is fitted first in wavelength regions where it dominates ($11$--$12\,\mu$m and $16.5$--$18.5\,\mu$m), the best-fit H$_2$O model is subtracted from the observation, and the carbon-bearing molecules (C$_2$H$_2$, HCN, CO$_2$) are then jointly fitted on the residual in the $12$--$16.5\,\mu$m region. A $3\sigma$ detection screen can be applied before each stage so that non-detected molecules are automatically excluded. The sequential order and wavelength masks can be adjusted for individual spectra.
 
-Two-component H$_2$O fits (DD: what are the two compoenents, also point to a reference here) are also supported through the same API. In this mode, the model includes independent warm and hot components with separate $(T,N,A)$ parameters. An ordering constraint, $T_{\mathrm{warm}} \leq T_{\mathrm{hot}}$, reduces label switching, and optional Gaussian temperature penalties can regularize the decomposition when the data do not uniquely separate the two components.
+Two-component H$_2$O fits (DD: what are the two components, also point to a reference here) are also supported through the same API. In this mode, the model includes independent warm and hot components with separate $(T,N,A)$ parameters. An ordering constraint, $T_{\mathrm{warm}} \leq T_{\mathrm{hot}}$, reduces label switching, and optional Gaussian temperature penalties can regularize the decomposition when the data do not uniquely separate the two components.
 
 ## Validation
 
