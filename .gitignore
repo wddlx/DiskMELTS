@@ -59,7 +59,6 @@ data/external/*
 !data/external/.gitkeep
 
 # Figures and LaTeX build products
-!figures/.gitkeep
 latex/*.aux
 latex/*.bbl
 latex/*.blg
