@@ -59,7 +59,6 @@ data/external/*
 !data/external/.gitkeep
 
 # Figures and LaTeX build products
-figures/*
 !figures/.gitkeep
 latex/*.aux
 latex/*.bbl
@@ -82,3 +81,5 @@ examples/realobs_validation.py
 figures/validation/thick/*
 
 Uma_tests/
+
+Paper/paper_Old.md
