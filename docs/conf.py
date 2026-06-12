@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath('../src'))
 # Project information
 # ---------------------------------------------------------------------------
 project   = 'DiskMELTS'
-copyright = '2025, Chengyan Xie, Dingshan Deng'
+copyright = '2026, Chengyan Xie, Dingshan Deng'
 author    = 'Chengyan Xie, Dingshan Deng'
 release   = '0.1.0'
 
@@ -19,7 +19,6 @@ extensions = [
     'sphinx.ext.autodoc',       # pull docstrings from source
     'sphinx.ext.napoleon',      # support Google/NumPy docstring style
     'sphinx.ext.viewcode',      # add [source] links to API pages
-    'sphinx.ext.intersphinx',   # cross-link to numpy/scipy/torch docs
     'myst_parser',              # write docs in Markdown
 ]
 
@@ -50,15 +49,6 @@ napoleon_google_docstring  = True
 napoleon_numpy_docstring   = False
 napoleon_use_param         = True
 napoleon_use_rtype         = True
-
-# ---------------------------------------------------------------------------
-# intersphinx — cross-references to external packages
-# ---------------------------------------------------------------------------
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy':  ('https://numpy.org/doc/stable', None),
-    'pandas': ('https://pandas.pydata.org/docs', None),
-}
 
 # ---------------------------------------------------------------------------
 # MyST-Parser settings

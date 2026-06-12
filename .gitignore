@@ -71,7 +71,14 @@ latex/*.out
 latex/*.pdf
 latex/*.synctex.gz
 
-# Training set
+# Local-only training inputs and generated pretraining tables.
+# These are required by the training-validation examples, but not by fitting
+# with the self-contained checkpoints committed under Trained_model/.
 Model_grids/
 Pretrain_grid/
 Realobs_data/Consub_data0/
+examples/realobs_validation.py
+
+figures/validation/thick/*
+
+Uma_tests/

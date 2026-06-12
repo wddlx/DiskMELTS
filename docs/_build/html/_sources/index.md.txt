@@ -6,8 +6,9 @@ DiskMELTS is a neural surrogate-assisted fitting package for retrieving
 molecular gas parameters — temperature ($T$), column density ($\log N$), and
 emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
 
-Most users should start by loading the provided pretrained models and fitting
-their own continuum-subtracted spectra.
+Most users should start with the pretrained models committed to the repository.
+The checkpoints are self-contained and do not require the large local training
+grids or pretraining CSV files.
 
 ---
 
@@ -30,6 +31,7 @@ area scaling solved analytically during the fit.
 
 installation
 quickstart
+training
 ```
 
 ```{toctree}

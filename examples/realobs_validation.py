@@ -116,31 +116,6 @@ MODEL_PATHS = {
     '13CO2':    os.path.join(BASE_DIR, 'Trained_model', 'net_13CO2_forward_11to19.pt'),
     'CO2':      os.path.join(BASE_DIR, 'Trained_model', 'net_CO2_forward_11to19.pt'),
 }
-PRETRAIN_CSV_PATHS = {
-    'H2O':      os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_H2O_11to19.csv'),
-    '13C12CH2': os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_13C12CH2_11to19.csv'),
-    'C2H2':     os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_C2H2_11to19.csv'),
-    'HCN':      os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_HCN_11to19.csv'),
-    '13CO2':    os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_13CO2_11to19.csv'),
-    'CO2':      os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_CO2_11to19.csv'),
-}
-WAV_RANGES = {
-    'H2O':      (11.0, 19.0),
-    '13C12CH2': (11.0, 17.5),
-    'C2H2':     (11.0, 17.5),
-    'HCN':      (11.0, 17.5),
-    '13CO2':    (11.0, 17.5),
-    'CO2':      (11.0, 17.5),
-}
-N_PCA = {
-    'H2O':      25,
-    '13C12CH2': 15,
-    'C2H2':     15,
-    'HCN':      15,
-    '13CO2':    15,
-    'CO2':      15,
-}
-
 # ===========================================================================
 # Helper functions
 # ===========================================================================
@@ -407,9 +382,6 @@ os.makedirs(FIG_DIR,    exist_ok=True)
 
 pretrained = load_models(
     model_paths=MODEL_PATHS,
-    pretrain_csv_paths=PRETRAIN_CSV_PATHS,
-    wav_ranges=WAV_RANGES,
-    n_pca=N_PCA,
 )
 
 # Load reference CSV (row 1 is the units row — skip it)

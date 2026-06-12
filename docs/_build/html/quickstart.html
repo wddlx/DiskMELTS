@@ -22,7 +22,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="diskmelts.trainmodel" href="api/trainmodel.html" />
+    <link rel="next" title="Training and Validation" href="training.html" />
     <link rel="prev" title="Installation" href="installation.html" /> 
 </head>
 
@@ -57,6 +57,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#example-script">Example script</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -93,13 +94,13 @@
   <section id="quick-start">
 <h1>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this heading"></a></h1>
 <p>DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
-models. This page shows the standard fitting workflow for observed data.</p>
+models. This page shows the standard fitting workflow for observed data. Run
+the path-based examples below from the repository root.</p>
 <section id="load-the-pretrained-models">
 <h2>1. Load the pretrained models<a class="headerlink" href="#load-the-pretrained-models" title="Permalink to this heading"></a></h2>
-<p>The model checkpoint (<code class="docutils literal notranslate"><span class="pre">.pt</span></code>) and its matching pretrain CSV must be kept
-together. The checkpoint stores the neural-network weights, while the pretrain
-CSV provides the wavelength grid and input scaling metadata used when the model
-was trained.</p>
+<p>Bundled model checkpoints are self-contained: each <code class="docutils literal notranslate"><span class="pre">.pt</span></code> file stores the
+network weights, scalers, PCA metadata, and wavelength grid needed for fitting.
+No <code class="docutils literal notranslate"><span class="pre">Pretrain_grid/*.csv</span></code> file is needed for this workflow.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_models</span>
 
 <span class="n">pretrained</span> <span class="o">=</span> <span class="n">load_models</span><span class="p">(</span>
@@ -108,24 +109,6 @@ was trained.</p>
         <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="s1">&#39;Trained_model/net_C2H2_forward_11to19.pt&#39;</span><span class="p">,</span>
         <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="s1">&#39;Trained_model/net_HCN_forward_11to19.pt&#39;</span><span class="p">,</span>
         <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="s1">&#39;Trained_model/net_CO2_forward_11to19.pt&#39;</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="n">pretrain_csv_paths</span><span class="o">=</span><span class="p">{</span>
-        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_H2O_11to19.csv&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="s1">&#39;Pretrain_grid/pretrain_C2H2_11to19.csv&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_HCN_11to19.csv&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="s1">&#39;Pretrain_grid/pretrain_CO2_11to19.csv&#39;</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="n">wav_ranges</span><span class="o">=</span><span class="p">{</span>
-        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">11.0</span><span class="p">,</span> <span class="mf">19.0</span><span class="p">),</span>
-        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">16.5</span><span class="p">),</span>
-        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">17.0</span><span class="p">),</span>
-        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span>  <span class="p">(</span><span class="mf">12.0</span><span class="p">,</span> <span class="mf">16.5</span><span class="p">),</span>
-    <span class="p">},</span>
-    <span class="n">n_pca</span><span class="o">=</span><span class="p">{</span>
-        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="mi">21</span><span class="p">,</span>
-        <span class="s1">&#39;C2H2&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
-        <span class="s1">&#39;HCN&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
-        <span class="s1">&#39;CO2&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
     <span class="p">},</span>
 <span class="p">)</span>
 </pre></div>
@@ -136,7 +119,9 @@ was trained.</p>
 <p>If your continuum-subtracted spectrum is a simple CSV, use the built-in helper:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">diskmelts</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_observed_spectrum</span>
 
-<span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span> <span class="o">=</span> <span class="n">load_observed_spectrum</span><span class="p">(</span><span class="s1">&#39;Realobs_data/Consub_data/my_source.csv&#39;</span><span class="p">)</span>
+<span class="n">obs_wav</span><span class="p">,</span> <span class="n">obs_flux</span> <span class="o">=</span> <span class="n">load_observed_spectrum</span><span class="p">(</span>
+    <span class="s1">&#39;Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv&#39;</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 <p>You can also read the spectrum with your own code. The fitting functions only
@@ -220,6 +205,17 @@ residual spectrum. The example below fits C$_2$H$_2$ and HCN together.</p>
 </div>
 <p>Edit the configuration block at the top of that script for your source name,
 input spectrum path, molecules, wavelength masks, and output directory.</p>
+<p>The default script uses the committed
+<code class="docutils literal notranslate"><span class="pre">Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv</span></code> spectrum. It checks
+that the spectrum and checkpoints exist before starting the fit.</p>
+<p>The equivalent interactive workflow is:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>notebooks/Example_Fitting.ipynb
+</pre></div>
+</div>
+<p>The notebook resolves the repository root whether Jupyter is launched from the
+repository root or from <code class="docutils literal notranslate"><span class="pre">notebooks/</span></code>.</p>
+<p>Training and checkpoint validation require additional local files. See
+<a class="reference internal" href="training.html"><span class="doc">Training and Validation</span></a>.</p>
 </section>
 </section>
 
@@ -228,13 +224,13 @@ input spectrum path, molecules, wavelength masks, and output directory.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="api/trainmodel.html" class="btn btn-neutral float-right" title="diskmelts.trainmodel" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="training.html" class="btn btn-neutral float-right" title="Training and Validation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

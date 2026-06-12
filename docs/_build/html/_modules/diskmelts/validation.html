@@ -46,6 +46,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -104,7 +105,7 @@
 <span class="sd">    from diskmelts.validation import validate_nt, validate_full</span>
 <span class="sd">    from diskmelts.plotting import plot_validation</span>
 
-<span class="sd">    pretrained = load_models(model_paths, pretrain_csv_paths, wav_ranges)</span>
+<span class="sd">    pretrained = load_models(model_paths)</span>
 <span class="sd">    models_h2o = load_model_grid(&#39;Model_grids/H2O&#39;)</span>
 
 <span class="sd">    nt   = validate_nt(&#39;H2O&#39;, pretrained,</span>

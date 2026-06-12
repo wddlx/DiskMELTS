@@ -29,9 +29,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ===========================================================================
 
 INPUT_PATH = os.path.join(
-    BASE_DIR, 'Realobs_data', 'Consub_data', 'j16142029_v9.0_contsub_RVcorr.csv'
+    BASE_DIR, 'Realobs_data', 'Consub_data', 'j16120505_v9.0_contsub_RVcorr.csv'
 )
-NAME = 'J16142029'   # source name used in filenames and plot titles;
+NAME = 'J16120505'   # source name used in filenames and plot titles;
                      # set to None to fall back to the input filename stem
 
 OUTPUT_DIR    = os.path.join(BASE_DIR, 'realobs_results')
@@ -40,11 +40,12 @@ FIG_DIR       = os.path.join(BASE_DIR, 'figures', 'realobs')
 FITTED_CSV    = os.path.join(BASE_DIR, 'Realobs_data', 'Fitted_Parameters.csv')
 
 # Global fit settings shared across all stages
-N_SAMPLES     = 20000
-N_REFINE      = 32
-N_TOP         = 20
+N_SAMPLES     = int(os.environ.get('DISKMELTS_N_SAMPLES', '20000'))
+N_REFINE      = int(os.environ.get('DISKMELTS_N_REFINE', '32'))
+N_TOP         = int(os.environ.get('DISKMELTS_N_TOP', '20'))
 SAMPLE_METHOD = 'sobol'
 SEED          = 42
+H2O_COMPONENTS = int(os.environ.get('DISKMELTS_H2O_COMPONENTS', '2'))
 
 # Input file format
 SKIPROWS  = 1
@@ -57,7 +58,9 @@ LINE_FREE_WINDOWS = [(11.45, 11.55), (13.10, 13.20), (15.65, 15.72), (15.90, 15.
 
 # Detection screening: set True to skip molecules whose peak is below threshold
 DETECTION_SCREENING    = True
-DETECTION_SIGMA_FACTOR = 3.0   # threshold = this × σ_noise
+DETECTION_SIGMA_FACTOR = float(
+    os.environ.get('DISKMELTS_DETECTION_SIGMA_FACTOR', '3.0')
+)
 
 # ---------------------------------------------------------------------------
 # STAGES — executed in order; each stage fits on the running residual.
@@ -85,8 +88,10 @@ STAGES = [
         'name':            'H2O',
         'mol':             'H2O',
         'fit_ranges':      [(11.0, 12.0), (16.5, 18.5)],
-        'h2o_components':  2,
-        'component_names': ['H2O_warm', 'H2O_hot'],
+        'h2o_components':  H2O_COMPONENTS,
+        'component_names': (
+            ['H2O_warm', 'H2O_hot'] if H2O_COMPONENTS == 2 else None
+        ),
         'T_bounds':        (200.0, 1300.0),
         'logN_bounds':     (14.0,  19.0),
         'loga_bounds':     (-2.0,  2.0),
@@ -126,25 +131,6 @@ MODEL_PATHS = {
     'HCN':  os.path.join(BASE_DIR, 'Trained_model', 'net_HCN_forward_11to19.pt'),
     'CO2':  os.path.join(BASE_DIR, 'Trained_model', 'net_CO2_forward_11to19.pt'),
 }
-PRETRAIN_CSV_PATHS = {
-    'H2O':  os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_H2O_11to19.csv'),
-    'C2H2': os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_C2H2_11to19.csv'),
-    'HCN':  os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_HCN_11to19.csv'),
-    'CO2':  os.path.join(BASE_DIR, 'Pretrain_grid', 'pretrain_CO2_11to19.csv'),
-}
-WAV_RANGES = {
-    'H2O':  (11.0, 19.0),
-    'C2H2': (11.0, 17.5),
-    'HCN':  (11.0, 17.5),
-    'CO2':  (11.0, 17.5),
-}
-N_PCA = {
-    'H2O':  25,
-    'C2H2': 15,
-    'HCN':  15,
-    'CO2':  15,
-}
-
 # ===========================================================================
 
 
@@ -152,14 +138,20 @@ N_PCA = {
 # Setup
 # ---------------------------------------------------------------------------
 
+required_paths = [INPUT_PATH, *MODEL_PATHS.values()]
+missing_paths = [path for path in required_paths if not os.path.isfile(path)]
+if missing_paths:
+    missing = '\n'.join(f'  - {path}' for path in missing_paths)
+    raise FileNotFoundError(
+        'Required fitting files are missing. A fresh clone should include the '
+        f'example spectrum and pretrained checkpoints:\n{missing}'
+    )
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(FIG_DIR, exist_ok=True)
 
 pretrained = load_models(
     model_paths=MODEL_PATHS,
-    pretrain_csv_paths=PRETRAIN_CSV_PATHS,
-    wav_ranges=WAV_RANGES,
-    n_pca=N_PCA,
 )
 
 obs_wav, obs_flux = load_observed_spectrum(

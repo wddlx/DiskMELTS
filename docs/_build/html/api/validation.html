@@ -49,6 +49,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul class="current">
@@ -90,6 +91,9 @@
   <section id="diskmelts-validation">
 <h1>diskmelts.validation<a class="headerlink" href="#diskmelts-validation" title="Permalink to this heading"></a></h1>
 <p>Validation functions for pretrained forward models.</p>
+<p>Validation requires either a generated pretraining CSV or the local slab-model
+grid. These inputs live in the Git-ignored <code class="docutils literal notranslate"><span class="pre">Pretrain_grid/</span></code> and <code class="docutils literal notranslate"><span class="pre">Model_grids/</span></code>
+directories; they are not required for ordinary observed-spectrum fitting.</p>
 <p>Two complementary strategies are provided:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">validate_nt</span></code></strong> — checks $(T, \log N)$ recovery on spectra the model
@@ -236,7 +240,7 @@ keyed by (T, logN) with ‘wavelength’ and ‘flux’ arrays</p></li>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

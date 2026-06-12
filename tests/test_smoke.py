@@ -1,9 +1,4 @@
-"""Smoke tests for the pretrained DiskMELTS fitting workflow.
-
-The pretrained fitting test is skipped unless both the H2O checkpoint and its
-matching pretrain CSV are present in the repository. This keeps CI fast while
-still exercising the full user workflow when running locally with the model files.
-"""
+"""Smoke tests for the committed pretrained DiskMELTS fitting workflow."""
 
 from __future__ import annotations
 
@@ -31,19 +26,12 @@ def test_pretrained_h2o_fitting_smoke():
     assert torch is not None
 
     model_path = ROOT / "Trained_model" / "net_H2O_forward_11to19.pt"
-    pretrain_csv = ROOT / "Pretrain_grid" / "pretrain_H2O_11to19.csv"
-    if not model_path.exists() or not pretrain_csv.exists():
-        pytest.skip(
-            "pretrained H2O checkpoint and matching Pretrain_grid CSV are required"
-        )
+    assert model_path.exists(), "the committed H2O checkpoint is required"
 
     from diskmelts import fit_molecules, generate_spectrum, load_models
 
     pretrained = load_models(
         model_paths={"H2O": str(model_path)},
-        pretrain_csv_paths={"H2O": str(pretrain_csv)},
-        wav_ranges={"H2O": (11.0, 19.0)},
-        n_pca={"H2O": 21},
     )
 
     obs_wav = pretrained["H2O"]["wav"]

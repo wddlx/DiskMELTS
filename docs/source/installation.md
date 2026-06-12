@@ -30,7 +30,7 @@ Press `y` to all prompts.
 Clone the repository and create the environment from the repository root:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/DiskMELTS.git
+git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
 conda env create --file=environment.yaml
 ```
@@ -55,8 +55,49 @@ pip install -e .
 
 This makes `import diskmelts` available from anywhere in your environment.
 
+## Repository data layout
+
+A fresh GitHub clone contains everything required for fitting:
+
+- self-contained pretrained checkpoints under `Trained_model/`
+- an example observed spectrum under `Realobs_data/Consub_data/`
+- `examples/dev_v1_realobs.py`
+- `notebooks/Example_Fitting.ipynb`
+
+The large training inputs are intentionally not uploaded:
+
+- `Model_grids/`
+- `Pretrain_grid/`
+
+These directories are ignored by Git. They are only required when generating
+pretraining tables, retraining checkpoints, or running the training-validation
+workflow.
+
 ## Verify
 
+Verify the package import:
+
 ```bash
+python -c "import diskmelts; print(diskmelts.__version__ if hasattr(diskmelts, '__version__') else 'DiskMELTS import OK')"
+```
+
+To run the development test suite, install the optional development
+dependencies first:
+
+```bash
+pip install -e ".[dev]"
 pytest tests/
 ```
+
+The test suite checks the committed fitting assets and notebook paths. Tests
+that exercise the scientific optimizer use small synthetic inputs so they can
+run in continuous integration.
+
+## Build the documentation
+
+```bash
+pip install -r docs/requirements.txt
+sphinx-build -E -W -b html docs/source docs/_build/html
+```
+
+The build is self-contained and does not download external API inventories.

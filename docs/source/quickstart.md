@@ -1,14 +1,14 @@
 # Quick Start
 
 DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
-models. This page shows the standard fitting workflow for observed data.
+models. This page shows the standard fitting workflow for observed data. Run
+the path-based examples below from the repository root.
 
 ## 1. Load the pretrained models
 
-The model checkpoint (`.pt`) and its matching pretrain CSV must be kept
-together. The checkpoint stores the neural-network weights, while the pretrain
-CSV provides the wavelength grid and input scaling metadata used when the model
-was trained.
+Bundled model checkpoints are self-contained: each `.pt` file stores the
+network weights, scalers, PCA metadata, and wavelength grid needed for fitting.
+No `Pretrain_grid/*.csv` file is needed for this workflow.
 
 ```python
 from diskmelts import load_models
@@ -20,24 +20,6 @@ pretrained = load_models(
         'HCN':  'Trained_model/net_HCN_forward_11to19.pt',
         'CO2':  'Trained_model/net_CO2_forward_11to19.pt',
     },
-    pretrain_csv_paths={
-        'H2O':  'Pretrain_grid/pretrain_H2O_11to19.csv',
-        'C2H2': 'Pretrain_grid/pretrain_C2H2_11to19.csv',
-        'HCN':  'Pretrain_grid/pretrain_HCN_11to19.csv',
-        'CO2':  'Pretrain_grid/pretrain_CO2_11to19.csv',
-    },
-    wav_ranges={
-        'H2O':  (11.0, 19.0),
-        'C2H2': (12.0, 16.5),
-        'HCN':  (12.0, 17.0),
-        'CO2':  (12.0, 16.5),
-    },
-    n_pca={
-        'H2O': 21,
-        'C2H2': 15,
-        'HCN': 15,
-        'CO2': 15,
-    },
 )
 ```
 
@@ -48,7 +30,9 @@ If your continuum-subtracted spectrum is a simple CSV, use the built-in helper:
 ```python
 from diskmelts import load_observed_spectrum
 
-obs_wav, obs_flux = load_observed_spectrum('Realobs_data/Consub_data/my_source.csv')
+obs_wav, obs_flux = load_observed_spectrum(
+    'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv'
+)
 ```
 
 You can also read the spectrum with your own code. The fitting functions only
@@ -136,3 +120,19 @@ python examples/dev_v1_realobs.py
 
 Edit the configuration block at the top of that script for your source name,
 input spectrum path, molecules, wavelength masks, and output directory.
+
+The default script uses the committed
+`Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv` spectrum. It checks
+that the spectrum and checkpoints exist before starting the fit.
+
+The equivalent interactive workflow is:
+
+```text
+notebooks/Example_Fitting.ipynb
+```
+
+The notebook resolves the repository root whether Jupyter is launched from the
+repository root or from `notebooks/`.
+
+Training and checkpoint validation require additional local files. See
+{doc}`training`.
