@@ -107,21 +107,26 @@ def _mol_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
 # Public: load models and generate spectra
 # ---------------------------------------------------------------------------
 
-def load_models(model_paths, pretrain_csv_paths, wav_ranges, n_pca=None, device=None):
+def load_models(
+    model_paths,
+    pretrain_csv_paths=None,
+    wav_ranges=None,
+    n_pca=None,
+    device=None,
+):
     """
     Load pretrained per-molecule forward models from disk.
 
     Args:
         model_paths (dict): mol -> path to the .pt checkpoint file
-        pretrain_csv_paths (dict): mol -> path to the pretrain CSV used during
-                                   training (needed to reconstruct scalers and
-                                   wavelength axis)
-        wav_ranges (dict): mol -> (lo_µm, hi_µm); must match wav_range used
-                           in trainmodel.pretrain_forward_model
-        n_pca (int or dict or None): number of PCA components; must match what
-                                     was used during training. Pass a dict
-                                     {mol: n} for per-molecule values, or a
-                                     single int for all molecules.
+        pretrain_csv_paths (dict or None): legacy mol -> pretrain CSV path.
+                                           Only needed for old checkpoints that
+                                           do not contain input scaling metadata
+                                           and their wavelength axis.
+        wav_ranges (dict or None): legacy mol -> (lo_µm, hi_µm), paired with
+                                   pretrain_csv_paths.
+        n_pca (int or dict or None): legacy PCA component count. Self-contained
+                                     checkpoints store and load their own PCA.
         device (torch.device or None): auto-selects CUDA if available
 
     Returns:
@@ -131,14 +136,16 @@ def load_models(model_paths, pretrain_csv_paths, wav_ranges, n_pca=None, device=
     """
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    pretrain_csv_paths = pretrain_csv_paths or {}
+    wav_ranges = wav_ranges or {}
     pretrained = {}
     for mol in model_paths:
         mol_n_pca = n_pca[mol] if isinstance(n_pca, dict) else n_pca
         kw = {} if mol_n_pca is None else {'n_pca': mol_n_pca}
         pretrained[mol] = pretrain_forward_model(
             mol=mol,
-            pretrain_csv=pretrain_csv_paths[mol],
-            wav_range=wav_ranges[mol],
+            pretrain_csv=pretrain_csv_paths.get(mol),
+            wav_range=wav_ranges.get(mol, (11.0, 19.0)),
             device=device,
             n_epochs=0,
             model_path=model_paths[mol],

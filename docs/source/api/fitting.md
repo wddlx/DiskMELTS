@@ -14,6 +14,18 @@ flux(T, logN, A) = A × peak(T, logN) × shape(T, logN)
 
 ## Loading models
 
+Current checkpoints are self-contained, so normal fitting only passes
+`model_paths`. The CSV, wavelength-range, and PCA arguments are compatibility
+options for legacy checkpoints.
+
+```python
+pretrained = load_models(
+    model_paths={
+        'H2O': 'Trained_model/net_H2O_forward_11to19.pt',
+    },
+)
+```
+
 ```{eval-rst}
 .. autofunction:: diskmelts.fitting.load_models
 ```

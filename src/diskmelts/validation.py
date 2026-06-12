@@ -22,7 +22,7 @@ Typical workflow
     from diskmelts.validation import validate_nt, validate_full
     from diskmelts.plotting import plot_validation
 
-    pretrained = load_models(model_paths, pretrain_csv_paths, wav_ranges)
+    pretrained = load_models(model_paths)
     models_h2o = load_model_grid('Model_grids/H2O')
 
     nt   = validate_nt('H2O', pretrained,

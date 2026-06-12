@@ -49,6 +49,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul class="current">
@@ -118,23 +119,32 @@ global Sobol search followed by local L-BFGS-B refinement.
 </div>
 <section id="loading-models">
 <h2>Loading models<a class="headerlink" href="#loading-models" title="Permalink to this heading"></a></h2>
+<p>Current checkpoints are self-contained, so normal fitting only passes
+<code class="docutils literal notranslate"><span class="pre">model_paths</span></code>. The CSV, wavelength-range, and PCA arguments are compatibility
+options for legacy checkpoints.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pretrained</span> <span class="o">=</span> <span class="n">load_models</span><span class="p">(</span>
+    <span class="n">model_paths</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="s1">&#39;Trained_model/net_H2O_forward_11to19.pt&#39;</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 <dl class="py function">
 <dt class="sig sig-object py" id="diskmelts.fitting.load_models">
-<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">load_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv_paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_ranges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#load_models"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.load_models" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">diskmelts.fitting.</span></span><span class="sig-name descname"><span class="pre">load_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_ranges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/fitting.html#load_models"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.fitting.load_models" title="Permalink to this definition"></a></dt>
 <dd><p>Load pretrained per-molecule forward models from disk.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model_paths</strong> (<em>dict</em>) – mol -&gt; path to the .pt checkpoint file</p></li>
-<li><p><strong>pretrain_csv_paths</strong> (<em>dict</em>) – mol -&gt; path to the pretrain CSV used during
-training (needed to reconstruct scalers and
-wavelength axis)</p></li>
-<li><p><strong>wav_ranges</strong> (<em>dict</em>) – mol -&gt; (lo_µm, hi_µm); must match wav_range used
-in trainmodel.pretrain_forward_model</p></li>
-<li><p><strong>n_pca</strong> (<em>int</em><em> or </em><em>dict</em><em> or </em><em>None</em>) – number of PCA components; must match what
-was used during training. Pass a dict
-{mol: n} for per-molecule values, or a
-single int for all molecules.</p></li>
+<li><p><strong>pretrain_csv_paths</strong> (<em>dict</em><em> or </em><em>None</em>) – legacy mol -&gt; pretrain CSV path.
+Only needed for old checkpoints that
+do not contain input scaling metadata
+and their wavelength axis.</p></li>
+<li><p><strong>wav_ranges</strong> (<em>dict</em><em> or </em><em>None</em>) – legacy mol -&gt; (lo_µm, hi_µm), paired with
+pretrain_csv_paths.</p></li>
+<li><p><strong>n_pca</strong> (<em>int</em><em> or </em><em>dict</em><em> or </em><em>None</em>) – legacy PCA component count. Self-contained
+checkpoints store and load their own PCA.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em><em> or </em><em>None</em>) – auto-selects CUDA if available</p></li>
 </ul>
 </dd>
@@ -458,7 +468,7 @@ appended.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

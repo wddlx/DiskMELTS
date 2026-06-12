@@ -23,7 +23,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="diskmelts.fitting" href="fitting.html" />
-    <link rel="prev" title="Quick Start" href="../quickstart.html" /> 
+    <link rel="prev" title="Training and Validation" href="../training.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -49,6 +49,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul class="current">
@@ -90,7 +91,7 @@
   <section id="diskmelts-trainmodel">
 <h1>diskmelts.trainmodel<a class="headerlink" href="#diskmelts-trainmodel" title="Permalink to this heading"></a></h1>
 <p>Training utilities for per-molecule forward surrogate models.</p>
-<p>Each molecule requires two steps before fitting:</p>
+<p>Retraining a molecule from the full local model grids uses two steps:</p>
 <ol class="arabic simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">generate_pre_training_set</span></code></strong> — build a CSV that enumerates every
 $(T, \log N)$ grid point with a peak-normalised spectrum.</p></li>
@@ -98,6 +99,9 @@ $(T, \log N)$ grid point with a peak-normalised spectrum.</p></li>
 from that CSV.</p></li>
 </ol>
 <p>The <code class="docutils literal notranslate"><span class="pre">MLP</span></code> class is used internally and is not part of the public API.</p>
+<p>Users of the bundled self-contained checkpoints can skip these steps and load
+the <code class="docutils literal notranslate"><span class="pre">.pt</span></code> files directly. See <a class="reference internal" href="../quickstart.html"><span class="doc">Quick Start</span></a> for fitting and
+<a class="reference internal" href="../training.html"><span class="doc">Training and Validation</span></a> for the complete local-data workflow.</p>
 <hr class="docutils" />
 <dl class="py function">
 <dt class="sig sig-object py" id="diskmelts.trainmodel.load_model_grid">
@@ -162,7 +166,7 @@ excluded count is printed (default None)</p></li>
 <hr class="docutils" />
 <dl class="py function">
 <dt class="sig sig-object py" id="diskmelts.trainmodel.pretrain_forward_model">
-<span class="sig-prename descclassname"><span class="pre">diskmelts.trainmodel.</span></span><span class="sig-name descname"><span class="pre">pretrain_forward_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(11.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(64,</span> <span class="pre">128,</span> <span class="pre">64)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">early_stopping_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/trainmodel.html#pretrain_forward_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.trainmodel.pretrain_forward_model" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">diskmelts.trainmodel.</span></span><span class="sig-name descname"><span class="pre">pretrain_forward_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrain_csv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wav_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(11.0,</span> <span class="pre">19.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(64,</span> <span class="pre">128,</span> <span class="pre">64)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_pca</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">early_stopping_patience</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diskmelts/trainmodel.html#pretrain_forward_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diskmelts.trainmodel.pretrain_forward_model" title="Permalink to this definition"></a></dt>
 <dd><p>Train (or load) the two-MLP forward model for one molecule.</p>
 <p>Two sub-models are trained independently from the same pretrain CSV.
 <code class="docutils literal notranslate"><span class="pre">net_shape</span></code> maps (T, logN) to n_pca PCA coefficients of the
@@ -175,7 +179,9 @@ skipped entirely.  After training the checkpoint is saved to model_path.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>mol</strong> (<em>str</em>) – molecule name matching column prefix in pretrain_csv
 (e.g. ‘H2O’, ‘C2H2’)</p></li>
-<li><p><strong>pretrain_csv</strong> (<em>str</em>) – path to the CSV produced by generate_pre_training_set</p></li>
+<li><p><strong>pretrain_csv</strong> (<em>str</em><em> or </em><em>None</em>) – path to the CSV produced by
+generate_pre_training_set. May be None when
+loading a self-contained checkpoint.</p></li>
 <li><p><strong>wav_range</strong> (<em>tuple</em>) – (min_wav, max_wav) µm to select training channels;
 use the molecule’s actual emission range to drop
 zero-only channels before PCA
@@ -233,14 +239,14 @@ log10p_v           (np.ndarray)     : true log10(peak) for val samples</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../quickstart.html" class="btn btn-neutral float-left" title="Quick Start" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../training.html" class="btn btn-neutral float-left" title="Training and Validation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="fitting.html" class="btn btn-neutral float-right" title="diskmelts.fitting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

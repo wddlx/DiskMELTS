@@ -48,6 +48,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -87,8 +88,9 @@
 <p>DiskMELTS is a neural surrogate-assisted fitting package for retrieving
 molecular gas parameters — temperature ($T$), column density ($\log N$), and
 emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.</p>
-<p>Most users should start by loading the provided pretrained models and fitting
-their own continuum-subtracted spectra.</p>
+<p>Most users should start with the pretrained models committed to the repository.
+The checkpoints are self-contained and do not require the large local training
+grids or pretraining CSV files.</p>
 <hr class="docutils" />
 <section id="how-it-works">
 <h2>How it works<a class="headerlink" href="#how-it-works" title="Permalink to this heading"></a></h2>
@@ -106,9 +108,11 @@ area scaling solved analytically during the fit.</p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#requirements">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html#install-from-source">Install from source</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html#conda-environment-recommended">Conda environment (recommended)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#conda-beginner-friendly">Conda (beginner-friendly)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#custom-environment">Custom environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#repository-data-layout">Repository data layout</a></li>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#verify">Verify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#build-the-documentation">Build the documentation</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a><ul>
@@ -118,6 +122,14 @@ area scaling solved analytically during the fit.</p>
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html#fit-c-bearing-molecules">4. Fit C-bearing molecules</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html#two-component-h2o">Two-component H2O</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quickstart.html#example-script">Example script</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="training.html">Training and Validation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html#local-only-data">Local-only data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="training.html#pca-configuration">PCA configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="training.html#example-script">Example script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="training.html#notebook">Notebook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="training.html#loading-a-trained-checkpoint">Loading a trained checkpoint</a></li>
 </ul>
 </li>
 </ul>
@@ -165,7 +177,7 @@ area scaling solved analytically during the fit.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

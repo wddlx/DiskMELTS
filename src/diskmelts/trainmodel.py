@@ -183,7 +183,7 @@ class MLP(nn.Module):
 
 def pretrain_forward_model(
     mol,
-    pretrain_csv,
+    pretrain_csv=None,
     wav_range=(11.0, 19.0),
     device=None,
     hidden=(64, 128, 64),
@@ -211,7 +211,9 @@ def pretrain_forward_model(
     Args:
         mol (str): molecule name matching column prefix in pretrain_csv
                    (e.g. 'H2O', 'C2H2')
-        pretrain_csv (str): path to the CSV produced by generate_pre_training_set
+        pretrain_csv (str or None): path to the CSV produced by
+                                    generate_pre_training_set. May be None when
+                                    loading a self-contained checkpoint.
         wav_range (tuple): (min_wav, max_wav) µm to select training channels;
                            use the molecule's actual emission range to drop
                            zero-only channels before PCA
@@ -257,6 +259,56 @@ def pretrain_forward_model(
 
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Self-contained checkpoints can be loaded without the training CSV.
+    if pretrain_csv is None:
+        if not model_path or not os.path.exists(model_path):
+            raise ValueError(
+                'pretrain_csv is required when training or when model_path '
+                'does not point to an existing checkpoint'
+            )
+        ckpt = torch.load(model_path, map_location=device, weights_only=False)
+        missing = [key for key in ('xp_sc', 'wav') if key not in ckpt]
+        if missing:
+            raise ValueError(
+                f'Checkpoint {model_path!r} is missing {missing}; pass its '
+                'matching pretrain_csv and wav_range to load this legacy checkpoint'
+            )
+
+        state_shape = ckpt['model_state_shape']
+        wkeys = sorted(k for k in state_shape if k.endswith('.weight'))
+        hidden_ckpt = tuple(state_shape[k].shape[0] for k in wkeys[:-1])
+        net_shape = MLP(
+            n_in=2, n_out=state_shape[wkeys[-1]].shape[0], hidden=hidden_ckpt
+        ).to(device)
+        net_shape.load_state_dict(state_shape)
+        net_shape.eval()
+
+        state_peak = ckpt['model_state_peak']
+        wkeys_p = sorted(k for k in state_peak if k.endswith('.weight'))
+        hidden_p = tuple(state_peak[k].shape[0] for k in wkeys_p[:-1])
+        net_peak = MLP(n_in=2, n_out=1, hidden=hidden_p).to(device)
+        net_peak.load_state_dict(state_peak)
+        net_peak.eval()
+
+        print(f'  [{mol}] loaded from {model_path}')
+        return dict(
+            net_shape=net_shape,
+            net_peak=net_peak,
+            xp_sc=ckpt['xp_sc'],
+            yp_sc_shape=ckpt['yp_sc_shape'],
+            yp_sc_peak=ckpt['yp_sc_peak'],
+            pca=ckpt.get('pca', None),
+            train_losses_shape=ckpt['train_losses_shape'],
+            val_losses_shape=ckpt['val_losses_shape'],
+            train_losses_peak=ckpt['train_losses_peak'],
+            val_losses_peak=ckpt['val_losses_peak'],
+            wav=np.asarray(ckpt['wav']),
+            X_pre_v=np.empty((0, 2), dtype=np.float32),
+            Y_pre_v=np.empty((0, len(ckpt['wav'])), dtype=np.float32),
+            X_pre_v_t=torch.empty((0, 2), dtype=torch.float32, device=device),
+            log10p_v=np.empty(0, dtype=np.float32),
+        )
 
     # --- Load pretrain CSV and select wavelength channels ---
     df_pre        = pd.read_csv(pretrain_csv)
@@ -434,8 +486,13 @@ def pretrain_forward_model(
                 'train_losses_peak':  train_losses_peak,
                 'val_losses_peak':    val_losses_peak,
                 'pca':                pca,
+                'xp_sc':              xp_sc,
                 'yp_sc_shape':        yp_sc_shape,
                 'yp_sc_peak':         yp_sc_peak,
+                'wav':                wav,
+                'mol':                mol,
+                'wav_range':          tuple(wav_range),
+                'n_pca':              None if pca is None else pca.n_components_,
                 'hidden':             hidden,
             }, model_path)
             print(f'  [{mol}] saved → {model_path}')
@@ -488,7 +545,7 @@ if __name__ == '__main__':
     }
 
     N_PCA = {
-        'H2O':  22,
+        'H2O':  21,
         'C2H2': 15,
         'HCN':  15,
         'CO2':  15,

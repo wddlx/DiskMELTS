@@ -49,12 +49,15 @@
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#install-from-source">Install from source</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#conda-environment-recommended">Conda environment (recommended)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conda-beginner-friendly">Conda (beginner-friendly)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#custom-environment">Custom environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#repository-data-layout">Repository data layout</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#verify">Verify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#build-the-documentation">Build the documentation</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training.html">Training and Validation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -121,30 +124,83 @@
 </table>
 <p>Python ≥ 3.9 is required.</p>
 </section>
-<section id="install-from-source">
-<h2>Install from source<a class="headerlink" href="#install-from-source" title="Permalink to this heading"></a></h2>
-<p>Clone the repository and install in editable mode:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/YOUR_USERNAME/DiskMELTS.git
+<section id="conda-beginner-friendly">
+<h2>Conda (beginner-friendly)<a class="headerlink" href="#conda-beginner-friendly" title="Permalink to this heading"></a></h2>
+<p>We provide <code class="docutils literal notranslate"><span class="pre">environment.yaml</span></code> as a quick-start option. First, check that you have conda:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>conda --version
+</pre></div>
+</div>
+<p>If you don’t have conda, google how to install it!</p>
+<p>Update conda to version 23 or above:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>conda update conda
+</pre></div>
+</div>
+<p>Press <code class="docutils literal notranslate"><span class="pre">y</span></code> to all prompts.</p>
+<p>Clone the repository and create the environment from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/wddlx/DiskMELTS.git
 <span class="nb">cd</span><span class="w"> </span>DiskMELTS
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>--file<span class="o">=</span>environment.yaml
+</pre></div>
+</div>
+<p>Press <code class="docutils literal notranslate"><span class="pre">y</span></code> to all prompts. This will download a number of packages.</p>
+<p>Activate it:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>conda activate diskmelts
+</pre></div>
+</div>
+<p>Verify everything is installed:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>conda list
+</pre></div>
+</div>
+</section>
+<section id="custom-environment">
+<h2>Custom environment<a class="headerlink" href="#custom-environment" title="Permalink to this heading"></a></h2>
+<p>Feel free to use your own conda or virtual environment. Install the package with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
 </pre></div>
 </div>
 <p>This makes <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">diskmelts</span></code> available from anywhere in your environment.</p>
 </section>
-<section id="conda-environment-recommended">
-<h2>Conda environment (recommended)<a class="headerlink" href="#conda-environment-recommended" title="Permalink to this heading"></a></h2>
-<p>If you use Conda, create the project environment from the repository root:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yaml
-conda<span class="w"> </span>activate<span class="w"> </span>diskmelts
-</pre></div>
-</div>
-<p>The environment file installs DiskMELTS in editable mode with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code>.</p>
+<section id="repository-data-layout">
+<h2>Repository data layout<a class="headerlink" href="#repository-data-layout" title="Permalink to this heading"></a></h2>
+<p>A fresh GitHub clone contains everything required for fitting:</p>
+<ul class="simple">
+<li><p>self-contained pretrained checkpoints under <code class="docutils literal notranslate"><span class="pre">Trained_model/</span></code></p></li>
+<li><p>an example observed spectrum under <code class="docutils literal notranslate"><span class="pre">Realobs_data/Consub_data/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/dev_v1_realobs.py</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">notebooks/Example_Fitting.ipynb</span></code></p></li>
+</ul>
+<p>The large training inputs are intentionally not uploaded:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Model_grids/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Pretrain_grid/</span></code></p></li>
+</ul>
+<p>These directories are ignored by Git. They are only required when generating
+pretraining tables, retraining checkpoints, or running the training-validation
+workflow.</p>
 </section>
 <section id="verify">
 <h2>Verify<a class="headerlink" href="#verify" title="Permalink to this heading"></a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>test.py
+<p>Verify the package import:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import diskmelts; print(diskmelts.__version__ if hasattr(diskmelts, &#39;__version__&#39;) else &#39;DiskMELTS import OK&#39;)&quot;</span>
 </pre></div>
 </div>
+<p>To run the development test suite, install the optional development
+dependencies first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+pytest<span class="w"> </span>tests/
+</pre></div>
+</div>
+<p>The test suite checks the committed fitting assets and notebook paths. Tests
+that exercise the scientific optimizer use small synthetic inputs so they can
+run in continuous integration.</p>
+</section>
+<section id="build-the-documentation">
+<h2>Build the documentation<a class="headerlink" href="#build-the-documentation" title="Permalink to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>docs/requirements.txt
+sphinx-build<span class="w"> </span>-E<span class="w"> </span>-W<span class="w"> </span>-b<span class="w"> </span>html<span class="w"> </span>docs/source<span class="w"> </span>docs/_build/html
+</pre></div>
+</div>
+<p>The build is self-contained and does not download external API inventories.</p>
 </section>
 </section>
 
@@ -159,7 +215,7 @@ conda<span class="w"> </span>activate<span class="w"> </span>diskmelts
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Chengyan Xie, Dingshan Deng.</p>
+    <p>&#169; Copyright 2026, Chengyan Xie, Dingshan Deng.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

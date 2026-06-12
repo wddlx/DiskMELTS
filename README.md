@@ -64,18 +64,11 @@ pretrained = load_models(
     model_paths={
         'H2O': 'Trained_model/net_H2O_forward_11to19.pt',
     },
-    pretrain_csv_paths={
-        'H2O': 'Pretrain_grid/pretrain_H2O_11to19.csv',
-    },
-    wav_ranges={
-        'H2O': (11.0, 19.0),
-    },
-    n_pca={
-        'H2O': 21,
-    },
 )
 
-obs_wav, obs_flux = load_observed_spectrum('Realobs_data/Consub_data/my_source.csv')
+obs_wav, obs_flux = load_observed_spectrum(
+    'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv'
+)
 
 fit = fit_molecules(
     obs_wav,
@@ -109,6 +102,19 @@ For a complete staged fit-and-subtract workflow, edit and run:
 ```bash
 python examples/dev_v1_realobs.py
 ```
+
+The fitting example and `notebooks/Example_Fitting.ipynb` use only files
+committed to GitHub: the example observed spectrum and the self-contained
+checkpoints under `Trained_model/`.
+
+## Training and validation data
+
+`Model_grids/` and `Pretrain_grid/` are intentionally ignored by Git because
+they contain the full local training data. To run
+`examples/dev_v1_pt_validation.py` or
+`notebooks/Example_Training_Validation.ipynb`, place the complete model grids
+under `Model_grids/<molecule>/`. The workflows create or reuse the corresponding
+pretraining CSV under `Pretrain_grid/`.
 
 ## Forward model convention
 

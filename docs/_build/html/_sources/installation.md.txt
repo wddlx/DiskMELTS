@@ -13,31 +13,91 @@
 
 Python ≥ 3.9 is required.
 
-## Install from source
+## Conda (beginner-friendly)
 
-Clone the repository and install in editable mode:
+We provide `environment.yaml` as a quick-start option. First, check that you have conda:
+
+    conda --version
+
+If you don't have conda, google how to install it!
+
+Update conda to version 23 or above:
+
+    conda update conda
+
+Press `y` to all prompts.
+
+Clone the repository and create the environment from the repository root:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/DiskMELTS.git
+git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
+conda env create --file=environment.yaml
+```
+
+Press `y` to all prompts. This will download a number of packages.
+
+Activate it:
+
+    conda activate diskmelts
+
+Verify everything is installed:
+
+    conda list
+
+## Custom environment
+
+Feel free to use your own conda or virtual environment. Install the package with:
+
+```bash
 pip install -e .
 ```
 
 This makes `import diskmelts` available from anywhere in your environment.
 
-## Conda environment (recommended)
+## Repository data layout
 
-If you use Conda, create the project environment from the repository root:
+A fresh GitHub clone contains everything required for fitting:
 
-```bash
-conda env create -f environment.yaml
-conda activate diskmelts
-```
+- self-contained pretrained checkpoints under `Trained_model/`
+- an example observed spectrum under `Realobs_data/Consub_data/`
+- `examples/dev_v1_realobs.py`
+- `notebooks/Example_Fitting.ipynb`
 
-The environment file installs DiskMELTS in editable mode with `pip install -e .`.
+The large training inputs are intentionally not uploaded:
+
+- `Model_grids/`
+- `Pretrain_grid/`
+
+These directories are ignored by Git. They are only required when generating
+pretraining tables, retraining checkpoints, or running the training-validation
+workflow.
 
 ## Verify
 
+Verify the package import:
+
 ```bash
-python test.py
+python -c "import diskmelts; print(diskmelts.__version__ if hasattr(diskmelts, '__version__') else 'DiskMELTS import OK')"
 ```
+
+To run the development test suite, install the optional development
+dependencies first:
+
+```bash
+pip install -e ".[dev]"
+pytest tests/
+```
+
+The test suite checks the committed fitting assets and notebook paths. Tests
+that exercise the scientific optimizer use small synthetic inputs so they can
+run in continuous integration.
+
+## Build the documentation
+
+```bash
+pip install -r docs/requirements.txt
+sphinx-build -E -W -b html docs/source docs/_build/html
+```
+
+The build is self-contained and does not download external API inventories.

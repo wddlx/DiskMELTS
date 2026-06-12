@@ -23,23 +23,26 @@ from diskmelts.plotting import plot_validation_split  # plot_validation unused (
 # CONFIGURATION — change MOL and GRID_DIR; everything else auto-adjusts
 # ===========================================================================
 
-MOL = 'H2O'   # 'H2O', 'C2H2', 'HCN', 'CO2'
+MOL = os.environ.get('DISKMELTS_MOL', 'H2O')
 
-# Input: model grid directory (one subdirectory per molecule)
-GRID_DIR = f'Model_grids/{MOL}'
+# Repository root = parent of examples/
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Input: local model grid directory (ignored by Git)
+GRID_DIR = os.path.join(BASE_DIR, 'Model_grids', MOL)
 
 # Output paths — auto-named from MOL; change the base dirs if needed
-PRETRAIN_CSV = f'Pretrain_grid/pretrain_{MOL}_11to19.csv'
-MODEL_PATH   = f'Trained_model/net_{MOL}_forward_11to19.pt'
-FIG_DIR      = 'figures/validation'
+PRETRAIN_CSV = os.path.join(BASE_DIR, 'Pretrain_grid', f'pretrain_{MOL}_11to19.csv')
+MODEL_PATH   = os.path.join(BASE_DIR, 'Trained_model', f'net_{MOL}_forward_11to19.pt')
+FIG_DIR      = os.path.join(BASE_DIR, 'figures', 'validation')
 
 # Per-molecule defaults — WAV_RANGE, FIT_RANGES, N_PCA differ by molecule
 #
 #   MOL     WAV_RANGE          FIT_RANGES                          N_PCA
 #   H2O     (11.0, 19.0)       [(11.0,12.0), (17.0,18.5)]         21
-#   C2H2    (12.0, 16.5)       (12.0, 16.0)                       15
-#   HCN     (12.0, 16.5)       (12.0, 16.0)                       15
-#   CO2     (12.0, 16.5)       (12.0, 16.0)                       15
+#   C2H2    (11.0, 17.5)       (12.0, 16.5)                       15
+#   HCN     (11.0, 17.5)       (12.0, 17.0)                       15
+#   CO2     (11.0, 17.5)       (12.0, 17.0)                       15
 #
 _MOL_DEFAULTS = {
     'H2O':      dict(wav_range=(11.0, 19.0), fit_ranges=[(11.0, 12.0), (16.5, 18.5)], n_pca=21),
@@ -57,7 +60,7 @@ N_PCA      = _MOL_DEFAULTS[MOL]['n_pca']
 HIDDEN = (64, 128, 64)   # hidden layer sizes for net_shape and net_peak
 
 # Training hyperparameters
-N_EPOCHS = 5000
+N_EPOCHS = int(os.environ.get('DISKMELTS_N_EPOCHS', '5000'))
 BATCH    = 128
 LR       = 1e-4
 PATIENCE = 500   # early-stopping patience (epochs without improvement)
@@ -72,12 +75,12 @@ LOGN_BOUNDS = (13.0, 19.0)   # (logN_min, logN_max) in log10(cm^-2)
 LOGA_BOUNDS = (-2.0, 2.0)    # (log10A_min, log10A_max) for full validation fitting
 
 # Holdout: grid points excluded from pretrain CSV and used as unseen validation
-HOLDOUT_N = 30     # number of grid points to hold out
+HOLDOUT_N = int(os.environ.get('DISKMELTS_HOLDOUT_N', '30'))
 
 # NT validation (T and logN only, A = 1) — gradient-based Adam optimizer
-VAL_NT_FRAC   = 0.02   # fraction of pretrain CSV rows to validate (in-pretrain set)
-VAL_NT_STARTS = 100    # random starting points for Adam
-VAL_NT_STEPS  = 300    # Adam gradient steps per start
+VAL_NT_FRAC   = float(os.environ.get('DISKMELTS_VAL_NT_FRAC', '0.02'))
+VAL_NT_STARTS = int(os.environ.get('DISKMELTS_VAL_NT_STARTS', '100'))
+VAL_NT_STEPS  = int(os.environ.get('DISKMELTS_VAL_NT_STEPS', '300'))
 VAL_NT_LR     = 0.03   # Adam learning rate
 
 # Full validation (T, logN, A with random A)
@@ -97,6 +100,15 @@ SEED = 42
 
 # ===========================================================================
 
+if not os.path.isdir(GRID_DIR):
+    raise FileNotFoundError(
+        f'Model grid not found: {GRID_DIR}\n'
+        'Model_grids/ is intentionally ignored by Git. Copy the full local '
+        'model grids into the repository before running training validation.'
+    )
+
+os.makedirs(os.path.dirname(PRETRAIN_CSV), exist_ok=True)
+os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 os.makedirs(FIG_DIR, exist_ok=True)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Device: {device}  |  Molecule: {MOL}')
@@ -165,10 +177,7 @@ pretrain_forward_model(
 # ---------------------------------------------------------------------------
 print('\n[4] Loading model for fitting ...')
 pretrained = load_models(
-    model_paths        = {MOL: MODEL_PATH},
-    pretrain_csv_paths = {MOL: PRETRAIN_CSV},
-    wav_ranges         = {MOL: WAV_RANGE},
-    n_pca              = {MOL: N_PCA},
+    model_paths={MOL: MODEL_PATH},
     device=device,
 )
 
