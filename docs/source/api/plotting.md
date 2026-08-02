@@ -24,6 +24,12 @@ Visualisation functions for fitting and validation results.
 
 ---
 
+```{eval-rst}
+.. autofunction:: diskmelts.plotting.plot_bank_reconstruction
+```
+
+---
+
 ## Molecule colour convention
 
 | Molecule | Colour |

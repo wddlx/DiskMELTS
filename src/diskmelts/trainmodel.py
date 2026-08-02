@@ -7,6 +7,7 @@ Provides three public functions:
     pretrain_forward_model   : train (or load) the two-MLP forward model per molecule
                                   net_shape : (T, logN) → n_pca PCA coefficients
                                   net_peak  : (T, logN) → log10(peak flux)
+    train_model_bank         : train overlapping wavelength/T/logN checkpoint tiles
 
 Run as a script to generate pretrain CSVs, train all four molecules, and save
 loss-curve diagnostics:
@@ -16,6 +17,8 @@ Edit the CONFIGURATION block inside if __name__ == '__main__' to change paths,
 which molecules to train, architecture, PCA size, learning rate, etc.
 """
 
+import copy
+import json
 import os
 import re
 import numpy as np
@@ -196,6 +199,7 @@ def pretrain_forward_model(
     n_pca=15,
     early_stopping_patience=500,
     T_range=None,
+    logN_range=None,
 ):
     """
     Train (or load) the two-MLP forward model for one molecule.
@@ -236,6 +240,8 @@ def pretrain_forward_model(
         T_range (tuple or None): (T_min, T_max) K; if set, only rows in this
                                   temperature range are used; useful for
                                   hot/warm two-component splits (default None)
+        logN_range (tuple or None): (logN_min, logN_max); if set, only rows in
+                                     this column-density range are used
 
     Returns:
         (dict): with keys
@@ -308,6 +314,10 @@ def pretrain_forward_model(
             Y_pre_v=np.empty((0, len(ckpt['wav'])), dtype=np.float32),
             X_pre_v_t=torch.empty((0, 2), dtype=torch.float32, device=device),
             log10p_v=np.empty(0, dtype=np.float32),
+            T_range=ckpt.get('T_range', None),
+            logN_range=ckpt.get('logN_range', None),
+            wav_range=ckpt.get('wav_range', None),
+            model_path=model_path,
         )
 
     # --- Load pretrain CSV and select wavelength channels ---
@@ -315,6 +325,11 @@ def pretrain_forward_model(
     pre_flux_cols = [c for c in df_pre.columns
                      if c.startswith('wav_')
                      and wav_range[0] <= float(c[4:]) <= wav_range[1]]
+    if not pre_flux_cols:
+        raise ValueError(
+            f'[{mol}] wav_range={wav_range} selects zero spectral columns '
+            f'from {pretrain_csv}'
+        )
     wav    = np.array([float(c[4:]) for c in pre_flux_cols])
     n_spec = len(pre_flux_cols)
 
@@ -329,6 +344,28 @@ def pretrain_forward_model(
         Y_pre      = Y_pre[mask]
         log10_peak = log10_peak[mask]
         print(f'  [{mol}] T_range={T_range}: {mask.sum()}/{len(mask)} samples kept')
+
+    if logN_range is not None:
+        mask       = (X_pre[:, 1] >= logN_range[0]) & (X_pre[:, 1] <= logN_range[1])
+        X_pre      = X_pre[mask]
+        Y_pre      = Y_pre[mask]
+        log10_peak = log10_peak[mask]
+        print(f'  [{mol}] logN_range={logN_range}: {mask.sum()}/{len(mask)} samples kept')
+
+    if len(X_pre) < 2:
+        raise ValueError(
+            f'[{mol}] fewer than two samples remain after applying '
+            f'T_range={T_range} and logN_range={logN_range}'
+        )
+    n_validation = max(1, int(np.ceil(0.1 * len(X_pre))))
+    max_pca = min(len(X_pre) - n_validation, len(pre_flux_cols))
+    if n_pca and n_pca > max_pca:
+        raise ValueError(
+            f'[{mol}] n_pca={n_pca} exceeds the usable limit '
+            f'{max_pca} for '
+            f'wav_range={wav_range}, T_range={T_range}, '
+            f'logN_range={logN_range}'
+        )
 
     X_tr, X_v, Y_tr, Y_v, p_tr, p_v = train_test_split(
         X_pre, Y_pre, log10_peak, test_size=0.1, random_state=seed)
@@ -359,9 +396,24 @@ def pretrain_forward_model(
     # --- Load from checkpoint if it exists ---
     if model_path and os.path.exists(model_path):
         ckpt        = torch.load(model_path, map_location=device, weights_only=False)
+        xp_sc       = ckpt.get('xp_sc', xp_sc)
         pca         = ckpt.get('pca', None)
         yp_sc_shape = ckpt['yp_sc_shape']
         yp_sc_peak  = ckpt['yp_sc_peak']
+        wav         = np.asarray(ckpt.get('wav', wav))
+
+        # Rebuild validation targets with the checkpoint preprocessing rather
+        # than the newly fitted temporary scalers/PCA.
+        Z_v_ckpt = pca.transform(Y_v) if pca is not None else Y_v
+        X_v_t = torch.from_numpy(
+            xp_sc.transform(X_v).astype(np.float32)
+        ).to(device)
+        Z_v_t = torch.from_numpy(
+            yp_sc_shape.transform(Z_v_ckpt).astype(np.float32)
+        ).to(device)
+        p_v_t = torch.from_numpy(
+            yp_sc_peak.transform(p_v.reshape(-1, 1)).astype(np.float32)
+        ).to(device)
 
         state_shape  = ckpt['model_state_shape']
         wkeys        = sorted(k for k in state_shape if k.endswith('.weight'))
@@ -406,6 +458,7 @@ def pretrain_forward_model(
         train_losses_shape, val_losses_shape = [], []
         train_losses_peak,  val_losses_peak  = [], []
         best_val_shape, best_val_peak = float('inf'), float('inf')
+        best_state_shape, best_state_peak = None, None
         es_ctr_shape,  es_ctr_peak   = 0, 0
         stopped_shape, stopped_peak  = False, False
 
@@ -457,6 +510,7 @@ def pretrain_forward_model(
                 if not stopped_shape:
                     if vl_shape < best_val_shape:
                         best_val_shape = vl_shape
+                        best_state_shape = copy.deepcopy(net_shape.state_dict())
                         es_ctr_shape   = 0
                     else:
                         es_ctr_shape  += 1
@@ -466,6 +520,7 @@ def pretrain_forward_model(
                 if not stopped_peak:
                     if vl_peak < best_val_peak:
                         best_val_peak = vl_peak
+                        best_state_peak = copy.deepcopy(net_peak.state_dict())
                         es_ctr_peak   = 0
                     else:
                         es_ctr_peak  += 1
@@ -474,6 +529,15 @@ def pretrain_forward_model(
                         stopped_peak = True
                 if stopped_shape and stopped_peak:
                     break
+
+        # Early stopping should return the best validation epoch rather than
+        # whichever weights happened to be present when patience expired.
+        if best_state_shape is not None:
+            net_shape.load_state_dict(best_state_shape)
+        if best_state_peak is not None:
+            net_peak.load_state_dict(best_state_peak)
+        net_shape.eval()
+        net_peak.eval()
 
         # Save checkpoint
         if model_path:
@@ -492,6 +556,8 @@ def pretrain_forward_model(
                 'wav':                wav,
                 'mol':                mol,
                 'wav_range':          tuple(wav_range),
+                'T_range':            None if T_range is None else tuple(T_range),
+                'logN_range':         None if logN_range is None else tuple(logN_range),
                 'n_pca':              None if pca is None else pca.n_components_,
                 'hidden':             hidden,
             }, model_path)
@@ -507,7 +573,158 @@ def pretrain_forward_model(
         wav=wav,
         X_pre_v=X_v,    Y_pre_v=Y_v,
         X_pre_v_t=X_v_t, log10p_v=p_v,
+        T_range=None if T_range is None else tuple(T_range),
+        logN_range=None if logN_range is None else tuple(logN_range),
+        wav_range=tuple(wav_range),
+        model_path=model_path,
     )
+
+
+def _range_token(bounds):
+    """Filesystem-safe token for a numeric two-value range."""
+    def _number(value):
+        return f'{float(value):g}'.replace('-', 'm').replace('.', 'p')
+    return f'{_number(bounds[0])}to{_number(bounds[1])}'
+
+
+def train_model_bank(
+    mol,
+    pretrain_csv,
+    model_dir,
+    wavelength_ranges,
+    logN_ranges,
+    T_ranges,
+    device=None,
+    hidden=(64, 128, 64),
+    n_epochs=5000,
+    batch_size=128,
+    lr=1e-4,
+    weight_decay=0.0,
+    seed=42,
+    n_pca=15,
+    early_stopping_patience=500,
+    manifest_path=None,
+):
+    """Train a bank of overlapping forward-surrogate tiles for one molecule.
+
+    Every Cartesian-product combination of wavelength, logN, and temperature
+    ranges is trained from one full pretraining CSV.  Checkpoints are
+    self-contained and a JSON manifest records their coverage for fitting.
+
+    Existing checkpoint files are loaded rather than retrained.  Use a new
+    ``model_dir`` or remove an obsolete checkpoint intentionally when changing
+    training data or hyperparameters.
+
+    Returns:
+        dict: manifest data plus in-memory ``models`` and ``model_bank``.
+    """
+    wavelength_ranges = [tuple(map(float, item)) for item in wavelength_ranges]
+    logN_ranges = [tuple(map(float, item)) for item in logN_ranges]
+    T_ranges = [tuple(map(float, item)) for item in T_ranges]
+    for label, ranges in (
+        ('wavelength', wavelength_ranges),
+        ('logN', logN_ranges),
+        ('temperature', T_ranges),
+    ):
+        if not ranges or any(lo >= hi for lo, hi in ranges):
+            raise ValueError(f'invalid {label} ranges: {ranges}')
+        ordered = sorted(ranges)
+        covered_through = ordered[0][1]
+        for current in ordered[1:]:
+            if current[0] > covered_through:
+                raise ValueError(
+                    f'{label} ranges leave an uncovered gap between '
+                    f'{covered_through:g} and {current[0]:g}'
+                )
+            covered_through = max(covered_through, current[1])
+
+    model_dir = os.path.abspath(os.fspath(model_dir))
+    os.makedirs(model_dir, exist_ok=True)
+    if manifest_path is None:
+        manifest_path = os.path.join(model_dir, f'{mol}_model_bank.json')
+    manifest_path = os.path.abspath(os.fspath(manifest_path))
+
+    tiles = []
+    models = []
+    total = len(wavelength_ranges) * len(logN_ranges) * len(T_ranges)
+    tile_number = 0
+    for wav_range in wavelength_ranges:
+        for logN_range in logN_ranges:
+            for T_range in T_ranges:
+                tile_number += 1
+                filename = (
+                    f'net_{mol}_w{_range_token(wav_range)}_'
+                    f'n{_range_token(logN_range)}_t{_range_token(T_range)}.pt'
+                )
+                model_path = os.path.join(model_dir, filename)
+                print(f'\n[{mol}] tile {tile_number}/{total}: {filename}')
+                trained = pretrain_forward_model(
+                    mol=mol,
+                    pretrain_csv=pretrain_csv,
+                    wav_range=wav_range,
+                    device=device,
+                    hidden=hidden,
+                    n_epochs=n_epochs,
+                    batch_size=batch_size,
+                    lr=lr,
+                    weight_decay=weight_decay,
+                    model_path=model_path,
+                    seed=seed,
+                    n_pca=n_pca,
+                    early_stopping_patience=early_stopping_patience,
+                    T_range=T_range,
+                    logN_range=logN_range,
+                )
+                tiles.append({
+                    'path': os.path.relpath(model_path, os.path.dirname(manifest_path)),
+                    'wav_range': list(wav_range),
+                    'logN_range': list(logN_range),
+                    'T_range': list(T_range),
+                })
+                models.append(trained)
+
+    manifest = {
+        'schema_version': 1,
+        'mol': mol,
+        'pretrain_csv': os.path.abspath(os.fspath(pretrain_csv)),
+        'n_pca': n_pca,
+        'hidden': list(hidden),
+        'wavelength_ranges': [list(item) for item in wavelength_ranges],
+        'logN_ranges': [list(item) for item in logN_ranges],
+        'T_ranges': [list(item) for item in T_ranges],
+        'tiles': tiles,
+    }
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    with open(manifest_path, 'w', encoding='utf-8') as stream:
+        json.dump(manifest, stream, indent=2)
+        stream.write('\n')
+    print(f'\n[{mol}] model-bank manifest saved → {manifest_path}')
+
+    in_memory_tiles = [
+        {
+            'model': model,
+            'path': os.path.abspath(os.path.join(os.path.dirname(manifest_path), spec['path'])),
+            'wav_range': tuple(spec['wav_range']),
+            'T_range': tuple(spec['T_range']),
+            'logN_range': tuple(spec['logN_range']),
+        }
+        for spec, model in zip(tiles, models)
+    ]
+    model_bank = {
+        'is_model_bank': True,
+        'mol': mol,
+        'manifest_path': manifest_path,
+        'tiles': in_memory_tiles,
+        'wav_ranges': wavelength_ranges,
+        'T_ranges': T_ranges,
+        'logN_ranges': logN_ranges,
+    }
+    return {
+        **manifest,
+        'manifest_path': manifest_path,
+        'models': models,
+        'model_bank': model_bank,
+    }
 
 
 # ===========================================================================

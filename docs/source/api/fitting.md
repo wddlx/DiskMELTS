@@ -18,6 +18,9 @@ Current checkpoints are self-contained, so normal fitting only passes
 `model_paths`. The CSV, wavelength-range, and PCA arguments are compatibility
 options for legacy checkpoints.
 
+`model_paths` may also point to a segmented model-bank JSON manifest. DiskMELTS
+then blends overlapping tiles while fitting one shared physical parameter set.
+
 ```python
 pretrained = load_models(
     model_paths={
@@ -28,6 +31,10 @@ pretrained = load_models(
 
 ```{eval-rst}
 .. autofunction:: diskmelts.fitting.load_models
+```
+
+```{eval-rst}
+.. autofunction:: diskmelts.fitting.load_model_bank
 ```
 
 ---

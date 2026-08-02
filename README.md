@@ -100,7 +100,7 @@ one-dimensional `obs_wav` and `obs_flux` arrays.
 For a complete staged fit-and-subtract workflow, edit and run:
 
 ```bash
-python examples/dev_v1_realobs.py
+python examples/dev_v2_realobs.py
 ```
 
 The fitting example and `notebooks/Example_Fitting.ipynb` use only files
@@ -111,10 +111,20 @@ checkpoints under `Trained_model/`.
 
 `Model_grids/` and `Pretrain_grid/` are intentionally ignored by Git because
 they contain the full local training data. To run
-`examples/dev_v1_pt_validation.py` or
+`examples/dev_v2_pt_validation.py` or
 `notebooks/Example_Training_Validation.ipynb`, place the complete model grids
 under `Model_grids/<molecule>/`. The workflows create or reuse the corresponding
 pretraining CSV under `Pretrain_grid/`.
+
+The v2 H2O script creates one full pretraining table, then trains 45 overlapping
+surrogates covering five wavelength, three temperature, and three column-density
+ranges. A JSON manifest makes those checkpoints behave as one blended H2O
+forward model during fitting.
+
+The same workflow trains `HCN`, `C2H2`, `CO2`, `13C12CH2`, and `13CO2` with
+three overlapping temperature models per molecule over 11.5–17.0 µm. The
+`run_H2O`, `run_Cmol`, and reserved `run_rarer` switches at the top of the
+script select which groups run.
 
 ## Forward model convention
 

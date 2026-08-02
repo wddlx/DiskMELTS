@@ -61,7 +61,7 @@ A fresh GitHub clone contains everything required for fitting:
 
 - self-contained pretrained checkpoints under `Trained_model/`
 - an example observed spectrum under `Realobs_data/Consub_data/`
-- `examples/dev_v1_realobs.py`
+- `examples/dev_v2_realobs.py`
 - `notebooks/Example_Fitting.ipynb`
 
 The large training inputs are intentionally not uploaded:

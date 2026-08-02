@@ -8,6 +8,9 @@ Retraining a molecule from the full local model grids uses two steps:
    $(T, \log N)$ grid point with a peak-normalised spectrum.
 2. **`pretrain_forward_model`** — train (or load) the two-MLP forward model
    from that CSV.
+3. **`train_model_bank`** — train a Cartesian product of overlapping
+   wavelength, temperature, and column-density tiles from one full CSV and
+   save a JSON manifest.
 
 The `MLP` class is used internally and is not part of the public API.
 
@@ -31,4 +34,10 @@ the `.pt` files directly. See {doc}`../quickstart` for fitting and
 
 ```{eval-rst}
 .. autofunction:: diskmelts.trainmodel.pretrain_forward_model
+```
+
+---
+
+```{eval-rst}
+.. autofunction:: diskmelts.trainmodel.train_model_bank
 ```

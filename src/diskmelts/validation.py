@@ -178,6 +178,7 @@ def validate_nt(
     n_steps=300,
     lr=0.03,
     seed=42,
+    validation_points=None,
 ):
     """
     Validate T and logN retrieval on pretrain grid spectra with A=1.
@@ -204,6 +205,9 @@ def validate_nt(
         n_steps (int): Adam gradient steps per start (default 300)
         lr (float): Adam learning rate (default 0.03)
         seed (int): random seed for row sampling (default 42)
+        validation_points (array-like or None): optional ``(T, logN)`` points
+            to validate.  Passing ``pretrain_forward_model()['X_pre_v']``
+            restricts evaluation to the model's withheld 10% validation split.
 
     Returns:
         (dict) with keys:
@@ -221,7 +225,21 @@ def validate_nt(
         (df[f'{mol}_logN'] >= logN_bounds[0]) & (df[f'{mol}_logN'] <= logN_bounds[1])
     ].reset_index(drop=True)
 
+    if validation_points is not None:
+        requested = {
+            (round(float(point[0]), 6), round(float(point[1]), 6))
+            for point in validation_points
+        }
+        row_keys = list(zip(df[f'{mol}_T'], df[f'{mol}_logN']))
+        df = df[[
+            (round(float(key[0]), 6), round(float(key[1]), 6)) in requested
+            for key in row_keys
+        ]].reset_index(drop=True)
+        if len(df) == 0:
+            raise ValueError('validation_points selected zero pretraining rows')
+
     n = int(len(df) * frac) if n_samples is None else min(n_samples, len(df))
+    n = max(1, n)
     df_sample = df.sample(n=n, random_state=seed).reset_index(drop=True)
 
     wav_net = pretrained[mol]['wav']

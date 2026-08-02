@@ -5,6 +5,10 @@ __pycache__/
 
 .obsidian/
 
+#AI memories
+.ai/
+
+
 # Distribution / packaging
 .Python
 build/

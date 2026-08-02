@@ -1,0 +1,738 @@
+{
+  "schema_version": 1,
+  "mol": "H2O",
+  "pretrain_csv": "/Users/chengyanxie/Documents/Github_myself/DiskMELTS/Pretrain_grid/pretrain_H2O_full.csv",
+  "n_pca": 21,
+  "hidden": [
+    64,
+    128,
+    64
+  ],
+  "wavelength_ranges": [
+    [
+      4.9,
+      7.4
+    ],
+    [
+      7.2,
+      11.2
+    ],
+    [
+      9.9,
+      15.1
+    ],
+    [
+      13.5,
+      19.2
+    ],
+    [
+      19.0,
+      25.0
+    ]
+  ],
+  "logN_ranges": [
+    [
+      13.0,
+      19.0
+    ],
+    [
+      18.5,
+      22.0
+    ],
+    [
+      21.5,
+      24.0
+    ]
+  ],
+  "T_ranges": [
+    [
+      50.0,
+      700.0
+    ],
+    [
+      600.0,
+      1300.0
+    ],
+    [
+      1200.0,
+      2000.0
+    ]
+  ],
+  "tiles": [
+    {
+      "path": "net_H2O_w4p9to7p4_n13to19_t50to700.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n13to19_t600to1300.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n13to19_t1200to2000.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n18p5to22_t50to700.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n18p5to22_t600to1300.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n18p5to22_t1200to2000.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n21p5to24_t50to700.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n21p5to24_t600to1300.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w4p9to7p4_n21p5to24_t1200to2000.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n13to19_t50to700.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n13to19_t600to1300.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n13to19_t1200to2000.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n18p5to22_t50to700.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n18p5to22_t600to1300.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n18p5to22_t1200to2000.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n21p5to24_t50to700.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n21p5to24_t600to1300.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n21p5to24_t1200to2000.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n13to19_t50to700.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n13to19_t600to1300.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n13to19_t1200to2000.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n18p5to22_t50to700.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n18p5to22_t600to1300.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n18p5to22_t1200to2000.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n21p5to24_t50to700.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n21p5to24_t600to1300.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n21p5to24_t1200to2000.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n13to19_t50to700.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n13to19_t600to1300.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n13to19_t1200to2000.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n18p5to22_t50to700.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n18p5to22_t600to1300.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n18p5to22_t1200to2000.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n21p5to24_t50to700.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n21p5to24_t600to1300.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n21p5to24_t1200to2000.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n13to19_t50to700.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n13to19_t600to1300.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n13to19_t1200to2000.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n18p5to22_t50to700.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n18p5to22_t600to1300.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n18p5to22_t1200to2000.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        18.5,
+        22.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n21p5to24_t50to700.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        50.0,
+        700.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n21p5to24_t600to1300.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        600.0,
+        1300.0
+      ]
+    },
+    {
+      "path": "net_H2O_w19to25_n21p5to24_t1200to2000.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        21.5,
+        24.0
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    }
+  ]
+}

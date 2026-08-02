@@ -14,6 +14,7 @@ Global-to-local search strategy in fit_molecules:
 Public functions
 ----------------
     load_models          : load per-molecule .pt checkpoints from disk
+    load_model_bank      : load a segmented checkpoint manifest
     generate_spectrum    : evaluate (T, logN, A) → flux via the two-MLP forward model
     fit_nested           : single-molecule retrieval via random-restart L-BFGS-B + NNLS
     fit_molecules        : multi-molecule global Sobol search + L-BFGS-B refinement
@@ -25,6 +26,7 @@ Public functions
     save_fitted_comparison: upsert best-fit parameters into a comparison CSV
 """
 
+import json
 import os
 import numpy as np
 import pandas as pd
@@ -58,7 +60,7 @@ def _wav_mask(wav, ranges):
     return mask
 
 
-def _mol_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
+def _single_model_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
     """
     Evaluate one molecule's two-MLP forward model at (T, logN, A).
 
@@ -103,9 +105,132 @@ def _mol_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
     return np.interp(wav_grid, wav_net, flux_net, left=0.0, right=0.0)
 
 
+def _tile_axis_weight(values, bounds):
+    """Smooth positive interior weight, zero outside one tile's bounds."""
+    values = np.asarray(values, dtype=np.float64)
+    lo, hi = map(float, bounds)
+    inside = (values >= lo) & (values <= hi)
+    scaled = np.minimum((values - lo) / (hi - lo), (hi - values) / (hi - lo))
+    return np.where(inside, np.maximum(scaled, 1.0e-6), 0.0)
+
+
+def _mol_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
+    """Evaluate either one checkpoint or an overlapping model bank."""
+    if not pretrained_mol.get('is_model_bank', False):
+        return _single_model_flux_on_wav(pretrained_mol, T, logN, A, wav_grid)
+
+    wav_grid = np.asarray(wav_grid, dtype=np.float64)
+    weighted_flux = np.zeros_like(wav_grid)
+    total_weight = np.zeros_like(wav_grid)
+    for tile in pretrained_mol['tiles']:
+        T_weight = float(_tile_axis_weight([T], tile['T_range'])[0])
+        logN_weight = float(_tile_axis_weight([logN], tile['logN_range'])[0])
+        if T_weight == 0.0 or logN_weight == 0.0:
+            continue
+        wav_weight = _tile_axis_weight(wav_grid, tile['wav_range'])
+        if not np.any(wav_weight):
+            continue
+        weight = T_weight * logN_weight * wav_weight
+        flux = _single_model_flux_on_wav(tile['model'], T, logN, A, wav_grid)
+        weighted_flux += weight * flux
+        total_weight += weight
+
+    result = np.zeros_like(wav_grid)
+    covered = total_weight > 0
+    result[covered] = weighted_flux[covered] / total_weight[covered]
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Public: load models and generate spectra
 # ---------------------------------------------------------------------------
+
+def _ranges_overlap(first, second):
+    return max(first[0], second[0]) <= min(first[1], second[1])
+
+
+def load_model_bank(
+    manifest_path,
+    device=None,
+    wav_ranges=None,
+    T_range=None,
+    logN_range=None,
+):
+    """Load an overlapping bank of segmented checkpoints from a JSON manifest.
+
+    Optional range filters avoid loading tiles that cannot contribute to a
+    planned fit.  The returned object can be passed anywhere a normal
+    single-molecule pretrained model is accepted.
+    """
+    manifest_path = os.path.abspath(os.fspath(manifest_path))
+    with open(manifest_path, 'r', encoding='utf-8') as stream:
+        manifest = json.load(stream)
+    if manifest.get('schema_version') != 1:
+        raise ValueError(f'unsupported model-bank manifest: {manifest_path}')
+    if not manifest.get('mol') or not manifest.get('tiles'):
+        raise ValueError(f'incomplete model-bank manifest: {manifest_path}')
+
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if wav_ranges is not None and isinstance(wav_ranges[0], (int, float)):
+        wav_ranges = [wav_ranges]
+
+    manifest_dir = os.path.dirname(manifest_path)
+    loaded_tiles = []
+    for spec in manifest['tiles']:
+        wav_range = tuple(map(float, spec['wav_range']))
+        tile_T_range = tuple(map(float, spec['T_range']))
+        tile_logN_range = tuple(map(float, spec['logN_range']))
+        if wav_ranges is not None and not any(
+            _ranges_overlap(wav_range, requested) for requested in wav_ranges
+        ):
+            continue
+        if T_range is not None and not _ranges_overlap(tile_T_range, T_range):
+            continue
+        if logN_range is not None and not _ranges_overlap(tile_logN_range, logN_range):
+            continue
+
+        path = spec['path']
+        if not os.path.isabs(path):
+            path = os.path.join(manifest_dir, path)
+        model = pretrain_forward_model(
+            mol=manifest['mol'],
+            pretrain_csv=None,
+            device=device,
+            n_epochs=0,
+            model_path=path,
+        )
+        for key, expected in (
+            ('wav_range', wav_range),
+            ('T_range', tile_T_range),
+            ('logN_range', tile_logN_range),
+        ):
+            stored = model.get(key)
+            if stored is not None and not np.allclose(stored, expected):
+                raise ValueError(
+                    f'checkpoint {path!r} has {key}={stored}, but its '
+                    f'manifest entry specifies {expected}'
+                )
+        loaded_tiles.append({
+            'model': model,
+            'path': os.path.abspath(path),
+            'wav_range': wav_range,
+            'T_range': tile_T_range,
+            'logN_range': tile_logN_range,
+        })
+
+    if not loaded_tiles:
+        raise ValueError('model-bank filters selected zero checkpoints')
+
+    return {
+        'is_model_bank': True,
+        'mol': manifest['mol'],
+        'manifest_path': manifest_path,
+        'tiles': loaded_tiles,
+        'wav_ranges': sorted(set(tile['wav_range'] for tile in loaded_tiles)),
+        'T_ranges': sorted(set(tile['T_range'] for tile in loaded_tiles)),
+        'logN_ranges': sorted(set(tile['logN_range'] for tile in loaded_tiles)),
+    }
 
 def load_models(
     model_paths,
@@ -118,7 +243,7 @@ def load_models(
     Load pretrained per-molecule forward models from disk.
 
     Args:
-        model_paths (dict): mol -> path to the .pt checkpoint file
+        model_paths (dict): mol -> path to a .pt checkpoint or model-bank JSON
         pretrain_csv_paths (dict or None): legacy mol -> pretrain CSV path.
                                            Only needed for old checkpoints that
                                            do not contain input scaling metadata
@@ -140,6 +265,16 @@ def load_models(
     wav_ranges = wav_ranges or {}
     pretrained = {}
     for mol in model_paths:
+        model_path = model_paths[mol]
+        if os.fspath(model_path).lower().endswith('.json'):
+            pretrained[mol] = load_model_bank(model_path, device=device)
+            if pretrained[mol]['mol'] != mol:
+                raise ValueError(
+                    f'model bank {model_path!r} contains '
+                    f'{pretrained[mol]["mol"]!r}, not requested key {mol!r}'
+                )
+            print(f'  Loaded {mol} model bank from {model_path}')
+            continue
         mol_n_pca = n_pca[mol] if isinstance(n_pca, dict) else n_pca
         kw = {} if mol_n_pca is None else {'n_pca': mol_n_pca}
         pretrained[mol] = pretrain_forward_model(
@@ -148,11 +283,11 @@ def load_models(
             wav_range=wav_ranges.get(mol, (11.0, 19.0)),
             device=device,
             n_epochs=0,
-            model_path=model_paths[mol],
+            model_path=model_path,
             seed=42,
             **kw,
         )
-        print(f'  Loaded {mol} from {model_paths[mol]}')
+        print(f'  Loaded {mol} from {model_path}')
     return pretrained
 
 
@@ -172,8 +307,34 @@ def generate_spectrum(T, logN, A, pretrained_mol, obs_wav=None):
         (np.ndarray): model flux in Jy on obs_wav (or native grid if None)
     """
     if obs_wav is None:
-        obs_wav = pretrained_mol['wav']
+        if pretrained_mol.get('is_model_bank', False):
+            obs_wav = np.unique(np.concatenate([
+                tile['model']['wav'] for tile in pretrained_mol['tiles']
+            ]))
+        else:
+            obs_wav = pretrained_mol['wav']
     return _mol_flux_on_wav(pretrained_mol, T, logN, A, obs_wav)
+
+
+def _model_bank_bounds(pretrained_mol, key, fallback):
+    if not pretrained_mol.get('is_model_bank', False):
+        return fallback
+    ranges = pretrained_mol[key]
+    return (min(item[0] for item in ranges), max(item[1] for item in ranges))
+
+
+def _check_bank_wavelength_coverage(pretrained_mol, wavelengths):
+    if not pretrained_mol.get('is_model_bank', False):
+        return
+    covered = np.zeros(len(wavelengths), dtype=bool)
+    for lo, hi in pretrained_mol['wav_ranges']:
+        covered |= (wavelengths >= lo) & (wavelengths <= hi)
+    if not np.all(covered):
+        missing = wavelengths[~covered]
+        raise ValueError(
+            f'model bank does not cover {len(missing)} selected wavelength pixels; '
+            f'first uncovered wavelength is {missing[0]:.6g} um'
+        )
 
 
 def fit_nested(
@@ -218,8 +379,14 @@ def fit_nested(
     obs_wav  = np.asarray(obs_wav,  dtype=np.float64)
     obs_flux = np.asarray(obs_flux, dtype=np.float64)
 
-    if T_bounds    is None: T_bounds    = _DEFAULT_T_BOUNDS
-    if logN_bounds is None: logN_bounds = _DEFAULT_LOGN_BOUNDS
+    if T_bounds is None:
+        T_bounds = _model_bank_bounds(
+            pretrained[mol], 'T_ranges', _DEFAULT_T_BOUNDS
+        )
+    if logN_bounds is None:
+        logN_bounds = _model_bank_bounds(
+            pretrained[mol], 'logN_ranges', _DEFAULT_LOGN_BOUNDS
+        )
 
     if loga_bounds is not None:
         _A_lo = 10.0 ** loga_bounds[0]
@@ -232,6 +399,9 @@ def fit_nested(
     fit_mask = _wav_mask(obs_wav, fit_ranges)
     wav_fit  = obs_wav[fit_mask]
     obs_fit  = obs_flux[fit_mask]
+    if len(wav_fit) == 0:
+        raise ValueError('fit_ranges select zero observed wavelength pixels')
+    _check_bank_wavelength_coverage(pretrained[mol], wav_fit)
 
     def _nnls_step(x0):
         spec = _mol_flux_on_wav(pretrained[mol], x0[0], x0[1], 1.0, wav_fit)
@@ -557,10 +727,6 @@ def fit_molecules(
     obs_wav = np.asarray(obs_wav, dtype=np.float64)
     obs_flux = np.asarray(obs_flux, dtype=np.float64)
 
-    if T_bounds is None:
-        T_bounds = _DEFAULT_T_BOUNDS
-    if logN_bounds is None:
-        logN_bounds = _DEFAULT_LOGN_BOUNDS
     if loga_bounds is None:
         loga_bounds = _DEFAULT_LOGA_BOUNDS
 
@@ -576,7 +742,12 @@ def fit_molecules(
     if len(wav_fit) == 0:
         raise ValueError('fit_ranges select zero observed wavelength pixels')
 
+    for comp in components:
+        _check_bank_wavelength_coverage(pretrained[comp['model_mol']], wav_fit)
+
     def _bounds_for(comp, bound_spec, default):
+        if bound_spec is None:
+            return default
         if isinstance(bound_spec, dict):
             if comp['label'] in bound_spec:
                 return tuple(bound_spec[comp['label']])
@@ -587,8 +758,11 @@ def fit_molecules(
 
     nonlinear_bounds = []
     for comp in components:
-        nonlinear_bounds.append(_bounds_for(comp, T_bounds, _DEFAULT_T_BOUNDS))
-        nonlinear_bounds.append(_bounds_for(comp, logN_bounds, _DEFAULT_LOGN_BOUNDS))
+        model = pretrained[comp['model_mol']]
+        default_T = _model_bank_bounds(model, 'T_ranges', _DEFAULT_T_BOUNDS)
+        default_logN = _model_bank_bounds(model, 'logN_ranges', _DEFAULT_LOGN_BOUNDS)
+        nonlinear_bounds.append(_bounds_for(comp, T_bounds, default_T))
+        nonlinear_bounds.append(_bounds_for(comp, logN_bounds, default_logN))
 
     if loga_bounds is None:
         A_bounds = (0.0, np.inf)

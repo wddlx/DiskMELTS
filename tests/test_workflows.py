@@ -100,7 +100,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
 
 
 def test_realobs_example_uses_committed_spectrum():
-    source = (ROOT / "examples" / "dev_v1_realobs.py").read_text()
+    source = (ROOT / "examples" / "dev_v2_realobs.py").read_text()
     assert "j16120505_v9.0_contsub_RVcorr.csv" in source
     assert "j16142029_v9.0_contsub_RVcorr.csv" not in source
 
@@ -112,7 +112,7 @@ def test_realobs_example_starts_from_github_assets(tmp_path):
     env["MPLCONFIGDIR"] = str(tmp_path / "matplotlib")
 
     result = subprocess.run(
-        [sys.executable, str(ROOT / "examples" / "dev_v1_realobs.py")],
+        [sys.executable, str(ROOT / "examples" / "dev_v2_realobs.py")],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -129,8 +129,8 @@ def test_training_example_explains_missing_local_grids(tmp_path):
     pytest.importorskip("torch")
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
-    script = examples_dir / "dev_v1_pt_validation.py"
-    shutil.copy(ROOT / "examples" / "dev_v1_pt_validation.py", script)
+    script = examples_dir / "dev_v2_pt_validation.py"
+    shutil.copy(ROOT / "examples" / "dev_v2_pt_validation.py", script)
 
     result = subprocess.run(
         [sys.executable, str(script)],

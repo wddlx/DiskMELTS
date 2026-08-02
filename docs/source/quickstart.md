@@ -115,7 +115,7 @@ fit_h2o_two = fit_molecules(
 For a complete staged workflow, start from:
 
 ```bash
-python examples/dev_v1_realobs.py
+python examples/dev_v2_realobs.py
 ```
 
 Edit the configuration block at the top of that script for your source name,

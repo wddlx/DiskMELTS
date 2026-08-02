@@ -9,9 +9,11 @@ from diskmelts.trainmodel import (
     load_model_grid,
     generate_pre_training_set,
     pretrain_forward_model,
+    train_model_bank,
 )
 from diskmelts.fitting import (
     load_models,
+    load_model_bank,
     generate_spectrum,
     fit_nested,
     fit_molecules,
@@ -31,6 +33,7 @@ from diskmelts.plotting import (
     plot_fit,
     plot_validation,
     plot_validation_split,
+    plot_bank_reconstruction,
 )
 
 __all__ = [
@@ -38,8 +41,10 @@ __all__ = [
     "load_model_grid",
     "generate_pre_training_set",
     "pretrain_forward_model",
+    "train_model_bank",
     # fitting
     "load_models",
+    "load_model_bank",
     "generate_spectrum",
     "fit_nested",
     "fit_molecules",
@@ -57,4 +62,5 @@ __all__ = [
     "plot_fit",
     "plot_validation",
     "plot_validation_split",
+    "plot_bank_reconstruction",
 ]

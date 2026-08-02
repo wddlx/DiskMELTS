@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "mol": "13C12CH2",
+  "pretrain_csv": "/Users/chengyanxie/Documents/Github_myself/DiskMELTS/Pretrain_grid/pretrain_13C12CH2_full.csv",
+  "n_pca": 15,
+  "hidden": [
+    64,
+    128,
+    64
+  ],
+  "wavelength_ranges": [
+    [
+      11.5,
+      17.0
+    ]
+  ],
+  "logN_ranges": [
+    [
+      13.0,
+      19.5
+    ]
+  ],
+  "T_ranges": [
+    [
+      200.0,
+      800.0
+    ],
+    [
+      600.0,
+      1500.0
+    ],
+    [
+      1200.0,
+      2000.0
+    ]
+  ],
+  "tiles": [
+    {
+      "path": "net_13C12CH2_w11p5to17_n13to19p5_t200to800.pt",
+      "wav_range": [
+        11.5,
+        17.0
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        200.0,
+        800.0
+      ]
+    },
+    {
+      "path": "net_13C12CH2_w11p5to17_n13to19p5_t600to1500.pt",
+      "wav_range": [
+        11.5,
+        17.0
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        600.0,
+        1500.0
+      ]
+    },
+    {
+      "path": "net_13C12CH2_w11p5to17_n13to19p5_t1200to2000.pt",
+      "wav_range": [
+        11.5,
+        17.0
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        1200.0,
+        2000.0
+      ]
+    }
+  ]
+}
