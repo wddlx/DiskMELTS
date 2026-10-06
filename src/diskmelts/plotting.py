@@ -37,6 +37,9 @@ _MOL_LABEL = {
     '13CO2':     r'$^{13}$CO$_2$',
     'C4H2':      r'C$_4$H$_2$',
     'HC3N':      r'HC$_3$N',
+    'C2H6':      r'C$_2$H$_6$',
+    'C2H4':      r'C$_2$H$_4$',
+    'CH4':       r'CH$_4$',
 }
 
 _MOL_COLOR = {
@@ -52,6 +55,9 @@ _MOL_COLOR = {
     '13CO2':    'C6',
     'C4H2':     'brown',
     'HC3N':     'gray',
+    'C2H6':     'C0',
+    'C2H4':     'olive',
+    'CH4':      'pink',
 }
 
 # ---------------------------------------------------------------------------
@@ -104,6 +110,7 @@ def plot_fit(
     save_path=None,
     params=None,
     uncertainty=None,
+    show=True,
 ):
     """
     Two-panel spectral fit figure.
@@ -133,8 +140,9 @@ def plot_fit(
                                fit_molecules result['params'].  When provided, a
                                parameter text box with best-fit values is drawn.
         uncertainty (dict or None): label -> {'T': {'minus', 'plus'}, ...} from
-                                    fit_molecules result['uncertainty'].  Combined
-                                    with params to show ± errorbars in the text box.
+                                      fit_molecules result['uncertainty'].  Combined
+                                      with params to show ± errorbars in the text box.
+        show (bool): display the figure interactively; set False for batch fits.
 
     Returns:
         (matplotlib.figure.Figure)
@@ -257,7 +265,8 @@ def plot_fit(
                     transform=ax_bot.transAxes, ha='right', va='top', fontsize=9)
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
         if save_path is not None:
             os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
             fig.savefig(save_path, dpi=200, bbox_inches='tight')

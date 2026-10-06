@@ -19,13 +19,11 @@ We provide `environment.yaml` as a quick-start option. First, check that you hav
 
     conda --version
 
-If you don't have conda, google how to install it!
+If you do not have conda, use a Python virtual environment instead.
 
 Update conda to version 23 or above:
 
     conda update conda
-
-Press `y` to all prompts.
 
 Clone the repository and create the environment from the repository root:
 
@@ -34,8 +32,6 @@ git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
 conda env create --file=environment.yaml
 ```
-
-Press `y` to all prompts. This will download a number of packages.
 
 Activate it:
 
@@ -57,21 +53,31 @@ This makes `import diskmelts` available from anywhere in your environment.
 
 ## Repository data layout
 
-A fresh GitHub clone contains everything required for fitting:
+A fresh GitHub clone or built wheel contains everything required for v2 model
+fitting. The wheel bundles 15 production checkpoint files (five H2O tiles and
+one checkpoint for each of ten other molecules), plus the H2O manifest under
+`diskmelts/models/Trained_model/`. Model fitting loads these files through
+`load_fitting_models`; it does not read any slab-grid CSVs.
 
-- self-contained pretrained checkpoints under `Trained_model/`
+The repository additionally contains:
+
 - an example observed spectrum under `Realobs_data/Consub_data/`
 - `examples/dev_v2_realobs.py`
-- `notebooks/Example_Fitting.ipynb`
+- `notebooks/Example_Fitting.ipynb` (model fitting, with an optional grid cell)
 
 The large training inputs are intentionally not uploaded:
 
 - `Model_grids/`
 - `Pretrain_grid/`
 
-These directories are ignored by Git. They are only required when generating
-pretraining tables, retraining checkpoints, or running the training-validation
-workflow.
+These directories are ignored by Git. `Model_grids/` is required only for the
+optional `fit_observation_grids` API or training. `Pretrain_grid/` is needed
+only for training and related validation. Neither belongs in a fitting-only
+GitHub upload or wheel. The repository's top-level `Trained_model/`, generated
+`realobs_results/`, `figures/` outputs, and `docs/_build/` are also excluded
+from the fitting-only upload. Four reference PDFs under
+`figures/realobs_validations/` remain included. Normal v2 inference uses the
+bundled checkpoints.
 
 ## Verify
 
@@ -89,9 +95,8 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-The test suite checks the committed fitting assets and notebook paths. Tests
-that exercise the scientific optimizer use small synthetic inputs so they can
-run in continuous integration.
+The test suite checks the bundled fitting assets and notebook paths. Its
+scientific-optimizer tests use small synthetic inputs.
 
 ## Build the documentation
 

@@ -73,15 +73,24 @@ latex/*.out
 latex/*.pdf
 latex/*.synctex.gz
 
-# Local-only training inputs and generated pretraining tables.
-# These are required by the training-validation examples, but not by fitting
-# with the self-contained checkpoints committed under Trained_model/.
-Model_grids/
-Pretrain_grid/
-Realobs_data/Consub_data0/
-examples/realobs_validation.py
+# Production fitting checkpoints live under src/diskmelts/models/ and are
+# included in the wheel. The following are optional local training assets.
+/Model_grids/
+/Pretrain_grid/
+/Trained_model/
+/Realobs_data/Consub_data0/
 
-figures/validation/thick/*
+# Generated fits, figures, and rendered documentation. Source files and
+# literature tables remain trackable.
+/realobs_results/
+/figures/*
+!/figures/realobs_validations/
+/figures/realobs_validations/*
+!/figures/realobs_validations/*.pdf
+/docs/_build/
+
+# Old local validation script superseded by the packaged v2 workflow.
+/examples/realobs_validation.py
 
 Uma_tests/
 

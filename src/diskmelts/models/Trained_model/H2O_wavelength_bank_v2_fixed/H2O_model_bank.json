@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "mol": "H2O",
+  "n_pca": 30,
+  "hidden": [
+    64,
+    128,
+    64
+  ],
+  "peak_normalization": "window",
+  "shape_loss": "spectral",
+  "temperature_transform": "log10",
+  "wavelength_ranges": [
+    [
+      4.9,
+      7.4
+    ],
+    [
+      7.2,
+      11.2
+    ],
+    [
+      9.9,
+      15.1
+    ],
+    [
+      13.5,
+      19.2
+    ],
+    [
+      19.0,
+      25.0
+    ]
+  ],
+  "logN_ranges": [
+    [
+      13.0,
+      19.0
+    ]
+  ],
+  "T_ranges": [
+    [
+      100.0,
+      1400.0
+    ]
+  ],
+  "tiles": [
+    {
+      "path": "net_H2O_w4p9to7p4_n13to19_t100to1400.pt",
+      "wav_range": [
+        4.9,
+        7.4
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        100.0,
+        1400.0
+      ],
+      "n_pca": 30
+    },
+    {
+      "path": "net_H2O_w7p2to11p2_n13to19_t100to1400.pt",
+      "wav_range": [
+        7.2,
+        11.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        100.0,
+        1400.0
+      ],
+      "n_pca": 30
+    },
+    {
+      "path": "net_H2O_w9p9to15p1_n13to19_t100to1400.pt",
+      "wav_range": [
+        9.9,
+        15.1
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        100.0,
+        1400.0
+      ],
+      "n_pca": 30
+    },
+    {
+      "path": "net_H2O_w13p5to19p2_n13to19_t100to1400.pt",
+      "wav_range": [
+        13.5,
+        19.2
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        100.0,
+        1400.0
+      ],
+      "n_pca": 30
+    },
+    {
+      "path": "net_H2O_w19to25_n13to19_t100to1400.pt",
+      "wav_range": [
+        19.0,
+        25.0
+      ],
+      "logN_range": [
+        13.0,
+        19.0
+      ],
+      "T_range": [
+        100.0,
+        1400.0
+      ],
+      "n_pca": 30
+    }
+  ]
+}

@@ -58,40 +58,29 @@ pip install -e .
 ## Quick fitting example
 
 ```python
-from diskmelts import load_models, load_observed_spectrum, fit_molecules, plot_fit
+from diskmelts import load_fitting_models, load_observed_spectrum, fit_stage
 
-pretrained = load_models(
-    model_paths={
-        'H2O': 'Trained_model/net_H2O_forward_11to19.pt',
-    },
-)
+pretrained = load_fitting_models(['H2O'])
 
 obs_wav, obs_flux = load_observed_spectrum(
     'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv'
 )
 
-fit = fit_molecules(
+fit = fit_stage(
     obs_wav,
     obs_flux,
-    mol='H2O',
+    molecule='H2O',
+    wavelength_range=(11.0, 19.0),
     pretrained=pretrained,
     fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
+    distance_pc=122.5,
     n_samples=20000,
     n_refine=32,
     n_top=20,
     sigma=0.001,
 )
 
-plot_fit(
-    obs_wav,
-    obs_flux,
-    fit,
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-    name='my_source',
-    save_path='figures/my_source_h2o.png',
-    params=fit['params'],
-    uncertainty=fit['uncertainty'],
-)
+print(fit['params'])
 ```
 
 You can also read spectra with your own code. DiskMELTS only requires
@@ -103,33 +92,46 @@ For a complete staged fit-and-subtract workflow, edit and run:
 python examples/dev_v2_realobs.py
 ```
 
-The fitting example and `notebooks/Example_Fitting.ipynb` use only files
-committed to GitHub: the example observed spectrum and the self-contained
-checkpoints under `Trained_model/`.
+The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
+`plot_saved_observation`. The production checkpoints are packaged under
+`src/diskmelts/models/` and included in the wheel. Model fitting requires no
+`Model_grids/` or `Pretrain_grid/` directory. The model metadata, including
+PCA counts and network layers, are in `diskmelts.MODEL_SPECS` and checked when
+loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
+sets the source distance and makes the returned emitting area physical.
+
+For an optional fit directly from slab grids, use `fit_grid_stage` or
+`fit_observation_grids` and supply `grid_root='Model_grids'` explicitly. This
+separate method does require the full local grids. See the
+[quick start](docs/source/quickstart.md) for both workflows and saved-result
+plotting.
 
 ## Training and validation data
 
 `Model_grids/` and `Pretrain_grid/` are intentionally ignored by Git because
-they contain the full local training data. To run
+they contain the full local training data. The generated checkpoint directories
+under the top-level `Trained_model/` are also optional; the package bundles
+only the production checkpoints needed for v2 fitting. To run
 `examples/dev_v2_pt_validation.py` or
 `notebooks/Example_Training_Validation.ipynb`, place the complete model grids
 under `Model_grids/<molecule>/`. The workflows create or reuse the corresponding
 pretraining CSV under `Pretrain_grid/`.
 
-The v2 H2O script creates one full pretraining table, then trains 45 overlapping
-surrogates covering five wavelength, three temperature, and three column-density
-ranges. A JSON manifest makes those checkpoints behave as one blended H2O
-forward model during fitting.
+The maintained v2 workflow uses a hybrid design after restricting the expanded
+IRIS grids to the intended physical domain. H2O uses five overlapping
+wavelength checkpoints covering 4.9–25.0 µm, all sharing `T=100–1400 K` and
+`logN=13–19`. Primary carbon-bearing and rarer molecules use one checkpoint
+each, the same temperature range, and `logN=13–19.5`.
 
-The same workflow trains `HCN`, `C2H2`, `CO2`, `13C12CH2`, and `13CO2` with
-three overlapping temperature models per molecule over 11.5–17.0 µm. The
-`run_H2O`, `run_Cmol`, and reserved `run_rarer` switches at the top of the
-script select which groups run.
+Five to ten percent of complete `(T, logN)` grid spectra are excluded before
+PCA or neural-network training. They are used to select the PCA dimension and
+to validate spectral reconstruction and full parameter fitting. The
+`run_H2O`, `run_Cmol`, and `run_rarer` switches select which groups run.
 
 ## Forward model convention
 
 ```text
-flux(T, logN, A) = A * peak(T, logN) * shape(T, logN)
+flux(T, logN, A, d) = A * (140 pc / d)^2 * peak(T, logN) * shape(T, logN)
 ```
 
 Each molecule has two pretrained MLPs:

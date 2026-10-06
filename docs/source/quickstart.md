@@ -1,138 +1,120 @@
-# Quick Start
+# Quick Start: fit an observed spectrum
 
-DiskMELTS is intended primarily for fitting spectra with pretrained surrogate
-models. This page shows the standard fitting workflow for observed data. Run
-the path-based examples below from the repository root.
+The installed `diskmelts` package includes the production v2 checkpoints. A
+model fit needs no `Model_grids/`, `Pretrain_grid/`, training script, or network
+configuration file. Inputs are a continuum-subtracted spectrum in Jy and its
+source distance in parsecs. Run this example from a writable working directory.
 
-## 1. Load the pretrained models
-
-Bundled model checkpoints are self-contained: each `.pt` file stores the
-network weights, scalers, PCA metadata, and wavelength grid needed for fitting.
-No `Pretrain_grid/*.csv` file is needed for this workflow.
+## One stage
 
 ```python
-from diskmelts import load_models
+from diskmelts import load_fitting_models, fit_stage, load_observed_spectrum
 
-pretrained = load_models(
-    model_paths={
-        'H2O':  'Trained_model/net_H2O_forward_11to19.pt',
-        'C2H2': 'Trained_model/net_C2H2_forward_11to19.pt',
-        'HCN':  'Trained_model/net_HCN_forward_11to19.pt',
-        'CO2':  'Trained_model/net_CO2_forward_11to19.pt',
-    },
-)
-```
-
-## 2. Load a spectrum
-
-If your continuum-subtracted spectrum is a simple CSV, use the built-in helper:
-
-```python
-from diskmelts import load_observed_spectrum
-
-obs_wav, obs_flux = load_observed_spectrum(
-    'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv'
-)
-```
-
-You can also read the spectrum with your own code. The fitting functions only
-need two one-dimensional arrays: `obs_wav` in microns and `obs_flux` in Jy.
-
-## 3. Fit H2O
-
-```python
-from diskmelts import fit_molecules, plot_fit
-
-fit_h2o = fit_molecules(
-    obs_wav,
-    obs_flux,
-    mol='H2O',
-    pretrained=pretrained,
+wave, flux = load_observed_spectrum('my_continuum_subtracted.csv')
+models = load_fitting_models(['H2O'])
+fit = fit_stage(
+    wave, flux,
+    molecule='H2O',
+    wavelength_range=(11.0, 19.0),
     fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-    h2o_components=1,
-    n_samples=20000,
-    n_refine=32,
-    n_top=20,
-    sigma=0.001,
-    seed=42,
-)
-
-plot_fit(
-    obs_wav,
-    obs_flux,
-    fit_h2o,
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-    name='my_source',
-    save_path='figures/my_source_h2o.png',
-    params=fit_h2o['params'],
-    uncertainty=fit_h2o['uncertainty'],
-)
-```
-
-## 4. Fit C-bearing molecules
-
-After subtracting water, C$_2$H$_2$, HCN, and CO$_2$ are usually fitted on the
-residual spectrum. The example below fits C$_2$H$_2$ and HCN together.
-
-```python
-residual_after_h2o = obs_flux - fit_h2o['model_flux']
-
-fit_c = fit_molecules(
-    obs_wav,
-    residual_after_h2o,
-    mol=['C2H2', 'HCN'],
-    pretrained=pretrained,
-    fit_ranges=(12.0, 16.5),
-    n_samples=20000,
-    n_refine=32,
-    n_top=20,
-    sigma=0.001,
-    seed=42,
-)
-```
-
-## Two-component H2O
-
-To fit warm and hot water components simultaneously, set `h2o_components=2`.
-
-```python
-fit_h2o_two = fit_molecules(
-    obs_wav,
-    obs_flux,
-    mol='H2O',
-    pretrained=pretrained,
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
+    pretrained=models,
     h2o_components=2,
     component_names=['H2O_warm', 'H2O_hot'],
+    T_bounds={'H2O_warm': (200, 600), 'H2O_hot': (600, 1100)},
     sigma=0.001,
-    T_prior={'H2O_warm': (2.6, 0.2), 'H2O_hot': (2.9, 0.1)},
-    T_prior_log10=True,
+    distance_pc=140.0,
+)
+print(fit['params'])
+```
+
+`fit_stage` returns fitted parameters, component spectra, the total model,
+residuals, and uncertainty estimates. It accepts one molecule or a list for a
+joint fit. `fit_ranges` accepts one `(low, high)` pair, a list of pairs, or a
+molecule-to-ranges mapping. Every fit interval must lie within
+`wavelength_range` and inside each selected checkpoint's trained domain.
+`MODEL_SPECS` records each checkpoint's wavelength, temperature, column-density,
+PCA, and network settings; the loader verifies them. Only requested models are
+loaded.
+
+## Ordered stages, saved results, and plots
+
+```python
+from pathlib import Path
+from diskmelts import fit_observation, plot_saved_observation
+
+source = Path('my_continuum_subtracted.csv')
+stages = [
+    {
+        'name': 'water', 'mol': 'H2O',
+        'wavelength_range': (11.0, 19.0),
+        'fit_ranges': [(11.0, 12.0), (16.5, 18.5)],
+        'h2o_components': 2,
+        'component_names': ['H2O_warm', 'H2O_hot'],
+        'T_bounds': {'H2O_warm': (200, 600), 'H2O_hot': (600, 1100)},
+    },
+    {
+        'name': 'carbon', 'mol': ['C2H2', 'HCN'],
+        'wavelength_range': (11.5, 17.0),
+        'fit_ranges': (12.9, 16.25),
+    },
+]
+output = Path('results/my_source')
+result = fit_observation(
+    source, stages, name='my_source', output_dir=output,
+    distance_pc=122.5, detection_screening=False,
+)
+figures = plot_saved_observation(
+    source, output, stages, name='my_source',
+    figure_dir='figures/my_source', active_stages=result['fits'],
+    sigma_noise=result['sigma_noise'],
 )
 ```
 
-## Example script
+The stages run in order. Each stage fits the previous stage's residual and
+writes parameter, spectrum, and running-residual CSVs. The plotter checks the
+saved subtraction sequence and creates stage and combined figures. It can be
+called later without loading checkpoints or rerunning optimization. Set
+`output_dir` and `figure_dir` explicitly; otherwise fit CSVs go under the
+current working directory. The source CSV may have a header row; the default
+reader skips one row and takes the first two columns as wavelength in µm and
+flux in Jy. Override `skiprows`, `wav_col`, or `flux_col` if needed.
 
-For a complete staged workflow, start from:
+For the repository's J16120505 example, run
+`python examples/dev_v2_realobs.py`. The example uses the packaged API.
 
-```bash
-python examples/dev_v2_realobs.py
+## Distance and area
+
+The checkpoints predict flux for `A=1 au²` at 140 pc. Supply the known source
+distance using `distance_pc` (default 140). The fitted physical area scales as
+`A * (140 / distance_pc)**2` in the observed flux. Distance and area cannot both
+be measured from one spectrum because only `A / distance_pc**2` is constrained.
+When `sigma` is supplied, the model fitter scales it with the flux to the
+140 pc reference. Fitted uncertainties are optimization summaries; bound hits
+and degeneracies require caution.
+
+## Optional direct-grid fit
+
+The separate grid API requires local slab CSVs. They are **not** included in
+the package and are **not** consulted by model fitting.
+
+```python
+from diskmelts import fit_observation_grids, plot_saved_observation
+
+result = fit_observation_grids(
+    source, stages, name='my_source',
+    grid_root='Model_grids', output_dir='results/my_source_grids',
+    distance_pc=122.5,
+)
+plot_saved_observation(
+    source, 'results/my_source_grids', stages, name='my_source',
+    figure_dir='figures/my_source_grids', active_stages=result['fits'],
+)
 ```
 
-Edit the configuration block at the top of that script for your source name,
-input spectrum path, molecules, wavelength masks, and output directory.
-
-The default script uses the committed
-`Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv` spectrum. It checks
-that the spectrum and checkpoints exist before starting the fit.
-
-The equivalent interactive workflow is:
-
-```text
-notebooks/Example_Fitting.ipynb
-```
-
-The notebook resolves the repository root whether Jupyter is launched from the
-repository root or from `notebooks/`.
-
-Training and checkpoint validation require additional local files. See
-{doc}`training`.
+`Model_grids/<molecule>/T{temperature}N{log_column}.csv` must contain `wave`
+and `Line` columns and cover the fitted domain. The grid fitter interpolates
+between T/logN points, refines the best solutions, and adds the full local grid
+step in quadrature to the formal T/logN errors. For example, a 25 K step gives
+`T_total_sigma = sqrt(T_fit_sigma**2 + 25**2)` K. Its covariance describes
+one local mode, not a full posterior. See {doc}`training` for obtaining and
+using optional grids.

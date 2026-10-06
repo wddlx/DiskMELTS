@@ -57,6 +57,7 @@ def _fit_only_nt(
     n_starts=20,
     n_steps=300,
     lr=0.03,
+    seed=42,
 ):
     """
     Recover T and logN only by jointly matching the peak-normalised spectral
@@ -64,6 +65,9 @@ def _fit_only_nt(
 
     Uses multi-start Adam gradient descent operating in standardised parameter
     space — no A is fitted.  wav_fit must be a subset of pretrained_mol['wav'].
+    Both target and prediction use the peak over the checkpoint's entire
+    wavelength grid. The prediction is renormalized internally, so checkpoints
+    trained using a broader CSV peak remain compatible. Starts use a local seed.
 
     Args:
         obs_norm_flux (np.ndarray): peak-normalised observed flux on wav_fit
@@ -75,6 +79,7 @@ def _fit_only_nt(
         n_starts (int): number of random starting points (default 20)
         n_steps (int): Adam steps per start (default 300)
         lr (float): Adam learning rate (default 0.03)
+        seed (int): seed for the independent random optimizer starts.
 
     Returns:
         (T_phys, logN_phys) as floats
@@ -112,13 +117,18 @@ def _fit_only_nt(
     obs_peak_t   = torch.full((n_starts, 1), float(obs_log10_peak),
                               dtype=torch.float32, device=device)
 
-    T_init    = torch.rand(n_starts) * (T_bounds[1]    - T_bounds[0])    + T_bounds[0]
-    logN_init = torch.rand(n_starts) * (logN_bounds[1] - logN_bounds[0]) + logN_bounds[0]
+    generator = torch.Generator().manual_seed(seed)
+    T_init = torch.rand(n_starts, generator=generator) * (T_bounds[1] - T_bounds[0]) + T_bounds[0]
+    logN_init = torch.rand(n_starts, generator=generator) * (logN_bounds[1] - logN_bounds[0]) + logN_bounds[0]
+    log_temperature = pretrained_mol.get('temperature_transform') == 'log10'
+    input_T_bounds = np.log10(T_bounds) if log_temperature else T_bounds
+    if log_temperature:
+        T_init = torch.log10(T_init)
     T_s    = (T_init    - xp_mean[0].cpu()) / xp_std[0].cpu()
     logN_s = (logN_init - xp_mean[1].cpu()) / xp_std[1].cpu()
 
-    T_min_s    = (T_bounds[0]    - xp_mean[0]) / xp_std[0]
-    T_max_s    = (T_bounds[1]    - xp_mean[0]) / xp_std[0]
+    T_min_s    = (input_T_bounds[0] - xp_mean[0]) / xp_std[0]
+    T_max_s    = (input_T_bounds[1] - xp_mean[0]) / xp_std[0]
     logN_min_s = (logN_bounds[0] - xp_mean[1]) / xp_std[1]
     logN_max_s = (logN_bounds[1] - xp_mean[1]) / xp_std[1]
 
@@ -129,9 +139,13 @@ def _fit_only_nt(
         z_shape_s = net_shape(T_logN_s)
         z_shape   = z_shape_s * yp_std_shape + yp_mean_shape
         norm_spec  = (z_shape @ pca_comp + pca_mean) if pca is not None else z_shape
-        norm_spec  = torch.clamp(norm_spec[:, fit_mask], min=0.0)
+        norm_spec = torch.clamp(norm_spec, min=0.0)
+        # Compare the physical spectrum's local peak/shape regardless of
+        # whether this checkpoint was trained with a global or local peak.
+        local_peak = norm_spec.amax(dim=1, keepdim=True).clamp_min(1e-30)
+        norm_spec = (norm_spec / local_peak)[:, fit_mask]
         z_peak_s   = net_peak(T_logN_s)
-        log10_peak = z_peak_s * yp_std_peak + yp_mean_peak
+        log10_peak = z_peak_s * yp_std_peak + yp_mean_peak + torch.log10(local_peak)
         return norm_spec, log10_peak
 
     for _ in range(n_steps):
@@ -157,6 +171,8 @@ def _fit_only_nt(
     for p in net_peak.parameters():  p.requires_grad_(True)
 
     T_phys    = (best_s[0] * xp_std[0].cpu() + xp_mean[0].cpu()).item()
+    if log_temperature:
+        T_phys = 10.0 ** T_phys
     logN_phys = (best_s[1] * xp_std[1].cpu() + xp_mean[1].cpu()).item()
     return T_phys, logN_phys
 
@@ -185,9 +201,9 @@ def validate_nt(
 
     Uses the same gradient-based Adam optimizer as the NT-only fitter: jointly
     matches the peak-normalised spectral shape (net_shape output) and the
-    log10(peak flux) (net_peak output).  No A is fitted.  This works directly
-    in the two-MLP representation space and is much more accurate for NT-only
-    retrieval than using fit_nested on physical flux.
+    log10(peak flux). No A is fitted. Predictions are converted to a local
+    peak/shape convention before comparison, including for legacy checkpoints.
+    This tests NT retrieval at known area separately from full T/logN/A fits.
 
     Call once per molecule.
 
@@ -204,7 +220,8 @@ def validate_nt(
         n_starts (int): random starting points for Adam optimizer (default 20)
         n_steps (int): Adam gradient steps per start (default 300)
         lr (float): Adam learning rate (default 0.03)
-        seed (int): random seed for row sampling (default 42)
+
+        seed (int): seed for row sampling and optimizer starts (default 42).
         validation_points (array-like or None): optional ``(T, logN)`` points
             to validate.  Passing ``pretrain_forward_model()['X_pre_v']``
             restricts evaluation to the model's withheld 10% validation split.
@@ -259,12 +276,18 @@ def validate_nt(
         log10p = float(row[f'{mol}_log10_peak'])
 
         norm_flux    = row[flux_cols].to_numpy(dtype=np.float32)
-        obs_norm_fit = np.interp(wav_fit, wav_pre, norm_flux)
+        local_flux = np.interp(wav_net, wav_pre, norm_flux)
+        local_peak = np.max(np.abs(local_flux))
+        if local_peak <= 0:
+            continue
+        obs_norm_fit = (local_flux / local_peak)[fit_mask_net]
+        log10p += np.log10(local_peak)
 
         T_p, logN_p = _fit_only_nt(
             obs_norm_fit, log10p, wav_fit, pretrained[mol],
             T_bounds=T_bounds, logN_bounds=logN_bounds,
             n_starts=n_starts, n_steps=n_steps, lr=lr,
+            seed=seed + i,
         )
 
         T_true_list.append(T_t);     logN_true_list.append(logN_t)
@@ -292,6 +315,7 @@ def validate_nt_holdout(
     n_starts=20,
     n_steps=300,
     lr=0.03,
+    seed=42,
 ):
     """
     Validate T and logN retrieval on grid points that were withheld from the
@@ -300,6 +324,8 @@ def validate_nt_holdout(
     For each holdout (T, logN) key the physical flux is taken directly from
     the model grid, peak-normalised, and passed to the Adam-based NT optimizer.
     This gives an honest estimate of generalisation to unseen grid points.
+
+    ``seed`` controls optimizer starts and is incremented for each holdout.
 
     Args:
         mol (str): molecule name, e.g. 'H2O', 'C2H2'
@@ -352,6 +378,7 @@ def validate_nt_holdout(
             obs_norm_fit, log10_peak, wav_fit, pretrained[mol],
             T_bounds=T_bounds, logN_bounds=logN_bounds,
             n_starts=n_starts, n_steps=n_steps, lr=lr,
+            seed=seed + i,
         )
 
         T_true_list.append(float(T_t))
@@ -387,7 +414,7 @@ def validate_full(
     """
     Validate T, logN, and A retrieval on synthetic spectra with random A.
 
-    Randomly draws (T, logN) grid points and A values, constructs the
+    Draws distinct (T, logN) grid points when enough are available, plus A values, and constructs the
     corresponding physical spectrum with optional noise, then runs fit_nested
     to recover all three parameters.  This tests the full fitting pipeline.
 
@@ -429,8 +456,8 @@ def validate_full(
     T_pred_list,    logN_pred_list,    A_pred_list    = [], [], []
 
     print(f'[{mol}] Full validation: {n_samples} spectra ...')
-    for i in range(n_samples):
-        idx      = rng.integers(len(keys))
+    indices = rng.choice(len(keys), size=n_samples, replace=n_samples > len(keys))
+    for i, idx in enumerate(indices):
         T_t, logN_t = keys[idx]
         A_t      = 10.0 ** rng.uniform(*log_A_range)
 

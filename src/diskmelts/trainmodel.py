@@ -1,13 +1,15 @@
 """
 diskmelts/trainmodel.py — Training utilities for per-molecule forward surrogate models.
 
-Provides three public functions:
+Provides public functions:
     load_model_grid          : load T{T}N{logN}.csv files from a Model_grids/ directory
     generate_pre_training_set: enumerate every (T, logN) grid point → per-molecule CSV
     pretrain_forward_model   : train (or load) the two-MLP forward model per molecule
                                   net_shape : (T, logN) → n_pca PCA coefficients
                                   net_peak  : (T, logN) → log10(peak flux)
     train_model_bank         : train overlapping wavelength/T/logN checkpoint tiles
+    select_grid_holdout      : reproducibly withhold complete slab-grid models
+    tune_pca_components      : choose PCA size from unseen-spectrum reconstruction
 
 Run as a script to generate pretrain CSVs, train all four molecules, and save
 loss-curve diagnostics:
@@ -35,7 +37,7 @@ from sklearn.model_selection import train_test_split
 # Grid loading
 # ===========================================================================
 
-def load_model_grid(grid_dir):
+def load_model_grid(grid_dir, T_range=None, logN_range=None, wav_range=None):
     """
     Load all slab-model CSV files from a directory.
 
@@ -43,6 +45,12 @@ def load_model_grid(grid_dir):
 
     Args:
         grid_dir (str): path to the directory containing the CSV files
+        T_range (tuple or None): optional inclusive temperature bounds; files
+            outside the bounds are not read.
+        logN_range (tuple or None): optional inclusive column-density bounds;
+            files outside the bounds are not read.
+        wav_range (tuple or None): optional inclusive wavelength bounds; flux
+            arrays are cropped while loading.
 
     Returns:
         (dict): keyed by (T, logN) tuples; each value is a dict with
@@ -56,12 +64,162 @@ def load_model_grid(grid_dir):
             continue
         T    = int(m.group(1))
         logN = float(m.group(2))
+        if T_range is not None and not T_range[0] <= T <= T_range[1]:
+            continue
+        if logN_range is not None and not logN_range[0] <= logN <= logN_range[1]:
+            continue
         df   = pd.read_csv(os.path.join(grid_dir, fname))
+        if wav_range is not None:
+            df = df[(df['wave'] >= wav_range[0]) & (df['wave'] <= wav_range[1])]
         models[(T, logN)] = {
             'wavelength': df['wave'].to_numpy(),
             'flux':       df['Line'].to_numpy(),
         }
     return models
+
+
+def select_grid_holdout(
+    models,
+    fraction=0.1,
+    seed=42,
+    T_range=None,
+    logN_range=None,
+    preserve_boundaries=True,
+):
+    """Select complete ``(T, logN)`` grid points for unseen validation.
+
+    Unlike the internal neural-network validation split, these keys are meant
+    to be passed to :func:`generate_pre_training_set` as ``holdout_keys`` so
+    their spectra never enter PCA fitting, scaler fitting, or MLP training.
+
+    Args:
+        models (dict): output of :func:`load_model_grid`.
+        fraction (float): fraction of eligible grid points to withhold.
+        seed (int): random seed.
+        T_range (tuple or None): optional inclusive temperature bounds.
+        logN_range (tuple or None): optional inclusive column-density bounds.
+        preserve_boundaries (bool): keep the outer T/logN rows in training so
+            the checkpoint retains full interpolation coverage.
+
+    Returns:
+        list: sorted ``(T, logN)`` holdout keys.
+    """
+    if not 0.0 < fraction < 1.0:
+        raise ValueError(f'fraction must be between 0 and 1, got {fraction}')
+
+    keys = [
+        tuple(key) for key in models
+        if (T_range is None or T_range[0] <= key[0] <= T_range[1])
+        and (logN_range is None or logN_range[0] <= key[1] <= logN_range[1])
+    ]
+    if len(keys) < 3:
+        raise ValueError('fewer than three grid points are eligible for holdout')
+
+    candidates = keys
+    if preserve_boundaries:
+        temperatures = [key[0] for key in keys]
+        columns = [key[1] for key in keys]
+        T_min, T_max = min(temperatures), max(temperatures)
+        N_min, N_max = min(columns), max(columns)
+        candidates = [
+            key for key in keys
+            if key[0] not in (T_min, T_max) and key[1] not in (N_min, N_max)
+        ]
+    n_holdout = max(1, int(round(fraction * len(keys))))
+    if n_holdout >= len(candidates):
+        raise ValueError(
+            f'cannot select {n_holdout} holdouts from {len(candidates)} '
+            'non-boundary candidates'
+        )
+    rng = np.random.default_rng(seed)
+    indices = rng.choice(len(candidates), size=n_holdout, replace=False)
+    return sorted(candidates[index] for index in indices)
+
+
+def tune_pca_components(
+    models,
+    holdout_keys,
+    wav_range,
+    candidates,
+    seed=42,
+    tolerance=0.05,
+):
+    """Choose PCA size using spectra excluded from surrogate training.
+
+    One PCA decomposition is fitted to the non-holdout, peak-normalised model
+    spectra. Each candidate is scored by its RMS reconstruction error on the
+    unseen holdout spectra. The smallest candidate within ``tolerance`` of the
+    best score is selected, avoiding unnecessary MLP output dimensions when
+    the reconstruction improvement has already plateaued.
+
+    Returns:
+        dict: ``selected``, per-candidate ``rmse``, and explained variance.
+    """
+    from sklearn.decomposition import PCA as _PCA
+
+    candidate_values = sorted({int(value) for value in candidates if int(value) > 0})
+    if not candidate_values:
+        raise ValueError('candidates must contain at least one positive integer')
+    if tolerance < 0:
+        raise ValueError('tolerance must be non-negative')
+
+    holdout_set = set(map(tuple, holdout_keys))
+    train_keys = [tuple(key) for key in models if tuple(key) not in holdout_set]
+    valid_keys = [tuple(key) for key in models if tuple(key) in holdout_set]
+    if not train_keys or not valid_keys:
+        raise ValueError('PCA tuning requires both training and holdout spectra')
+
+    reference_wav = np.asarray(models[train_keys[0]]['wavelength'])
+    wav_mask = (reference_wav >= wav_range[0]) & (reference_wav <= wav_range[1])
+    wav = reference_wav[wav_mask]
+    if len(wav) < 2:
+        raise ValueError(f'wav_range={wav_range} selects fewer than two channels')
+
+    def _normalised_matrix(keys):
+        spectra = []
+        for key in keys:
+            item = models[key]
+            flux = np.interp(wav, item['wavelength'], item['flux']).astype(np.float32)
+            peak = float(np.max(np.abs(flux)))
+            spectra.append(flux / peak if peak > 0 else flux)
+        return np.asarray(spectra, dtype=np.float32)
+
+    train_flux = _normalised_matrix(train_keys)
+    valid_flux = _normalised_matrix(valid_keys)
+    max_components = min(max(candidate_values), len(train_flux) - 1, train_flux.shape[1])
+    usable = [value for value in candidate_values if value <= max_components]
+    if not usable:
+        raise ValueError(
+            f'all PCA candidates exceed usable maximum {max_components}'
+        )
+
+    pca = _PCA(n_components=max(usable), svd_solver='randomized', random_state=seed)
+    pca.fit(train_flux)
+    valid_coeff = pca.transform(valid_flux)
+    scores = {}
+    explained = {}
+    for n_components in usable:
+        reconstructed = (
+            valid_coeff[:, :n_components] @ pca.components_[:n_components]
+            + pca.mean_
+        )
+        scores[n_components] = float(np.sqrt(np.mean((reconstructed - valid_flux) ** 2)))
+        explained[n_components] = float(
+            np.sum(pca.explained_variance_ratio_[:n_components])
+        )
+
+    best_rmse = min(scores.values())
+    selected = min(
+        value for value in usable if scores[value] <= best_rmse * (1.0 + tolerance)
+    )
+    return {
+        'selected': selected,
+        'rmse': scores,
+        'explained_variance': explained,
+        'n_train': len(train_keys),
+        'n_holdout': len(valid_keys),
+        'wav_range': tuple(map(float, wav_range)),
+    }
 
 
 # ===========================================================================
@@ -200,6 +358,13 @@ def pretrain_forward_model(
     early_stopping_patience=500,
     T_range=None,
     logN_range=None,
+    peak_normalization='csv',
+    shape_loss='standardized',
+    scheduler_patience=10,
+    min_lr=0.0,
+    temperature_transform='linear',
+    shape_edge_ranges=None,
+    shape_edge_weight=10.0,
 ):
     """
     Train (or load) the two-MLP forward model for one molecule.
@@ -242,12 +407,26 @@ def pretrain_forward_model(
                                   hot/warm two-component splits (default None)
         logN_range (tuple or None): (logN_min, logN_max); if set, only rows in
                                      this column-density range are used
+        peak_normalization (str): 'csv' preserves the input representation;
+            'window' renormalizes selected channels and adjusts log-peak so
+            their product remains the physical spectrum. Empty windows have
+            no defined log-peak and are excluded from the peak-head loss.
+            Use 'window' for H2O.
+        shape_loss (str): 'standardized' weights coefficients equally;
+            'spectral' minimizes spectral MSE; 'spectral_edge' additionally
+            weights selected wavelength intervals. Inference is unchanged.
+        scheduler_patience (int): epochs without improvement before reducing LR.
+        min_lr (float): lower learning-rate bound for both network heads.
+        temperature_transform (str): 'linear' or 'log10' before standardization.
+            Stored in the checkpoint; inference still accepts temperature in K.
+        shape_edge_ranges (list): wavelength intervals emphasized by the edge loss.
+        shape_edge_weight (float): extra weight applied within those intervals.
 
     Returns:
         (dict): with keys
             net_shape          (nn.Module)      : shape MLP in eval mode
             net_peak           (nn.Module)      : peak MLP in eval mode
-            xp_sc              (StandardScaler) : fitted on (T, logN) inputs
+            xp_sc              (StandardScaler) : fitted on transformed inputs
             yp_sc_shape        (StandardScaler) : fitted on PCA coefficients
             yp_sc_peak         (StandardScaler) : fitted on log10(peak) values
             pca                (PCA or None)    : fitted sklearn PCA, or None
@@ -262,6 +441,13 @@ def pretrain_forward_model(
             log10p_v           (np.ndarray)     : true log10(peak) for val samples
     """
     from sklearn.decomposition import PCA as _PCA
+
+    if peak_normalization not in ('csv', 'window'):
+        raise ValueError("peak_normalization must be 'csv' or 'window'")
+    if shape_loss not in ('standardized', 'spectral', 'spectral_edge'):
+        raise ValueError("shape_loss must be 'standardized', 'spectral', or 'spectral_edge'")
+    if temperature_transform not in ('linear', 'log10'):
+        raise ValueError("temperature_transform must be 'linear' or 'log10'")
 
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -318,6 +504,14 @@ def pretrain_forward_model(
             logN_range=ckpt.get('logN_range', None),
             wav_range=ckpt.get('wav_range', None),
             model_path=model_path,
+            peak_normalization=ckpt.get('peak_normalization', 'csv'),
+            shape_loss=ckpt.get('shape_loss', 'standardized'),
+            temperature_transform=ckpt.get('temperature_transform', 'linear'),
+            peak_loss_excludes_dark=ckpt.get('peak_loss_excludes_dark', False),
+            n_dark_training=ckpt.get('n_dark_training', 0),
+            n_dark_validation=ckpt.get('n_dark_validation', 0),
+            shape_edge_ranges=ckpt.get('shape_edge_ranges', []),
+            shape_edge_weight=ckpt.get('shape_edge_weight', 1.0),
         )
 
     # --- Load pretrain CSV and select wavelength channels ---
@@ -336,6 +530,11 @@ def pretrain_forward_model(
     X_pre      = df_pre[[f'{mol}_T', f'{mol}_logN']].to_numpy(dtype=np.float32)
     Y_pre      = df_pre[pre_flux_cols].to_numpy(dtype=np.float32)
     log10_peak = df_pre[f'{mol}_log10_peak'].to_numpy(dtype=np.float32)
+    if peak_normalization == 'window':
+        window_peak = np.max(np.abs(Y_pre), axis=1)
+        safe_peak = np.where(window_peak > 0, window_peak, 1.0)
+        Y_pre = Y_pre / safe_peak[:, None]
+        log10_peak = log10_peak + np.log10(safe_peak)
 
     # Optional temperature filter (e.g. for hot/warm two-component training)
     if T_range is not None:
@@ -370,7 +569,13 @@ def pretrain_forward_model(
     X_tr, X_v, Y_tr, Y_v, p_tr, p_v = train_test_split(
         X_pre, Y_pre, log10_peak, test_size=0.1, random_state=seed)
 
-    xp_sc = StandardScaler().fit(X_tr)
+    X_tr_input, X_v_input = X_tr.copy(), X_v.copy()
+    if temperature_transform == 'log10':
+        if np.any(X_pre[:, 0] <= 0):
+            raise ValueError('log10 temperature requires positive temperatures')
+        X_tr_input[:, 0] = np.log10(X_tr_input[:, 0])
+        X_v_input[:, 0] = np.log10(X_v_input[:, 0])
+    xp_sc = StandardScaler().fit(X_tr_input)
 
     # --- PCA compression on peak-normalised spectral shapes ---
     if n_pca and n_pca < n_spec:
@@ -387,15 +592,65 @@ def pretrain_forward_model(
 
     n_shape     = Z_tr.shape[1]
     yp_sc_shape = StandardScaler().fit(Z_tr)
-    yp_sc_peak  = StandardScaler().fit(p_tr.reshape(-1, 1))
+    peak_tr_valid = np.any(Y_tr != 0, axis=1) if peak_normalization == 'window' else np.ones(len(Y_tr), dtype=bool)
+    peak_v_valid = np.any(Y_v != 0, axis=1) if peak_normalization == 'window' else np.ones(len(Y_v), dtype=bool)
+    if not peak_tr_valid.any() or not peak_v_valid.any():
+        raise ValueError('training and validation splits must each contain a nonzero spectrum')
+    if not peak_tr_valid.all() or not peak_v_valid.all():
+        print(f'  [{mol}] excluding {(~peak_tr_valid).sum()} training and '
+              f'{(~peak_v_valid).sum()} validation empty windows from peak loss')
+    yp_sc_peak = StandardScaler().fit(p_tr[peak_tr_valid].reshape(-1, 1))
+    peak_v_valid_t = torch.as_tensor(peak_v_valid, dtype=torch.bool, device=device)
 
-    X_v_t  = torch.from_numpy(xp_sc.transform(X_v).astype(np.float32)).to(device)
+    X_v_t  = torch.from_numpy(xp_sc.transform(X_v_input).astype(np.float32)).to(device)
     Z_v_t  = torch.from_numpy(yp_sc_shape.transform(Z_v).astype(np.float32)).to(device)
     p_v_t  = torch.from_numpy(yp_sc_peak.transform(p_v.reshape(-1, 1)).astype(np.float32)).to(device)
 
     # --- Load from checkpoint if it exists ---
     if model_path and os.path.exists(model_path):
         ckpt        = torch.load(model_path, map_location=device, weights_only=False)
+        expected_metadata = {
+            'wav_range': tuple(map(float, wav_range)),
+            'T_range': None if T_range is None else tuple(map(float, T_range)),
+            'logN_range': None if logN_range is None else tuple(map(float, logN_range)),
+            'n_pca': None if not n_pca or n_pca >= n_spec else int(n_pca),
+            'hidden': tuple(hidden),
+            'peak_normalization': peak_normalization,
+            'shape_loss': shape_loss,
+            'temperature_transform': temperature_transform,
+            'peak_loss_excludes_dark': peak_normalization == 'window',
+            'shape_edge_ranges': [] if shape_edge_ranges is None else
+                [tuple(map(float, r)) for r in shape_edge_ranges],
+            'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
+        }
+        incompatible = []
+        for key, expected in expected_metadata.items():
+            if key not in ckpt:
+                defaults = {'peak_normalization': 'csv', 'shape_loss': 'standardized',
+                            'temperature_transform': 'linear',
+                            'peak_loss_excludes_dark': False,
+                            'shape_edge_ranges': [], 'shape_edge_weight': 1.0}
+                if key not in defaults:
+                    continue
+                stored = defaults[key]
+            else:
+                stored = ckpt[key]
+            if key == 'shape_edge_ranges':
+                matches = np.allclose(np.asarray(stored, dtype=float).reshape(-1, 2),
+                                      np.asarray(expected, dtype=float).reshape(-1, 2))
+            elif isinstance(expected, tuple):
+                matches = stored is not None and np.allclose(stored, expected)
+            else:
+                matches = stored == expected
+            if not matches:
+                incompatible.append(f'{key}: stored={stored}, requested={expected}')
+        if incompatible:
+            details = '; '.join(incompatible)
+            raise ValueError(
+                f'checkpoint {model_path!r} is incompatible with this training '
+                f'configuration ({details}). Move the old checkpoint or choose '
+                'a new model_path before retraining.'
+            )
         xp_sc       = ckpt.get('xp_sc', xp_sc)
         pca         = ckpt.get('pca', None)
         yp_sc_shape = ckpt['yp_sc_shape']
@@ -406,7 +661,7 @@ def pretrain_forward_model(
         # than the newly fitted temporary scalers/PCA.
         Z_v_ckpt = pca.transform(Y_v) if pca is not None else Y_v
         X_v_t = torch.from_numpy(
-            xp_sc.transform(X_v).astype(np.float32)
+            xp_sc.transform(X_v_input).astype(np.float32)
         ).to(device)
         Z_v_t = torch.from_numpy(
             yp_sc_shape.transform(Z_v_ckpt).astype(np.float32)
@@ -438,22 +693,62 @@ def pretrain_forward_model(
 
     else:
         # --- Train from scratch ---
+        torch.manual_seed(seed)
         net_shape = MLP(n_in=2, n_out=n_shape, hidden=hidden).to(device)
         net_peak  = MLP(n_in=2, n_out=1,        hidden=hidden).to(device)
 
-        X_tr_s = torch.from_numpy(xp_sc.transform(X_tr).astype(np.float32))
+        X_tr_s = torch.from_numpy(xp_sc.transform(X_tr_input).astype(np.float32))
         Z_tr_s = torch.from_numpy(yp_sc_shape.transform(Z_tr).astype(np.float32))
         p_tr_s = torch.from_numpy(yp_sc_peak.transform(p_tr.reshape(-1, 1)).astype(np.float32))
 
         loader = DataLoader(
-            TensorDataset(X_tr_s, Z_tr_s, p_tr_s),
+            TensorDataset(X_tr_s, Z_tr_s, p_tr_s, torch.as_tensor(peak_tr_valid)),
             batch_size=batch_size, shuffle=True,
         )
         criterion   = nn.MSELoss()
+        # PCA components are orthonormal: weighting squared standardized
+        # coefficient errors by coefficient variance gives spectral MSE,
+        # up to a constant. No large decoded-spectrum tensor is needed.
+        shape_weights = np.asarray(yp_sc_shape.scale_) ** 2
+        if shape_loss == 'standardized':
+            shape_weights = np.ones_like(shape_weights)
+        if shape_loss == 'spectral_edge':
+            if pca is None:
+                raise ValueError('spectral_edge currently requires PCA compression')
+            if not shape_edge_ranges:
+                raise ValueError("shape_edge_ranges is required for shape_loss='spectral_edge'")
+            channel_weights = np.ones(n_spec, dtype=np.float64)
+            edge_mask = np.zeros(n_spec, dtype=bool)
+            for edge_lo, edge_hi in shape_edge_ranges:
+                edge_mask |= (wav >= edge_lo) & (wav <= edge_hi)
+            if not np.any(edge_mask):
+                raise ValueError(f'shape_edge_ranges select no channels in {wav_range}')
+            channel_weights[edge_mask] *= float(shape_edge_weight)
+            projection = pca.components_ * channel_weights[None, :]
+            weight_matrix = projection @ pca.components_.T
+            weight_matrix *= np.asarray(yp_sc_shape.scale_)[:, None]
+            weight_matrix *= np.asarray(yp_sc_shape.scale_)[None, :]
+            weight_matrix /= np.sum(channel_weights)
+            weight_matrix = torch.as_tensor(weight_matrix, dtype=torch.float32, device=device)
+        else:
+            shape_weights = torch.as_tensor(
+                shape_weights / np.mean(shape_weights), dtype=torch.float32, device=device
+            )
+
+        def shape_criterion(prediction, target):
+            if shape_loss == 'spectral_edge':
+                delta = (prediction - target) * torch.as_tensor(
+                    yp_sc_shape.scale_, dtype=torch.float32, device=device
+                )
+                return torch.einsum('bi,ij,bj->', delta, weight_matrix, delta) / len(delta)
+            return ((prediction - target).square() * shape_weights).mean()
+
         opt_shape   = optim.Adam(net_shape.parameters(), lr=lr, weight_decay=weight_decay)
         opt_peak    = optim.Adam(net_peak.parameters(),  lr=lr, weight_decay=weight_decay)
-        sched_shape = optim.lr_scheduler.ReduceLROnPlateau(opt_shape, patience=10, factor=0.5)
-        sched_peak  = optim.lr_scheduler.ReduceLROnPlateau(opt_peak,  patience=10, factor=0.5)
+        sched_shape = optim.lr_scheduler.ReduceLROnPlateau(
+            opt_shape, patience=scheduler_patience, factor=0.5, min_lr=min_lr)
+        sched_peak = optim.lr_scheduler.ReduceLROnPlateau(
+            opt_peak, patience=scheduler_patience, factor=0.5, min_lr=min_lr)
 
         train_losses_shape, val_losses_shape = [], []
         train_losses_peak,  val_losses_peak  = [], []
@@ -468,17 +763,18 @@ def pretrain_forward_model(
             net_shape.train()
             net_peak.train()
             bl_shape, bl_peak = [], []
-            for xb, zb, pb in loader:
+            for xb, zb, pb, peak_valid in loader:
                 xb, zb, pb = xb.to(device), zb.to(device), pb.to(device)
+                peak_valid = peak_valid.to(device)
                 if not stopped_shape:
                     opt_shape.zero_grad()
-                    loss_s = criterion(net_shape(xb), zb)
+                    loss_s = shape_criterion(net_shape(xb), zb)
                     loss_s.backward()
                     opt_shape.step()
                     bl_shape.append(loss_s.item())
-                if not stopped_peak:
+                if not stopped_peak and peak_valid.any():
                     opt_peak.zero_grad()
-                    loss_p = criterion(net_peak(xb), pb)
+                    loss_p = criterion(net_peak(xb[peak_valid]), pb[peak_valid])
                     loss_p.backward()
                     opt_peak.step()
                     bl_peak.append(loss_p.item())
@@ -486,8 +782,8 @@ def pretrain_forward_model(
             net_shape.eval()
             net_peak.eval()
             with torch.no_grad():
-                vl_shape = criterion(net_shape(X_v_t), Z_v_t).item()
-                vl_peak  = criterion(net_peak(X_v_t),  p_v_t).item()
+                vl_shape = shape_criterion(net_shape(X_v_t), Z_v_t).item()
+                vl_peak = criterion(net_peak(X_v_t[peak_v_valid_t]), p_v_t[peak_v_valid_t]).item()
             sched_shape.step(vl_shape)
             sched_peak.step(vl_peak)
             if bl_shape:
@@ -560,6 +856,18 @@ def pretrain_forward_model(
                 'logN_range':         None if logN_range is None else tuple(logN_range),
                 'n_pca':              None if pca is None else pca.n_components_,
                 'hidden':             hidden,
+                'peak_normalization': peak_normalization,
+                'shape_loss':         shape_loss,
+                'scheduler_patience': scheduler_patience,
+                'min_lr':             min_lr,
+                'seed':               seed,
+                'temperature_transform': temperature_transform,
+                'peak_loss_excludes_dark': peak_normalization == 'window',
+                'shape_edge_ranges': [] if shape_edge_ranges is None else
+                    [tuple(map(float, r)) for r in shape_edge_ranges],
+                'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
+                'n_dark_training': int((~peak_tr_valid).sum()),
+                'n_dark_validation': int((~peak_v_valid).sum()),
             }, model_path)
             print(f'  [{mol}] saved → {model_path}')
 
@@ -577,6 +885,14 @@ def pretrain_forward_model(
         logN_range=None if logN_range is None else tuple(logN_range),
         wav_range=tuple(wav_range),
         model_path=model_path,
+        peak_normalization=peak_normalization,
+        shape_loss=shape_loss,
+        temperature_transform=temperature_transform,
+        peak_loss_excludes_dark=peak_normalization == 'window',
+        n_dark_training=int((~peak_tr_valid).sum()),
+        n_dark_validation=int((~peak_v_valid).sum()),
+        shape_edge_ranges=[] if shape_edge_ranges is None else [tuple(map(float, r)) for r in shape_edge_ranges],
+        shape_edge_weight=float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
     )
 
 
@@ -604,6 +920,12 @@ def train_model_bank(
     n_pca=15,
     early_stopping_patience=500,
     manifest_path=None,
+    peak_normalization='csv',
+    shape_loss='standardized',
+    shape_edge_weight=10.0,
+    scheduler_patience=10,
+    min_lr=0.0,
+    temperature_transform='linear',
 ):
     """Train a bank of overlapping forward-surrogate tiles for one molecule.
 
@@ -615,12 +937,36 @@ def train_model_bank(
     ``model_dir`` or remove an obsolete checkpoint intentionally when changing
     training data or hyperparameters.
 
+    ``n_pca`` may be one integer shared by every wavelength range or a sequence
+    with one value per wavelength range. The latter supports independently
+    tuned spectral complexity while retaining shared physical coverage.
+    ``peak_normalization``, ``shape_loss``, ``scheduler_patience``,
+    ``min_lr`` and ``temperature_transform`` are forwarded to every checkpoint.
+    A per-wavelength ``shape_loss`` sequence can assign ``spectral_edge`` to
+    tiles whose overlaps need extra accuracy. Their complete overlaps with
+    adjacent windows receive ``shape_edge_weight`` additional emphasis.
+
     Returns:
         dict: manifest data plus in-memory ``models`` and ``model_bank``.
     """
     wavelength_ranges = [tuple(map(float, item)) for item in wavelength_ranges]
     logN_ranges = [tuple(map(float, item)) for item in logN_ranges]
     T_ranges = [tuple(map(float, item)) for item in T_ranges]
+    if np.isscalar(n_pca):
+        n_pca_by_wavelength = [int(n_pca)] * len(wavelength_ranges)
+    else:
+        n_pca_by_wavelength = [int(value) for value in n_pca]
+        if len(n_pca_by_wavelength) != len(wavelength_ranges):
+            raise ValueError(
+                'n_pca sequence must have one value per wavelength range: '
+                f'{len(n_pca_by_wavelength)} != {len(wavelength_ranges)}'
+            )
+    if isinstance(shape_loss, str):
+        shape_loss_by_wavelength = [shape_loss] * len(wavelength_ranges)
+    else:
+        shape_loss_by_wavelength = list(shape_loss)
+        if len(shape_loss_by_wavelength) != len(wavelength_ranges):
+            raise ValueError('shape_loss sequence must match wavelength_ranges')
     for label, ranges in (
         ('wavelength', wavelength_ranges),
         ('logN', logN_ranges),
@@ -648,7 +994,17 @@ def train_model_bank(
     models = []
     total = len(wavelength_ranges) * len(logN_ranges) * len(T_ranges)
     tile_number = 0
-    for wav_range in wavelength_ranges:
+    for wav_index, wav_range in enumerate(wavelength_ranges):
+        tile_n_pca = n_pca_by_wavelength[wav_index]
+        tile_shape_loss = shape_loss_by_wavelength[wav_index]
+        edge_ranges = []
+        if tile_shape_loss == 'spectral_edge':
+            for other_index, other_range in enumerate(wavelength_ranges):
+                if other_index != wav_index:
+                    overlap = (max(wav_range[0], other_range[0]),
+                               min(wav_range[1], other_range[1]))
+                    if overlap[0] < overlap[1]:
+                        edge_ranges.append(overlap)
         for logN_range in logN_ranges:
             for T_range in T_ranges:
                 tile_number += 1
@@ -670,16 +1026,24 @@ def train_model_bank(
                     weight_decay=weight_decay,
                     model_path=model_path,
                     seed=seed,
-                    n_pca=n_pca,
+                    n_pca=tile_n_pca,
                     early_stopping_patience=early_stopping_patience,
                     T_range=T_range,
                     logN_range=logN_range,
+                    peak_normalization=peak_normalization,
+                    shape_loss=tile_shape_loss,
+                    scheduler_patience=scheduler_patience,
+                    min_lr=min_lr,
+                    temperature_transform=temperature_transform,
+                    shape_edge_ranges=edge_ranges,
+                    shape_edge_weight=shape_edge_weight,
                 )
                 tiles.append({
                     'path': os.path.relpath(model_path, os.path.dirname(manifest_path)),
                     'wav_range': list(wav_range),
                     'logN_range': list(logN_range),
                     'T_range': list(T_range),
+                    'n_pca': tile_n_pca,
                 })
                 models.append(trained)
 
@@ -687,8 +1051,18 @@ def train_model_bank(
         'schema_version': 1,
         'mol': mol,
         'pretrain_csv': os.path.abspath(os.fspath(pretrain_csv)),
-        'n_pca': n_pca,
+        'n_pca': (
+            n_pca_by_wavelength[0]
+            if len(set(n_pca_by_wavelength)) == 1
+            else n_pca_by_wavelength
+        ),
         'hidden': list(hidden),
+        'peak_normalization': peak_normalization,
+        'shape_loss': (shape_loss_by_wavelength[0]
+                       if len(set(shape_loss_by_wavelength)) == 1
+                       else shape_loss_by_wavelength),
+        'shape_edge_weight': shape_edge_weight,
+        'temperature_transform': temperature_transform,
         'wavelength_ranges': [list(item) for item in wavelength_ranges],
         'logN_ranges': [list(item) for item in logN_ranges],
         'T_ranges': [list(item) for item in T_ranges],

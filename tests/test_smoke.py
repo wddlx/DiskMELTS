@@ -1,14 +1,9 @@
-"""Smoke tests for the committed pretrained DiskMELTS fitting workflow."""
+"""Smoke tests for the bundled production fitting workflow."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
-
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_import_diskmelts():
@@ -16,8 +11,8 @@ def test_import_diskmelts():
 
     import diskmelts
 
-    assert hasattr(diskmelts, "load_models")
-    assert hasattr(diskmelts, "fit_molecules")
+    assert hasattr(diskmelts, "load_fitting_models")
+    assert hasattr(diskmelts, "fit_stage")
     assert hasattr(diskmelts, "load_observed_spectrum")
 
 
@@ -25,16 +20,10 @@ def test_pretrained_h2o_fitting_smoke():
     torch = pytest.importorskip("torch")
     assert torch is not None
 
-    model_path = ROOT / "Trained_model" / "net_H2O_forward_11to19.pt"
-    assert model_path.exists(), "the committed H2O checkpoint is required"
+    from diskmelts import fit_stage, generate_spectrum, load_fitting_models
 
-    from diskmelts import fit_molecules, generate_spectrum, load_models
-
-    pretrained = load_models(
-        model_paths={"H2O": str(model_path)},
-    )
-
-    obs_wav = pretrained["H2O"]["wav"]
+    pretrained = load_fitting_models("H2O")
+    obs_wav = np.linspace(11.0, 18.6, 350)
     obs_flux = generate_spectrum(
         T=650.0,
         logN=17.0,
@@ -43,17 +32,10 @@ def test_pretrained_h2o_fitting_smoke():
         obs_wav=obs_wav,
     )
 
-    fit = fit_molecules(
-        obs_wav,
-        obs_flux,
-        mol="H2O",
-        pretrained=pretrained,
-        fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
-        n_samples=512,
-        n_refine=4,
-        n_top=4,
-        seed=42,
-        verbose=False,
+    fit = fit_stage(
+        obs_wav, obs_flux, "H2O", (11.0, 18.6),
+        [(11.0, 12.0), (16.5, 18.5)], pretrained,
+        n_samples=256, n_refine=4, n_top=4, seed=42, verbose=False,
     )
 
     params = fit["params"]["H2O"]

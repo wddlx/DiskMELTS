@@ -1,0 +1,15 @@
+source,component,N_1e18,N_minus_1e18,N_plus_1e18,T_K,T_minus_K,T_plus_K,A_au2,A_minus_au2,A_plus_au2,reference
+FZ Tau,cold,7.64,1.12,1.39,420,9,10,2.60,0.11,0.11,Romero-Mirza et al. 2024 Table 3
+FZ Tau,hot,5.57,0.52,0.60,903,23,15,0.34,0.02,0.03,Romero-Mirza et al. 2024 Table 3
+GK Tau,cold,0.98,0.15,0.18,365,11,12,2.04,0.16,0.20,Romero-Mirza et al. 2024 Table 3
+GK Tau,hot,1.77,0.22,0.23,905,25,27,0.11,0.01,0.01,Romero-Mirza et al. 2024 Table 3
+HP Tau,cold,0.42,0.09,0.11,468,23,28,1.32,0.14,0.17,Romero-Mirza et al. 2024 Table 3
+HP Tau,hot,3.34,0.77,1.11,858,32,40,0.11,0.02,0.02,Romero-Mirza et al. 2024 Table 3
+GQ Lup,cold,0.46,0.05,0.06,361,8,7,5.60,0.34,0.44,Romero-Mirza et al. 2024 Table 3
+GQ Lup,hot,1.48,0.19,0.25,836,26,28,0.18,0.02,0.02,Romero-Mirza et al. 2024 Table 3
+IQ Tau,cold,0.74,0.23,0.41,333,24,27,0.96,0.21,0.33,Romero-Mirza et al. 2024 Table 3
+IQ Tau,hot,3.75,0.56,0.64,926,27,31,0.07,0.01,0.01,Romero-Mirza et al. 2024 Table 3
+AS 209,cold,0.11,0.08,0.21,238,18,23,11.44,6.91,28.74,Romero-Mirza et al. 2024 Table 3
+AS 209,hot,4.85,0.90,1.12,807,22,25,0.10,0.01,0.01,Romero-Mirza et al. 2024 Table 3
+CI Tau,cold,0.52,0.12,0.17,483,25,21,0.86,0.10,0.11,Romero-Mirza et al. 2024 Table 3
+CI Tau,hot,3.79,0.35,0.40,917,16,17,0.19,0.01,0.01,Romero-Mirza et al. 2024 Table 3

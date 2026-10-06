@@ -9,14 +9,14 @@ Forward model convention:
 Global-to-local search strategy in fit_molecules:
 1. Draw Sobol or Latin-hypercube samples over all nonlinear parameters (T, logN).
 2. For each nonlinear trial, solve all linear amplitudes A together with NNLS.
-3. Keep the best distinct candidates and refine them with L-BFGS-B.
+3. Refine the best distinct candidates with scaled L-BFGS-B and Nelder-Mead.
 
 Public functions
 ----------------
     load_models          : load per-molecule .pt checkpoints from disk
     load_model_bank      : load a segmented checkpoint manifest
     generate_spectrum    : evaluate (T, logN, A) → flux via the two-MLP forward model
-    fit_nested           : single-molecule retrieval via random-restart L-BFGS-B + NNLS
+    fit_nested           : single-molecule retrieval with analytic amplitude
     fit_molecules        : multi-molecule global Sobol search + L-BFGS-B refinement
     load_observed_spectrum: load a continuum-subtracted spectrum from CSV
     detect_stage_molecules: screen for molecular detections above a noise threshold
@@ -86,7 +86,8 @@ def _single_model_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
     wav_net     = pretrained_mol['wav']
     device      = next(net_shape.parameters()).device
 
-    T_s    = float((T    - xp_sc.mean_[0]) / xp_sc.scale_[0])
+    input_T = np.log10(T) if pretrained_mol.get('temperature_transform') == 'log10' else T
+    T_s    = float((input_T - xp_sc.mean_[0]) / xp_sc.scale_[0])
     logN_s = float((logN - xp_sc.mean_[1]) / xp_sc.scale_[1])
     x_s    = torch.tensor([[T_s, logN_s]], dtype=torch.float32, device=device)
 
@@ -337,6 +338,29 @@ def _check_bank_wavelength_coverage(pretrained_mol, wavelengths):
         )
 
 
+def _refine_scaled(objective, initial, bounds, loss_scale):
+    """Refine in unit coordinates with differences resolvable by float32 MLPs."""
+    limits = np.asarray(bounds, dtype=float)
+    origin, span = limits[:, 0], limits[:, 1] - limits[:, 0]
+    scale = max(float(loss_scale), np.finfo(float).tiny)
+    result = scipy.optimize.minimize(
+        lambda z: objective(origin + z * span) / scale,
+        (np.asarray(initial) - origin) / span,
+        method='L-BFGS-B', bounds=[(0.0, 1.0)] * len(initial),
+        options={'eps': 1e-4, 'ftol': 1e-12, 'gtol': 1e-7, 'maxiter': 300},
+    )
+    # A derivative-free polish avoids stagnation at ReLU/float32 boundaries.
+    polished = scipy.optimize.minimize(
+        lambda z: objective(origin + z * span) / scale,
+        result.x, method='Nelder-Mead', bounds=[(0.0, 1.0)] * len(initial),
+        options={'xatol': 1e-6, 'fatol': 1e-12, 'maxiter': 300},
+    )
+    if polished.fun < result.fun:
+        result = polished
+    result.x = origin + result.x * span
+    return result
+
+
 def fit_nested(
     obs_wav,
     obs_flux,
@@ -351,10 +375,10 @@ def fit_nested(
     seed=None,
 ):
     """
-    Retrieve (T, logN, A) for one molecule via nested L-BFGS-B + NNLS optimisation.
+    Retrieve (T, logN, A) with scaled nonlinear optimization and analytic area.
 
-    Outer loop: scipy L-BFGS-B over (T, logN).
-    Inner loop: scipy NNLS solves for A (enforces A ≥ 0).
+    Outer loop: scaled L-BFGS-B over (T, logN), followed by Nelder-Mead.
+    Inner loop: exact one-component bounded least squares solves for A ≥ 0.
 
     Args:
         obs_wav (np.ndarray): observed wavelength axis in µm
@@ -405,13 +429,12 @@ def fit_nested(
 
     def _nnls_step(x0):
         spec = _mol_flux_on_wav(pretrained[mol], x0[0], x0[1], 1.0, wav_fit)
-        if np.isfinite(_A_hi):
-            res = scipy.optimize.lsq_linear(spec[:, None], obs_fit,
-                                            bounds=([_A_lo], [_A_hi]))
-            A = float(res.x[0])
-        else:
-            A_vec, _ = scipy.optimize.nnls(spec[:, None], obs_fit)
-            A        = float(A_vec[0])
+        # One linear component has an exact bounded least-squares solution.
+        # Scaling avoids absolute NNLS tolerances on very faint spectra.
+        spec_scale = max(float(np.max(np.abs(spec))), np.finfo(float).tiny)
+        s = spec / spec_scale
+        denom = float(np.dot(s, s))
+        A = float(np.clip(np.dot(s, obs_fit) / denom / spec_scale, _A_lo, _A_hi)) if denom > 0 else _A_lo
         resid = obs_fit - spec * A
         return float(np.sum(resid ** 2)), A
 
@@ -419,8 +442,8 @@ def fit_nested(
     all_res = []
     for _ in range(n_restarts):
         x0 = np.array([rng.uniform(*T_bounds), rng.uniform(*logN_bounds)])
-        opt = scipy.optimize.minimize(
-            lambda p: _nnls_step(p)[0], x0, method='L-BFGS-B', bounds=bounds)
+        opt = _refine_scaled(
+            lambda p: _nnls_step(p)[0], x0, bounds, np.dot(obs_fit, obs_fit))
         loss, A = _nnls_step(opt.x)
         all_res.append((loss, opt.x.copy(), A))
     all_res.sort(key=lambda t: t[0])
@@ -781,16 +804,21 @@ def fit_molecules(
         if not _is_ordered_water(params, components):
             return np.inf, np.zeros(len(components)), None
         M = _matrix_for(params)
+        # A shared flux scale preserves the physical amplitude bounds while
+        # making solver tolerances independent of the spectrum's brightness.
+        flux_scale = max(float(np.max(np.abs(obs_fit))),
+                         float(np.max(np.abs(M))), np.finfo(float).tiny)
+        M_scaled, obs_scaled = M / flux_scale, obs_fit / flux_scale
         if np.isfinite(A_bounds[1]):
             res = scipy.optimize.lsq_linear(
-                M,
-                obs_fit,
+                M_scaled,
+                obs_scaled,
                 bounds=(np.full(len(components), A_bounds[0]),
                         np.full(len(components), A_bounds[1])),
             )
             A = np.asarray(res.x, dtype=np.float64)
         else:
-            A, _ = scipy.optimize.nnls(M, obs_fit)
+            A, _ = scipy.optimize.nnls(M_scaled, obs_scaled)
         residual = obs_fit - M @ A
         loss = float(np.sum(residual ** 2))
         return loss, A, M
@@ -859,12 +887,8 @@ def fit_molecules(
 
     refined = []
     for cand in refine_starts:
-        opt = scipy.optimize.minimize(
-            _objective,
-            cand['x'],
-            method='L-BFGS-B',
-            bounds=nonlinear_bounds,
-        )
+        opt = _refine_scaled(_objective, cand['x'], nonlinear_bounds,
+                             np.dot(obs_fit, obs_fit))
         loss, A, _ = _penalized_loss(opt.x)
         scaled = np.array([
             (opt.x[j] - nonlinear_bounds[j][0]) /

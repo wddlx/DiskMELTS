@@ -21,6 +21,8 @@ PUBLIC_SYMBOLS = [
     "generate_pre_training_set",
     "pretrain_forward_model",
     "train_model_bank",
+    "select_grid_holdout",
+    "tune_pca_components",
     # validation
     "validate_nt",
     "validate_nt_holdout",

@@ -14,16 +14,6 @@ ROOT = Path(__file__).resolve().parent.parent
 FITTING_NOTEBOOK = ROOT / "notebooks" / "Example_Fitting.ipynb"
 TRAINING_NOTEBOOK = ROOT / "notebooks" / "Example_Training_Validation.ipynb"
 
-MODEL_FILES = {
-    "H2O": ("net_H2O_forward_11to19.pt", 21),
-    "C2H2": ("net_C2H2_forward_11to19.pt", 15),
-    "13C12CH2": ("net_13C12CH2_forward_11to19.pt", 15),
-    "HCN": ("net_HCN_forward_11to19.pt", 15),
-    "CO2": ("net_CO2_forward_11to19.pt", 15),
-    "13CO2": ("net_13CO2_forward_11to19.pt", 15),
-}
-
-
 def _notebook(path):
     return json.loads(path.read_text())
 
@@ -46,13 +36,16 @@ def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
     namespace = {}
 
     monkeypatch.chdir(start_dir)
-    exec(_code_cell(notebook, 0), namespace)
     exec(_code_cell(notebook, 1), namespace)
+    exec(_code_cell(notebook, 2), namespace)
 
     assert namespace["BASE_DIR"] == ROOT
-    assert namespace["INPUT_PATH"].is_file()
-    assert namespace["INPUT_PATH"].name == "j16120505_v9.0_contsub_RVcorr.csv"
-    assert all(path.is_file() for path in namespace["MODEL_PATHS"].values())
+    assert namespace["SOURCE"].is_file()
+    assert namespace["SOURCE"].name == "j16120505_v9.0_contsub_RVcorr.csv"
+    assert namespace["DISTANCE_PC"] == pytest.approx(122.5)
+    assert [stage['name'] for stage in namespace['STAGES']] == [
+        'water', 'carbon', 'CO2']
+    assert 'MODEL_PATHS' not in namespace
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
@@ -62,28 +55,25 @@ def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir)
     namespace = {}
 
     monkeypatch.chdir(start_dir)
-    exec(_code_cell(notebook, 0), namespace)
-    exec(_code_cell(notebook, 2), namespace)
+    exec(_code_cell(notebook, 1), namespace)
+    namespace['TRAIN_MOLECULE'] = 'CO2'
+    exec(_code_cell(notebook, 5), namespace)
 
     assert namespace["BASE_DIR"] == ROOT
-    assert namespace["GRID_DIR"] == ROOT / "Model_grids" / namespace["MOL"]
-    assert namespace["PRETRAIN_CSV"].parent == ROOT / "Pretrain_grid"
-    assert namespace["MODEL_PATH"].parent == ROOT / "Trained_model"
+    assert namespace["GRID_DIR"] == ROOT / "Model_grids" / namespace["TRAIN_MOLECULE"]
+    assert namespace['LOCAL_MODEL'].parent == ROOT / 'Trained_model/CO2_single_v2'
+    assert namespace['RUN_TRAINING'] is False
 
 
-def test_committed_checkpoints_are_self_contained():
-    torch = pytest.importorskip("torch")
+def test_production_checkpoint_files_are_bundled():
+    from diskmelts import MODEL_SPECS
+    from diskmelts.v2_fitting import MODEL_ROOT
 
-    for molecule, (filename, expected_n_pca) in MODEL_FILES.items():
-        path = ROOT / "Trained_model" / filename
-        assert path.is_file(), f"missing committed checkpoint for {molecule}: {path}"
-
-        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-        assert checkpoint["mol"] == molecule
-        assert checkpoint["n_pca"] == expected_n_pca
-        assert checkpoint["pca"].n_components_ == expected_n_pca
-        assert len(checkpoint["wav"]) > 0
-        assert hasattr(checkpoint["xp_sc"], "mean_")
+    assert len(MODEL_SPECS) == 11
+    for molecule, spec in MODEL_SPECS.items():
+        path = MODEL_ROOT / spec['path']
+        assert path.is_file(), f'missing bundled checkpoint for {molecule}: {path}'
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 15
 
 
 def test_gitignore_separates_fitting_assets_from_training_data():
@@ -93,10 +83,44 @@ def test_gitignore_separates_fitting_assets_from_training_data():
         if line.strip() and not line.lstrip().startswith("#")
     }
 
-    assert "Model_grids/" in patterns
-    assert "Pretrain_grid/" in patterns
-    assert "Trained_model/" not in patterns
-    assert "Realobs_data/Consub_data/" not in patterns
+    for pattern in ('/Model_grids/', '/Pretrain_grid/', '/Trained_model/',
+                    '/docs/_build/', '/realobs_results/', '/figures/*'):
+        assert pattern in patterns
+    for path in ('src/diskmelts/models/Trained_model/C2H2_single_v2/net_C2H2_forward.pt',
+                 'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',
+                 'notebooks/Example_Fitting.ipynb',
+                 'figures/realobs_validations/H2O_parameter_comparison.pdf'):
+        result = subprocess.run(['git', 'check-ignore', '--no-index', '-q', path],
+                                cwd=ROOT)
+        assert result.returncode == 1, f'important file is ignored: {path}'
+
+
+def test_git_index_contains_fitting_distribution_only():
+    """Catch an omitted checkpoint or accidentally tracked generated tree."""
+    if not (ROOT / '.git').exists():
+        pytest.skip('Git index is unavailable in an installed source archive')
+    tracked = set(subprocess.check_output(
+        ['git', 'ls-files', '--cached'], cwd=ROOT, text=True).splitlines())
+    from diskmelts import MODEL_SPECS
+
+    for spec in MODEL_SPECS.values():
+        assert f"src/diskmelts/models/{spec['path']}" in tracked
+    required = {
+        'src/diskmelts/v2_fitting.py', 'src/diskmelts/v2_grid_fitting.py',
+        'src/diskmelts/v2_read_plot.py', 'src/diskmelts/v2_paper_comparison.py',
+        'notebooks/Example_Fitting.ipynb',
+        'notebooks/Example_Training_Validation.ipynb',
+        'docs/source/api/v2.md', 'examples/dev_v2_realobs.py',
+        'examples/dev_v2_testsWithRO.py',
+        'Realobs_data/literature_usco_table2.csv',
+        'Realobs_data/literature_water_two_component.csv',
+    }
+    assert required <= tracked
+    assert not any(path.startswith((
+        'Trained_model/', 'docs/_build/', 'realobs_results/',
+        'figures/validation/', 'figures/realobs/', 'Model_grids/',
+        'Pretrain_grid/',
+    )) for path in tracked)
 
 
 def test_realobs_example_uses_committed_spectrum():
