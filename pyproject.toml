@@ -30,10 +30,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+io = ["astropy"]
 dev = ["pytest", "sphinx", "sphinx-rtd-theme", "myst-parser"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+diskmelts = ["models/Trained_model/*/*.pt", "models/Trained_model/*/*.json",
+            "consub/*.csv", "consub/regions/*.csv", "consub/regions/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

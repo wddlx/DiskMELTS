@@ -6,6 +6,7 @@ import pytest
 PUBLIC_SYMBOLS = [
     # fitting
     "load_models",
+    "load_model_bank",
     "generate_spectrum",
     "fit_nested",
     "fit_molecules",
@@ -19,6 +20,9 @@ PUBLIC_SYMBOLS = [
     "load_model_grid",
     "generate_pre_training_set",
     "pretrain_forward_model",
+    "train_model_bank",
+    "select_grid_holdout",
+    "tune_pca_components",
     # validation
     "validate_nt",
     "validate_nt_holdout",
@@ -27,6 +31,7 @@ PUBLIC_SYMBOLS = [
     "plot_fit",
     "plot_validation",
     "plot_validation_split",
+    "plot_bank_reconstruction",
 ]
 
 

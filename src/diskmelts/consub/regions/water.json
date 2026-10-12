@@ -1,0 +1,11 @@
+{
+  "preset": "water",
+  "molecules": [
+    "H2O"
+  ],
+  "threshold": 0.03,
+  "padding_kms": 40.0,
+  "unknown_template_pixels": {
+    "H2O": 0
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "preset": "carbon_rich",
+  "molecules": [
+    "H2O",
+    "C2H2",
+    "HCN",
+    "CO2",
+    "13C12CH2",
+    "13CO2",
+    "C4H2",
+    "HC3N",
+    "CH4"
+  ],
+  "threshold": 0.03,
+  "padding_kms": 40.0,
+  "unknown_template_pixels": {
+    "H2O": 0,
+    "C2H2": 0,
+    "HCN": 0,
+    "CO2": 0,
+    "13C12CH2": 0,
+    "13CO2": 0,
+    "C4H2": 0,
+    "HC3N": 0,
+    "CH4": 0
+  }
+}

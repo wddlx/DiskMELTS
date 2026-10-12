@@ -1,8 +1,8 @@
-import os
+from pathlib import Path
 import sys
 
 # Make the src/ package importable without installing it
-sys.path.insert(0, os.path.abspath('../../src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 
 # ---------------------------------------------------------------------------
 # Project information
@@ -19,6 +19,7 @@ extensions = [
     'sphinx.ext.autodoc',       # pull docstrings from source
     'sphinx.ext.napoleon',      # support Google/NumPy docstring style
     'sphinx.ext.viewcode',      # add [source] links to API pages
+    'sphinx.ext.mathjax',       # render the equations used in the guides
     'myst_parser',              # write docs in Markdown
 ]
 
@@ -46,14 +47,14 @@ autodoc_typehints = 'description'
 # Napoleon (docstring style)
 # ---------------------------------------------------------------------------
 napoleon_google_docstring  = True
-napoleon_numpy_docstring   = False
+napoleon_numpy_docstring   = True
 napoleon_use_param         = True
 napoleon_use_rtype         = True
 
 # ---------------------------------------------------------------------------
 # MyST-Parser settings
 # ---------------------------------------------------------------------------
-myst_enable_extensions = ['colon_fence']
+myst_enable_extensions = ['colon_fence', 'dollarmath']
 source_suffix = {
     '.rst': 'restructuredtext',
     '.md':  'markdown',

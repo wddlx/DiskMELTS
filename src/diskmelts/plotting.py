@@ -37,6 +37,9 @@ _MOL_LABEL = {
     '13CO2':     r'$^{13}$CO$_2$',
     'C4H2':      r'C$_4$H$_2$',
     'HC3N':      r'HC$_3$N',
+    'C2H6':      r'C$_2$H$_6$',
+    'C2H4':      r'C$_2$H$_4$',
+    'CH4':       r'CH$_4$',
 }
 
 _MOL_COLOR = {
@@ -52,6 +55,9 @@ _MOL_COLOR = {
     '13CO2':    'C6',
     'C4H2':     'brown',
     'HC3N':     'gray',
+    'C2H6':     'C0',
+    'C2H4':     'olive',
+    'CH4':      'pink',
 }
 
 # ---------------------------------------------------------------------------
@@ -104,6 +110,7 @@ def plot_fit(
     save_path=None,
     params=None,
     uncertainty=None,
+    show=True,
 ):
     """
     Two-panel spectral fit figure.
@@ -133,8 +140,9 @@ def plot_fit(
                                fit_molecules result['params'].  When provided, a
                                parameter text box with best-fit values is drawn.
         uncertainty (dict or None): label -> {'T': {'minus', 'plus'}, ...} from
-                                    fit_molecules result['uncertainty'].  Combined
-                                    with params to show ± errorbars in the text box.
+                                      fit_molecules result['uncertainty'].  Combined
+                                      with params to show ± errorbars in the text box.
+        show (bool): display the figure interactively; set False for batch fits.
 
     Returns:
         (matplotlib.figure.Figure)
@@ -257,7 +265,8 @@ def plot_fit(
                     transform=ax_bot.transAxes, ha='right', va='top', fontsize=9)
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
         if save_path is not None:
             os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
             fig.savefig(save_path, dpi=200, bbox_inches='tight')
@@ -450,6 +459,66 @@ def plot_validation_split(
                     fontsize=8,
                 )
 
+        plt.tight_layout()
+
+        if save_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+            fig.savefig(save_path, dpi=200, bbox_inches='tight')
+            plt.close(fig)
+            print(f'Saved → {save_path}')
+
+    return fig
+
+
+def plot_bank_reconstruction(
+    wavelength,
+    true_fluxes,
+    predicted_fluxes,
+    mol='',
+    save_path=None,
+):
+    """Plot normalized residuals for an assembled surrogate model bank.
+
+    Every spectrum is normalized by its own true peak before subtraction. The
+    upper panel shows all residual curves; the lower panel shows their median
+    and 16th–84th percentile envelope.
+    """
+    wavelength = np.asarray(wavelength, dtype=np.float64)
+    true_fluxes = np.asarray(true_fluxes, dtype=np.float64)
+    predicted_fluxes = np.asarray(predicted_fluxes, dtype=np.float64)
+    if true_fluxes.shape != predicted_fluxes.shape:
+        raise ValueError('true_fluxes and predicted_fluxes must have matching shapes')
+    if true_fluxes.ndim != 2 or true_fluxes.shape[1] != len(wavelength):
+        raise ValueError('flux arrays must have shape (n_spectra, n_wavelengths)')
+
+    peaks = np.max(np.abs(true_fluxes), axis=1)
+    peaks = np.maximum(peaks, 1.0e-30)
+    residuals = (predicted_fluxes - true_fluxes) / peaks[:, None]
+    q16, median, q84 = np.percentile(residuals, [16, 50, 84], axis=0)
+    mol_display = _MOL_LABEL.get(mol, mol)
+
+    with plt.style.context([_PLOT_STYLE]):
+        fig, (ax_all, ax_summary) = plt.subplots(
+            2, 1, figsize=(8, 5.5), sharex=True,
+            gridspec_kw={'height_ratios': [1.4, 1.0]},
+        )
+        for residual in residuals:
+            ax_all.plot(wavelength, residual, color='C0', alpha=0.12, lw=0.5)
+        ax_all.axhline(0.0, color='black', lw=0.7)
+        ax_all.set_ylabel('(model − grid) / peak')
+        ax_all.set_title(
+            f'{mol_display} assembled-bank reconstruction: '
+            f'{len(residuals)} spectra'
+        )
+
+        ax_summary.fill_between(
+            wavelength, q16, q84, color='C0', alpha=0.25, label='16–84%'
+        )
+        ax_summary.plot(wavelength, median, color='C0', lw=1.0, label='median')
+        ax_summary.axhline(0.0, color='black', lw=0.7)
+        ax_summary.set_xlabel(r'Wavelength ($\mu$m)')
+        ax_summary.set_ylabel('Normalized residual')
+        ax_summary.legend(fontsize=8)
         plt.tight_layout()
 
         if save_path is not None:

@@ -6,7 +6,7 @@ Validation requires either a generated pretraining CSV or the local slab-model
 grid. These inputs live in the Git-ignored `Pretrain_grid/` and `Model_grids/`
 directories; they are not required for ordinary observed-spectrum fitting.
 
-Two complementary strategies are provided:
+Three validation functions are provided:
 
 - **`validate_nt`** — checks $(T, \log N)$ recovery on spectra the model
   was trained on (in-distribution test).

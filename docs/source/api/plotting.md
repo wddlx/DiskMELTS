@@ -24,6 +24,12 @@ Visualisation functions for fitting and validation results.
 
 ---
 
+```{eval-rst}
+.. autofunction:: diskmelts.plotting.plot_bank_reconstruction
+```
+
+---
+
 ## Molecule colour convention
 
 | Molecule | Colour |
@@ -37,3 +43,6 @@ Visualisation functions for fitting and validation results.
 | `13CO2` | C6 |
 | `C4H2` | brown |
 | `HC3N` | gray |
+| `C2H6` | blue (`C0`) |
+| `C2H4` | olive |
+| `CH4` | pink |
