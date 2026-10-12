@@ -80,6 +80,10 @@ latex/*.synctex.gz
 /Trained_model/
 /Realobs_data/Consub_data0/
 
+# Local continuum experiments, raw spectra, notebooks, and tests.
+# Runtime code and reference tables are shipped under src/diskmelts/consub/.
+/0-Consub/
+
 # Generated fits, figures, and rendered documentation. Source files and
 # literature tables remain trackable.
 /realobs_results/

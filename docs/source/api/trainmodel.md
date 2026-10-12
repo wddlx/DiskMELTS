@@ -4,14 +4,14 @@ Training utilities for per-molecule forward surrogate models.
 
 Retraining a molecule from the full local model grids uses these steps:
 
-1. **`generate_pre_training_set`** — build a CSV that enumerates every
-   $(T, \log N)$ grid point with a peak-normalised spectrum.
-2. **`pretrain_forward_model`** — train (or load) the two-MLP forward model
-   from that CSV.
-3. **`select_grid_holdout`** — exclude complete grid spectra for honest unseen
+1. **`select_grid_holdout`** — exclude complete grid spectra for unseen
    validation.
-4. **`tune_pca_components`** — choose the PCA dimension from holdout spectral
+2. **`generate_pre_training_set`** — build a training CSV from retained grid
+   points, with a peak-normalised spectrum for each row.
+3. **`tune_pca_components`** — choose the PCA dimension from holdout spectral
    reconstruction.
+4. **`pretrain_forward_model`** — train (or load) the two-MLP forward model
+   from the training CSV.
 
 `train_model_bank` trains the maintained wavelength-only H2O bank and remains
 available for reproducing archived wavelength/T/logN segmented experiments.

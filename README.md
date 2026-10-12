@@ -1,50 +1,38 @@
 # DiskMELTS
 
 DiskMELTS (Machine-learning Enabled Line fitting Tool for Spectra) is a
-neural surrogate-assisted package for fitting molecular emission in JWST
-mid-infrared spectra of protoplanetary disks. Its primary workflow is to load
-pretrained molecular surrogate models and retrieve temperature (`T`), column
+package for continuum subtraction and fitting molecular emission in JWST
+mid-infrared spectra of protoplanetary disks. Its fitting workflow loads
+pretrained molecular surrogate models and retrieves temperature (`T`), column
 density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-### Conda (beginner-friendly)
+Requires Python 3.9 or newer. Start from a clone of this repository.
 
-We provide `environment.yaml` as a quick-start option. First, check that you have conda:
+### Conda
 
-    conda --version
+From the repository root, create and activate the supplied environment. It
+installs DiskMELTS in editable mode, with FITS and notebook support:
 
-If you don't have conda, google how to install it!
-
-Update conda to version 23 or above:
-
-    conda update conda
-
-Press `y` to all prompts.
-
-Create the environment:
-
-    conda env create --file=environment.yaml
-
-Press `y` to all prompts. This will download a number of packages.
-
-Activate it:
-
-    conda activate diskmelts
-
-Verify everything is installed:
-
-    conda list
+```bash
+conda env create --file environment.yaml
+conda activate diskmelts
+```
 
 ### Custom environment
 
-Feel free to use your own conda or virtual environment. Install the package with:
+In an existing Python environment, run from the repository root:
 
 ```bash
-pip install -e .
+python -m pip install -e .
 ```
 
-## Required packages
+For FITS reading, use `python -m pip install -e ".[io]"`. CSV and array inputs
+need no optional dependencies. Select this same environment as your Jupyter kernel;
+restart an existing kernel after upgrading the package.
+
+## Runtime dependencies
 
 | Package | Purpose |
 |---|---|
@@ -54,6 +42,42 @@ pip install -e .
 | `scipy` | L-BFGS-B optimizer, NNLS, Sobol sampling |
 | `scikit-learn` | Model scaling and PCA metadata |
 | `matplotlib` | Plotting |
+
+## Continuum subtraction
+
+For a CSV with `wave,flux,err` columns (wavelength in µm and flux/error in the
+same units):
+
+```python
+import diskmelts
+
+wav, flux, error = diskmelts.consub.read_spectrum("raw_spectrum.csv")
+wav, consub, err, cont, contOrig = diskmelts.consub.calculate(
+    wav, flux, error, preset="ttauri", exclude=[[12, 13]],
+)
+fig = diskmelts.consub.plot(
+    wav, consub, err, cont, contOrig, ranges=[(5, 12), (12, 25)], savedir=None,
+)
+```
+
+`calculate()` returns five NumPy arrays. `plot()` displays the raw spectrum,
+continuum, and residual; `savedir="figures/consub"` also writes `continuum.png`.
+Its `error` and `contOrig` inputs may be `None`.
+
+Presets are `water`, `ttauri`, `carbon_rich`, and `carbon_extended`.
+Use `preset=None, linefreefile="windows.csv"` for custom `xmin,xmax` windows.
+With `preset=None, linefreefile=None` (or `""`), fitting uses all nonexcluded
+pixels and skips the line-free correction, so `cont` equals `contOrig`.
+Reference tables are bundled; normal continuum subtraction needs no model grids.
+
+The private `0-Consub/` experiment directory is excluded from Git and is not
+required by the installed package. Its runtime code and reference tables are
+maintained under `src/diskmelts/consub/`.
+
+Returned `err` represents measurement/noise error, not correlated continuum
+uncertainty. Broad excluded intervals require inspection. See the
+[continuum guide](docs/source/continuum.md) for presets, regional box sizes,
+special regions, FITS input, saving CSVs, and uncertainty diagnostics.
 
 ## Quick fitting example
 

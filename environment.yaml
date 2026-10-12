@@ -15,6 +15,7 @@ dependencies:
   - matplotlib >= 3.8
 
   # Useful for examples and notebooks.
+  - astropy
   - jupyter
   - jupyterlab
   - ipykernel

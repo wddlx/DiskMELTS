@@ -53,8 +53,10 @@ from diskmelts.v2_read_plot import (
     plot_saved_observation,
 )
 from diskmelts.v2_paper_comparison import plot_literature_comparisons
+from diskmelts import consub
 
 __all__ = [
+    "consub",
     "MODEL_SPECS",
     "load_fitting_models",
     "fit_stage",

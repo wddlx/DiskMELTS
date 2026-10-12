@@ -2,13 +2,16 @@
 
 **Machine-learning Enabled Line fitting Tool for Spectra**
 
-DiskMELTS is a neural surrogate-assisted fitting package for retrieving
+DiskMELTS subtracts spectral continua and uses neural surrogates to retrieve
 molecular gas parameters — temperature ($T$), column density ($\log N$), and
 emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
 
 Most users should start with the pretrained models bundled in the installed
 package. The checkpoints are self-contained and require no large local training
 grids or pretraining CSV files.
+
+For raw spectra, start with {doc}`continuum` and `diskmelts.consub.calculate`.
+For spectra that are already continuum-subtracted, start with {doc}`quickstart`.
 
 ---
 
@@ -31,6 +34,7 @@ area scaling solved analytically during the fit.
 
 installation
 quickstart
+continuum
 training
 ```
 
@@ -41,6 +45,7 @@ training
 api/trainmodel
 api/fitting
 api/v2
+api/consub
 api/validation
 api/plotting
 ```

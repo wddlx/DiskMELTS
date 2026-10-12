@@ -6,7 +6,7 @@ import pytest
 
 
 pytest.importorskip('torch')
-from examples.dev_v2_fittingGrids import (
+from diskmelts.v2_grid_fitting import (
     combine_grid_uncertainty,
     fit_grid_stage,
     fit_observation_grids,

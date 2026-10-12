@@ -8,7 +8,7 @@ import pytest
 
 
 pytest.importorskip('torch')
-from examples.dev_v2_read_plot import plot_saved_observation, read_stage_result
+from diskmelts import plot_saved_observation, read_stage_result
 
 
 @pytest.fixture

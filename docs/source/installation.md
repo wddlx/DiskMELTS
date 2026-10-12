@@ -1,108 +1,84 @@
 # Installation
 
-## Requirements
+DiskMELTS requires Python 3.9 or newer. The runtime dependencies are NumPy,
+pandas, SciPy, scikit-learn, PyTorch, and matplotlib. Astropy is optional and
+needed only for the FITS-reading helper.
 
-| Package | Purpose |
-|---|---|
-| `torch` | Pretrained model inference and optional training |
-| `numpy` | Array operations |
-| `pandas` | CSV I/O |
-| `scipy` | L-BFGS-B optimiser, NNLS, Sobol sampling |
-| `scikit-learn` | `StandardScaler`, PCA |
-| `matplotlib` | Plotting |
-
-Python ≥ 3.9 is required.
-
-## Conda (beginner-friendly)
-
-We provide `environment.yaml` as a quick-start option. First, check that you have conda:
-
-    conda --version
-
-If you do not have conda, use a Python virtual environment instead.
-
-Update conda to version 23 or above:
-
-    conda update conda
-
-Clone the repository and create the environment from the repository root:
+## Install from a checkout
 
 ```bash
 git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
-conda env create --file=environment.yaml
+python -m pip install -e .
 ```
 
-Activate it:
-
-    conda activate diskmelts
-
-Verify everything is installed:
-
-    conda list
-
-## Custom environment
-
-Feel free to use your own conda or virtual environment. Install the package with:
+For FITS support, replace the last command with:
 
 ```bash
-pip install -e .
+python -m pip install -e ".[io]"
 ```
 
-This makes `import diskmelts` available from anywhere in your environment.
+Run installation commands in the environment used by your Python interpreter or
+Jupyter kernel. Restart existing notebook kernels after upgrading the package.
+Editable installation makes source changes available without reinstalling;
+changes to dependencies or package metadata may still require reinstalling.
 
-## Repository data layout
+## Conda environment
 
-A fresh GitHub clone or built wheel contains everything required for v2 model
-fitting. The wheel bundles 15 production checkpoint files (five H2O tiles and
-one checkpoint for each of ten other molecules), plus the H2O manifest under
-`diskmelts/models/Trained_model/`. Model fitting loads these files through
-`load_fitting_models`; it does not read any slab-grid CSVs.
-
-The repository additionally contains:
-
-- an example observed spectrum under `Realobs_data/Consub_data/`
-- `examples/dev_v2_realobs.py`
-- `notebooks/Example_Fitting.ipynb` (model fitting, with an optional grid cell)
-
-The large training inputs are intentionally not uploaded:
-
-- `Model_grids/`
-- `Pretrain_grid/`
-
-These directories are ignored by Git. `Model_grids/` is required only for the
-optional `fit_observation_grids` API or training. `Pretrain_grid/` is needed
-only for training and related validation. Neither belongs in a fitting-only
-GitHub upload or wheel. The repository's top-level `Trained_model/`, generated
-`realobs_results/`, `figures/` outputs, and `docs/_build/` are also excluded
-from the fitting-only upload. Four reference PDFs under
-`figures/realobs_validations/` remain included. Normal v2 inference uses the
-bundled checkpoints.
-
-## Verify
-
-Verify the package import:
+Alternatively, from the repository root:
 
 ```bash
-python -c "import diskmelts; print(diskmelts.__version__ if hasattr(diskmelts, '__version__') else 'DiskMELTS import OK')"
+conda env create --file environment.yaml
+conda activate diskmelts
 ```
 
-To run the development test suite, install the optional development
-dependencies first:
+This installs the local package in editable mode, its runtime dependencies,
+Astropy, and Jupyter. Select the `diskmelts` environment when using notebooks.
+
+## What is bundled?
+
+The installed package contains:
+
+- 15 production checkpoints: five H2O tiles and one checkpoint for each of ten
+  other molecules, plus the H2O bank manifest;
+- four continuum reference presets and the curated correction windows.
+
+Ordinary model fitting and continuum subtraction need no `Model_grids/`,
+`Pretrain_grid/`, or repository example directory. You supply your spectrum.
+The checkout additionally contains example spectra, scripts, and notebooks.
+
+The full slab grids are optional local data, excluded from Git and distributions.
+`Model_grids/` is required for direct-grid fitting, retraining, or generating
+new continuum reference windows. `Pretrain_grid/` is used by training and
+related validation. The top-level `Trained_model/` holds optional local training
+outputs; normal inference loads checkpoints inside the installed package.
+
+## Verify and test
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/
+python -c "import diskmelts; print(diskmelts.consub.calculate.__name__)"
 ```
 
-The test suite checks the bundled fitting assets and notebook paths. Its
-scientific-optimizer tests use small synthetic inputs.
+For development, from the repository root:
+
+```bash
+python -m pip install -e ".[dev,io]"
+pytest
+```
+
+`pytest` runs the distributed tests in `tests/`. The private `0-Consub/`
+directory is ignored by Git and is not required for installation or testing.
+If you have that local directory, run its additional continuum tests explicitly:
+
+```bash
+pytest -q 0-Consub/consub_test.py
+```
 
 ## Build the documentation
 
 ```bash
-pip install -r docs/requirements.txt
+python -m pip install -r docs/requirements.txt
 sphinx-build -E -W -b html docs/source docs/_build/html
 ```
 
-The build is self-contained and does not download external API inventories.
+The build does not download external API inventories.

@@ -8,7 +8,7 @@ quadrature, as requested: ``sqrt(fit_sigma**2 + grid_step**2)``.
 
 ``fit_grid_stage`` fits one or several molecules. ``fit_observation_grids``
 runs sequential stages and writes the same stage-spectrum/parameter/running
-CSV format used by ``dev_v2_read_plot.py``. The local covariance describes one
+CSV format used by ``diskmelts.v2_read_plot``. The local covariance describes one
 mode near the optimum; it is not a substitute for a multimodal posterior.
 """
 
@@ -469,7 +469,7 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
                           seed=42, maxiter=100, popsize=8,
                           n_refine=3, skiprows=1, delimiter=',',
                           wav_col=0, flux_col=1):
-    """Run ordered grid-only fits and save stage CSVs for dev_v2_read_plot."""
+    """Run ordered grid-only fits and save stage CSVs for v2_read_plot."""
     if grid_root is None:
         raise ValueError('grid_root is required for direct-grid fitting')
     input_path = Path(input_path)

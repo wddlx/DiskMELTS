@@ -134,10 +134,21 @@ def test_realobs_example_starts_from_github_assets(tmp_path):
     env = os.environ.copy()
     env["DISKMELTS_DETECTION_SIGMA_FACTOR"] = "1000000000"
     env["MPLCONFIGDIR"] = str(tmp_path / "matplotlib")
+    env["PYTHONPATH"] = str(ROOT / "src")
+    # Exercise the unchanged script in an isolated layout so the smoke test
+    # cannot overwrite a user's scientific fit products in the checkout.
+    example_dir = tmp_path / "examples"
+    example_dir.mkdir()
+    script = example_dir / "dev_v2_realobs.py"
+    shutil.copy(ROOT / "examples" / script.name, script)
+    data_dir = tmp_path / "Realobs_data" / "Consub_data"
+    data_dir.mkdir(parents=True)
+    spectrum = "j16120505_v9.0_contsub_RVcorr.csv"
+    shutil.copy(ROOT / "Realobs_data" / "Consub_data" / spectrum, data_dir / spectrum)
 
     result = subprocess.run(
-        [sys.executable, str(ROOT / "examples" / "dev_v2_realobs.py")],
-        cwd=ROOT,
+        [sys.executable, str(script)],
+        cwd=tmp_path,
         env=env,
         capture_output=True,
         text=True,

@@ -5,6 +5,11 @@ model fit needs no `Model_grids/`, `Pretrain_grid/`, training script, or network
 configuration file. Inputs are a continuum-subtracted spectrum in Jy and its
 source distance in parsecs. Run this example from a writable working directory.
 
+If your spectrum still includes its continuum, first use
+`diskmelts.consub.calculate` as described in {doc}`continuum`. Its returned
+`wav` and `consub` arrays can be passed directly to `fit_stage` below. Its `err`
+array can be passed as `sigma`, but does not include continuum uncertainty.
+
 ## One stage
 
 ```python
