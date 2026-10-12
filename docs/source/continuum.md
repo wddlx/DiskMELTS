@@ -147,7 +147,9 @@ include correlated continuum uncertainty**. Broad excluded intervals, especially
 12.5–16.5 µm, remain dependent on interpolation. The extended carbon mask removes
 many anchors around the 10 µm dust feature; inspect it carefully. Neither method
 corrects fringes or channel offsets, and one-temperature masks cannot guarantee
-line-free windows for every source or spectral resolution.
+line-free windows for every source or spectral resolution. Very coarsely sampled
+spectra may have too few pixels in the narrow preset windows, particularly for
+`carbon_extended`; use a custom window CSV with broader clean intervals in that case.
 
 For support masks and indicative continuum uncertainties, the advanced
 `diskmelts.consub.subtract_continuum()` interface returns a diagnostic DataFrame;
@@ -162,9 +164,11 @@ separation of smooth and narrow components in the
 [arPLS reweighting](https://pybaselines.readthedocs.io/en/latest/generated/api/pybaselines.Baseline.arpls.html).
 No Gaussian-process implementation is included here.
 
-Additional local tests and USco/PPan examples live in the Git-ignored
-`0-Consub/consub_test.py`; that directory is not distributed or required by the
-package. The array and CSV examples above work independently of it.
+The distributed `tests/test_consub_package.py` checks the public five-array
+interface, bundled presets, custom windows, and plotting in a directory with
+no `0-Consub/` inputs. Additional local tests and USco/PPan examples live in
+the Git-ignored `0-Consub/consub_test.py`; that directory is not distributed or
+required by the package.
 Local synthetic benchmarks compare both methods against known
 continua and different-temperature molecular spectra. The methods perform
 differently across masked gaps; these tests do not establish absolute accuracy

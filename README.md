@@ -73,6 +73,8 @@ Reference tables are bundled; normal continuum subtraction needs no model grids.
 The private `0-Consub/` experiment directory is excluded from Git and is not
 required by the installed package. Its runtime code and reference tables are
 maintained under `src/diskmelts/consub/`.
+The distributed tests in `tests/` exercise the installed continuum API and
+bundled references without that private directory.
 
 Returned `err` represents measurement/noise error, not correlated continuum
 uncertainty. Broad excluded intervals require inspection. See the

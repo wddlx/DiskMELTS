@@ -1,8 +1,8 @@
-import os
+from pathlib import Path
 import sys
 
-# Make the src/ package importable without installing it
-sys.path.insert(0, os.path.abspath('../src'))
+# Legacy docs-root configuration; kept in sync with docs/source/conf.py.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 # ---------------------------------------------------------------------------
 # Project information
@@ -46,14 +46,14 @@ autodoc_typehints = 'description'
 # Napoleon (docstring style)
 # ---------------------------------------------------------------------------
 napoleon_google_docstring  = True
-napoleon_numpy_docstring   = False
+napoleon_numpy_docstring   = True
 napoleon_use_param         = True
 napoleon_use_rtype         = True
 
 # ---------------------------------------------------------------------------
 # MyST-Parser settings
 # ---------------------------------------------------------------------------
-myst_enable_extensions = ['colon_fence']
+myst_enable_extensions = ['colon_fence', 'dollarmath']
 source_suffix = {
     '.rst': 'restructuredtext',
     '.md':  'markdown',

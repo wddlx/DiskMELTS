@@ -84,9 +84,12 @@ def test_gitignore_separates_fitting_assets_from_training_data():
     }
 
     for pattern in ('/Model_grids/', '/Pretrain_grid/', '/Trained_model/',
+                    '/0-Consub/',
                     '/docs/_build/', '/realobs_results/', '/figures/*'):
         assert pattern in patterns
     for path in ('src/diskmelts/models/Trained_model/C2H2_single_v2/net_C2H2_forward.pt',
+                 'src/diskmelts/consub/regions/ttauri.csv',
+                 'src/diskmelts/consub/cont_ranges.csv',
                  'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',
                  'notebooks/Example_Fitting.ipynb',
                  'figures/realobs_validations/H2O_parameter_comparison.pdf'):
@@ -105,6 +108,12 @@ def test_git_index_contains_fitting_distribution_only():
 
     for spec in MODEL_SPECS.values():
         assert f"src/diskmelts/models/{spec['path']}" in tracked
+    from diskmelts.consub._core import HERE, PRESETS
+
+    for preset in PRESETS:
+        assert f'src/diskmelts/consub/regions/{preset}.csv' in tracked
+        assert f'src/diskmelts/consub/regions/{preset}.json' in tracked
+        assert (HERE / 'regions' / f'{preset}.csv').is_file()
     required = {
         'src/diskmelts/v2_fitting.py', 'src/diskmelts/v2_grid_fitting.py',
         'src/diskmelts/v2_read_plot.py', 'src/diskmelts/v2_paper_comparison.py',
@@ -114,10 +123,17 @@ def test_git_index_contains_fitting_distribution_only():
         'examples/dev_v2_testsWithRO.py',
         'Realobs_data/literature_usco_table2.csv',
         'Realobs_data/literature_water_two_component.csv',
+        'src/diskmelts/consub/__init__.py',
+        'src/diskmelts/consub/_api.py',
+        'src/diskmelts/consub/_core.py',
+        'src/diskmelts/consub/cont_ranges.csv',
+        'src/diskmelts/consub/cont_ranges_PPan.csv',
+        'docs/source/continuum.md',
+        'docs/source/api/consub.md',
     }
     assert required <= tracked
     assert not any(path.startswith((
-        'Trained_model/', 'docs/_build/', 'realobs_results/',
+        'Trained_model/', '0-Consub/', 'docs/_build/', 'realobs_results/',
         'figures/validation/', 'figures/realobs/', 'Model_grids/',
         'Pretrain_grid/',
     )) for path in tracked)

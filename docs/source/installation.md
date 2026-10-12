@@ -66,7 +66,8 @@ python -m pip install -e ".[dev,io]"
 pytest
 ```
 
-`pytest` runs the distributed tests in `tests/`. The private `0-Consub/`
+`pytest` runs the distributed tests in `tests/`, including the continuum
+API and bundled-reference checks. The private `0-Consub/`
 directory is ignored by Git and is not required for installation or testing.
 If you have that local directory, run its additional continuum tests explicitly:
 

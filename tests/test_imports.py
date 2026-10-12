@@ -4,6 +4,18 @@ import pytest
 
 
 PUBLIC_SYMBOLS = [
+    # bundled v2 workflows
+    "consub",
+    "MODEL_SPECS",
+    "load_fitting_models",
+    "fit_stage",
+    "fit_observation",
+    "fit_grid_stage",
+    "fit_observation_grids",
+    "combine_grid_uncertainty",
+    "read_stage_result",
+    "plot_saved_observation",
+    "plot_literature_comparisons",
     # fitting
     "load_models",
     "load_model_bank",
