@@ -5,7 +5,8 @@ These pages display the maintained notebooks from the repository's
 Clone the repository and run them with the `diskmelts-notebooks` environment
 from {doc}`../installation`. The documentation build displays their code but
 does not run the fitting or training cells. The figures below were rendered
-from the included Upper Sco example and saved fitting results.
+from the included Upper Sco example and the notebook's current constrained
+fitting run.
 
 ## 1. Subtract the continuum
 
@@ -19,14 +20,21 @@ light red shading where those wavelengths are omitted from fitting.
 
 ## 2. Fit molecular emission
 
-{doc}`Example_Fitting` fits water, carbon molecules, and CO₂ in sequence. The
-water-stage plot shows its two components; the combined plot shows all fitted
-components and the final residual. They were rendered from the notebook's
-saved J16120505 results, without rerunning the fit.
+{doc}`Example_Fitting` fits water, carbon molecules, and CO₂ in sequence. In
+the carbon stage, 13C12CH2 has at most the fitted temperature of C2H2 and
+shares its emitting area. In the CO₂ stage, 13CO2 shares both values with CO₂. HCN, HC3N, and
+the column densities remain independent. The plots below come from the
+notebook's updated J16120505 fit.
 
 ![Upper Sco J16120505 water-stage fit](../_static/examples/upper_sco_water_fit.png)
 
-![Upper Sco J16120505 combined molecular fit and residual](../_static/examples/upper_sco_combined_fit.png)
+![Upper Sco J16120505 constrained carbon isotopologue fit](../_static/examples/upper_sco_carbon_tied_fit.png)
+
+![Upper Sco J16120505 constrained CO2 isotopologue fit](../_static/examples/upper_sco_co2_tied_fit.png)
+
+These figures demonstrate the requested constraints. The hot-water and HC3N
+areas reach their configured bounds in this example, so their individual
+parameters need further review before scientific interpretation.
 
 ## 3. Train and validate a model
 

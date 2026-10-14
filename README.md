@@ -143,6 +143,12 @@ The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
 PCA counts and network layers, are in `diskmelts.MODEL_SPECS` and checked when
 loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
 sets the source distance and makes the returned emitting area physical.
+The [fitting notebook](notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
+be no hotter than C2H2 and gives them the same emitting area. It ties 13CO2
+to CO2 in both temperature and area. Set
+`isotopologue_groups`, `Tshare` (`free`, `equal`, or `less`), and `Ashare` in a
+joint stage to choose those constraints. See the
+[fitting guide](docs/source/quickstart.md) for examples.
 
 For an optional fit directly from slab grids, use `fit_grid_stage` or
 `fit_observation_grids` and supply `grid_root='Model_grids'` explicitly. This

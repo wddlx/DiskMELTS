@@ -15,6 +15,10 @@ def test_model_stage_scales_flux_and_noise_to_reference_distance(monkeypatch):
     def fake_fit_molecules(**kwargs):
         np.testing.assert_allclose(kwargs['obs_flux'], [1.0, 2.0])
         assert kwargs['sigma'] == pytest.approx(0.4)
+        assert kwargs.get('shared_area_groups') is None
+        assert kwargs['isotopologue_groups'] == [('C2H2', '13C12CH2')]
+        assert kwargs['Tshare'] == ['equal']
+        assert kwargs['Ashare'] == [True]
         return {
             'model_flux': np.array([1.0, 2.0]),
             'residual': np.zeros(2),
@@ -27,6 +31,8 @@ def test_model_stage_scales_flux_and_noise_to_reference_distance(monkeypatch):
     result = dev_v2_fitting.fit_stage(
         wav, observed, 'C2H2', (12.0, 12.1), (12.0, 12.1),
         pretrained={'C2H2': object()}, distance_pc=280.0, sigma=0.1,
+        isotopologue_groups=[('C2H2', '13C12CH2')],
+        Tshare=['equal'], Ashare=[True],
     )
     np.testing.assert_allclose(result['model_flux'], observed)
     np.testing.assert_allclose(result['component_fluxes']['C2H2'], observed)

@@ -667,6 +667,10 @@ def fit_molecules(
     verbose=True,
     T_prior=None,
     T_prior_log10=False,
+    shared_area_groups=None,
+    isotopologue_groups=None,
+    Tshare=None,
+    Ashare=None,
 ):
     """
     Fit one or more selected molecules with global screening + local optimisation.
@@ -695,6 +699,16 @@ def fit_molecules(
             molecule names or component labels.
         loga_bounds (tuple or None): bounds on log10(A).  None means A >= 0
             with no upper bound; otherwise bounded least squares is used.
+        shared_area_groups (list of sequences or None): component labels whose
+            emitting areas must be equal, e.g. [('C2H2', '13C12CH2')]. Each
+            component may appear in at most one group. Unlisted components
+            retain independent areas.
+        isotopologue_groups (list of sequences or None): each group names its
+            main species first, followed by one or more rare isotopologues.
+        Tshare (list or None): one mode per isotopologue group: 'free', 'equal',
+            or 'less'. 'less' requires every rare T <= the main T.
+        Ashare (list of bool or None): one flag per isotopologue group. True
+            fits one common emitting area; False keeps independent areas.
         n_samples (int): number of global screening samples.
         sample_method (str): 'sobol', 'latin_hypercube', or 'random'.
         n_refine (int): number of distinct global candidates to refine locally.
@@ -740,6 +754,8 @@ def fit_molecules(
             'component_fluxes' : label -> model flux on obs_wav.
             'residual'         : obs_flux - model_flux.
             'fit_ranges'       : actual joint ranges used.
+            'shared_area_groups': all applied groups of tied component labels.
+            'isotopologue_groups', 'Tshare', 'Ashare': group constraints used.
             'top_list'         : ranked refined solutions.
             'global_top'       : best unrefined global candidates.
             'uncertainty'      : label -> parameter percentile summary.
@@ -757,6 +773,51 @@ def fit_molecules(
     for comp in components:
         if comp['model_mol'] not in pretrained:
             raise KeyError(f"pretrained has no model for {comp['model_mol']!r}")
+
+    labels = [comp['label'] for comp in components]
+    if isotopologue_groups is None:
+        if Tshare is not None or Ashare is not None:
+            raise ValueError('Tshare and Ashare require isotopologue_groups')
+        iso_groups = []
+    else:
+        iso_groups = [tuple(group) for group in isotopologue_groups]
+        if any(len(group) < 2 or len(set(group)) != len(group) for group in iso_groups):
+            raise ValueError('each isotopologue group needs a main and distinct rare labels')
+        unknown = set().union(*map(set, iso_groups)) - set(labels) if iso_groups else set()
+        if unknown:
+            raise ValueError(f'isotopologue_groups contains unknown component labels: {sorted(unknown)}')
+        members = [label for group in iso_groups for label in group]
+        if len(set(members)) != len(members):
+            raise ValueError('isotopologue_groups cannot overlap')
+    modes = ['free'] * len(iso_groups) if Tshare is None else list(Tshare)
+    area_flags = [False] * len(iso_groups) if Ashare is None else list(Ashare)
+    if len(modes) != len(iso_groups) or any(mode not in ('free', 'equal', 'less') for mode in modes):
+        raise ValueError('Tshare needs one free, equal, or less mode per isotopologue group')
+    if len(area_flags) != len(iso_groups) or any(not isinstance(flag, (bool, np.bool_))
+                                                  for flag in area_flags):
+        raise ValueError('Ashare needs one Boolean per isotopologue group')
+
+    all_area_groups = [tuple(group) for group in shared_area_groups or ()]
+    all_area_groups.extend(group for group, share in zip(iso_groups, area_flags) if share)
+    area_group_for = list(range(len(components)))
+    used_labels = set()
+    for group in all_area_groups:
+        group = tuple(group)
+        if len(group) < 2 or len(set(group)) != len(group):
+            raise ValueError('each shared_area_groups entry needs at least two distinct labels')
+        unknown = set(group) - set(labels)
+        if unknown:
+            raise ValueError(f'shared_area_groups contains unknown component labels: {sorted(unknown)}')
+        overlap = used_labels.intersection(group)
+        if overlap:
+            raise ValueError(f'area-sharing groups overlap at component labels: {sorted(overlap)}')
+        used_labels.update(group)
+        anchor = labels.index(group[0])
+        for label in group:
+            area_group_for[labels.index(label)] = anchor
+    area_group_ids = list(dict.fromkeys(area_group_for))
+    area_group_members = [[i for i, group_id in enumerate(area_group_for)
+                           if group_id == anchor] for anchor in area_group_ids]
 
     joint_ranges = _fit_ranges_for_components(fit_ranges, components)
     fit_mask = _wav_mask(obs_wav, joint_ranges)
@@ -779,13 +840,79 @@ def fit_molecules(
             return default
         return tuple(bound_spec)
 
-    nonlinear_bounds = []
+    component_bounds = []
     for comp in components:
         model = pretrained[comp['model_mol']]
         default_T = _model_bank_bounds(model, 'T_ranges', _DEFAULT_T_BOUNDS)
         default_logN = _model_bank_bounds(model, 'logN_ranges', _DEFAULT_LOGN_BOUNDS)
-        nonlinear_bounds.append(_bounds_for(comp, T_bounds, default_T))
-        nonlinear_bounds.append(_bounds_for(comp, logN_bounds, default_logN))
+        bounds = (_bounds_for(comp, T_bounds, default_T),
+                  _bounds_for(comp, logN_bounds, default_logN))
+        if any(len(pair) != 2 or not np.all(np.isfinite(pair)) or pair[0] >= pair[1]
+               for pair in bounds):
+            raise ValueError(f'{comp["label"]} needs finite increasing T and logN bounds')
+        component_bounds.append(bounds)
+
+    # Optimize only independent temperatures. An equal group has one T
+    # coordinate. A less group has its main T plus one [0, 1] coordinate per
+    # rare species, mapped into [rare_min, min(rare_max, main_T)]. Thus neither
+    # global screening nor local refinement can violate the requested relation.
+    group_for = {}
+    for group, mode in zip(iso_groups, modes):
+        if mode != 'free':
+            for label in group:
+                group_for[labels.index(label)] = (labels.index(group[0]), mode)
+    main_T_bounds = {}
+    for group, mode in zip(iso_groups, modes):
+        if mode == 'free':
+            continue
+        indices = [labels.index(label) for label in group]
+        if mode == 'equal':
+            lo = max(component_bounds[i][0][0] for i in indices)
+            hi = min(component_bounds[i][0][1] for i in indices)
+        else:
+            main = indices[0]
+            lo = max(component_bounds[main][0][0],
+                     *(component_bounds[i][0][0] for i in indices[1:]))
+            hi = component_bounds[main][0][1]
+        if not lo < hi:
+            raise ValueError(f'Tshare={mode!r} has no feasible temperature range for {group}')
+        main_T_bounds[indices[0]] = (lo, hi)
+
+    nonlinear_bounds = []
+    temperature_indices = {}
+    column_indices = {}
+    for i, comp in enumerate(components):
+        relation = group_for.get(i)
+        if relation is None or relation[0] == i:
+            temperature_indices[i] = len(nonlinear_bounds)
+            nonlinear_bounds.append(main_T_bounds.get(i, component_bounds[i][0]))
+        elif relation[1] == 'less':
+            temperature_indices[i] = len(nonlinear_bounds)
+            nonlinear_bounds.append((0.0, 1.0))
+        column_indices[i] = len(nonlinear_bounds)
+        nonlinear_bounds.append(component_bounds[i][1])
+
+    def _physical_params(x):
+        """Expand optimization coordinates to per-component (T, logN)."""
+        physical = np.empty(2 * len(components), dtype=np.float64)
+        for i in range(len(components)):
+            physical[2 * i + 1] = x[column_indices[i]]
+            relation = group_for.get(i)
+            if relation is None or relation[0] == i:
+                physical[2 * i] = x[temperature_indices[i]]
+        for i, (main, mode) in group_for.items():
+            if i == main:
+                continue
+            if mode == 'equal':
+                physical[2 * i] = physical[2 * main]
+            else:
+                lo, hi = component_bounds[i][0]
+                available_hi = min(hi, physical[2 * main])
+                physical[2 * i] = min(
+                    physical[2 * main],
+                    lo + x[temperature_indices[i]] * (available_hi - lo),
+                )
+        return physical
 
     if loga_bounds is None:
         A_bounds = (0.0, np.inf)
@@ -801,24 +928,30 @@ def fit_molecules(
         return np.column_stack(cols)
 
     def _solve_amplitudes(params):
-        if not _is_ordered_water(params, components):
+        physical = _physical_params(params)
+        if not _is_ordered_water(physical, components):
             return np.inf, np.zeros(len(components)), None
-        M = _matrix_for(params)
+        M = _matrix_for(physical)
+        M_group = np.column_stack([M[:, members].sum(axis=1)
+                                   for members in area_group_members])
         # A shared flux scale preserves the physical amplitude bounds while
         # making solver tolerances independent of the spectrum's brightness.
         flux_scale = max(float(np.max(np.abs(obs_fit))),
-                         float(np.max(np.abs(M))), np.finfo(float).tiny)
-        M_scaled, obs_scaled = M / flux_scale, obs_fit / flux_scale
+                         float(np.max(np.abs(M_group))), np.finfo(float).tiny)
+        M_scaled, obs_scaled = M_group / flux_scale, obs_fit / flux_scale
         if np.isfinite(A_bounds[1]):
             res = scipy.optimize.lsq_linear(
                 M_scaled,
                 obs_scaled,
-                bounds=(np.full(len(components), A_bounds[0]),
-                        np.full(len(components), A_bounds[1])),
+                bounds=(np.full(len(area_group_members), A_bounds[0]),
+                        np.full(len(area_group_members), A_bounds[1])),
             )
-            A = np.asarray(res.x, dtype=np.float64)
+            A_group = np.asarray(res.x, dtype=np.float64)
         else:
-            A, _ = scipy.optimize.nnls(M_scaled, obs_scaled)
+            A_group, _ = scipy.optimize.nnls(M_scaled, obs_scaled)
+        A = np.empty(len(components), dtype=np.float64)
+        for members, value in zip(area_group_members, A_group):
+            A[members] = value
         residual = obs_fit - M @ A
         loss = float(np.sum(residual ** 2))
         return loss, A, M
@@ -838,11 +971,12 @@ def fit_molecules(
         if T_prior is None or _prior_scale == 0.0:
             return 0.0
         penalty = 0.0
+        physical = _physical_params(x)
         for i, comp in enumerate(components):
             label = comp['label']
             if label in T_prior:
                 center, std = T_prior[label]
-                T_val = x[2 * i]
+                T_val = physical[2 * i]
                 t = np.log10(max(T_val, 1e-10)) if T_prior_log10 else T_val
                 penalty += ((t - center) / std) ** 2
         return penalty
@@ -856,7 +990,7 @@ def fit_molecules(
         loss, _, _ = _penalized_loss(x)
         return loss
 
-    n_dim = 2 * len(components)
+    n_dim = len(nonlinear_bounds)
     unit = _draw_unit_samples(n_samples, n_dim, method=sample_method, seed=seed)
     samples = _scale_unit_samples(unit, nonlinear_bounds)
 
@@ -919,11 +1053,12 @@ def fit_molecules(
 
     def _decode_solution(sol, rank=None):
         params = {}
+        physical = _physical_params(sol['x'])
         for i, comp in enumerate(components):
             A = float(sol['A'][i])
             params[comp['label']] = {
-                'T': float(sol['x'][2 * i]),
-                'logN': float(sol['x'][2 * i + 1]),
+                'T': float(physical[2 * i]),
+                'logN': float(physical[2 * i + 1]),
                 'A': A,
                 'log10A': float(np.log10(max(A, 1e-300))),
                 'model_mol': comp['model_mol'],
@@ -972,6 +1107,10 @@ def fit_molecules(
         'component_fluxes': component_fluxes,
         'residual': obs_flux - total_flux,
         'fit_ranges': joint_ranges,
+        'shared_area_groups': all_area_groups,
+        'isotopologue_groups': iso_groups,
+        'Tshare': modes,
+        'Ashare': area_flags,
         'top_list': top_list,
         'global_top': global_top,
         'uncertainty': uncertainty,

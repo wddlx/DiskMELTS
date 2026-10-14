@@ -478,6 +478,15 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
     stages = list(stages)
     if not stages or len({stage['name'] for stage in stages}) != len(stages):
         raise ValueError('stages must be nonempty and have unique names')
+    unsupported = ('isotopologue_groups', 'Tshare', 'Ashare',
+                   'shared_area_groups')
+    for stage in stages:
+        requested = [key for key in unsupported if stage.get(key) is not None]
+        if requested:
+            raise ValueError(
+                f"Grid stage {stage['name']!r} does not support "
+                f"{', '.join(requested)}; use fit_observation for constrained fits"
+            )
     obs_wav, obs_flux = load_observed_spectrum(
         input_path, skiprows=skiprows, delimiter=delimiter,
         wav_col=wav_col, flux_col=flux_col,
