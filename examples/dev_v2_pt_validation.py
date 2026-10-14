@@ -31,6 +31,7 @@ from diskmelts.fitting import generate_spectrum, load_models
 from diskmelts.plotting import plot_bank_reconstruction, plot_validation
 from diskmelts.trainmodel import (
     generate_pre_training_set,
+    grid_sha256,
     load_model_grid,
     pretrain_forward_model,
     select_grid_holdout,
@@ -279,6 +280,12 @@ RARER_CONFIGS = {
     'C2H6': {'wav_range': (9.0, 15.0)},
     'C2H4': {'wav_range': (8.0, 14.0)},
     'CH4': {'wav_range': (5.0, 9.0)},
+    # C2HD has a second strong band near 19 µm, especially at low T.
+    'C2HD': {'wav_range': (11.5, 20.5)},
+    # The CO isotopologue bands peak around 14.5–15.5 µm; wider edges retain
+    # hot-template wings that 13.5–17.5 µm would cut off.
+    'CO17O': {'wav_range': (13.0, 18.0)},
+    'CO18O': {'wav_range': (13.0, 18.0)},
 }
 
 MODEL_CONFIGS = {'H2O': H2O_CONFIG}
@@ -315,6 +322,7 @@ BATCH = 128
 LR = 1.0e-4
 PATIENCE = 500
 SEED = 42
+
 
 # This must remain between 5% and 10% for the maintained scientific workflow.
 HOLDOUT_FRACTION = float(os.environ.get('DISKMELTS_HOLDOUT_FRACTION', '0.10'))
@@ -412,6 +420,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
             'T_range': list(T_range),
             'logN_range': list(logN_range),
             'keys': [list(key) for key in holdout_keys],
+            'grid_sha256': grid_sha256(models),
         }
         print(
             f'    retained {len(models)} grid points, {len(wav_out)} wavelengths, '
@@ -681,11 +690,15 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
 
     grid_dir = os.path.join(BASE_DIR, 'Model_grids', MOL)
     data_tag = 'single_T100to1400_N13to19p5' if MOL != 'H2O' else 'single_T100to1400_N13to19'
+    # Preserve the older checkpoint while training this newly supplied grid.
+    artifact_tag = f'{MOL}_single_v2_newgrid' if MOL == '13C12CH2' else f'{MOL}_single_v2'
+    if MOL == '13C12CH2':
+        data_tag += '_newgrid'
     pretrain_csv = os.path.join(BASE_DIR, 'Pretrain_grid', f'pretrain_{MOL}_{data_tag}.csv')
     holdout_path = os.path.join(BASE_DIR, 'Pretrain_grid', f'holdout_{MOL}_{data_tag}.json')
-    model_dir = os.path.join(BASE_DIR, 'Trained_model', f'{MOL}_single_v2')
+    model_dir = os.path.join(BASE_DIR, 'Trained_model', artifact_tag)
     model_path = os.path.join(model_dir, f'net_{MOL}_forward.pt')
-    figure_dir = os.path.join(BASE_DIR, 'figures', 'validation', f'{MOL}_single_v2')
+    figure_dir = os.path.join(BASE_DIR, 'figures', 'validation', artifact_tag)
 
     print('\n' + '=' * 76)
     print(
@@ -733,6 +746,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         'T_range': list(T_range),
         'logN_range': list(logN_range),
         'keys': [list(key) for key in holdout_keys],
+        'grid_sha256': grid_sha256(models),
     }
 
     print(f'\n[2] Pretraining CSV ({len(holdout_keys)} unseen grid models) ...')
@@ -794,6 +808,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         early_stopping_patience=PATIENCE,
         T_range=T_range,
         logN_range=logN_range,
+        training_data_sha256=holdout_metadata['grid_sha256'],
     )
 
     if not RUN_VALIDATION:
@@ -971,6 +986,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         'holdout_fraction': HOLDOUT_FRACTION,
         'n_grid': len(models),
         'n_holdout': len(holdout_keys),
+        'grid_sha256': holdout_metadata['grid_sha256'],
         'T_rmse_K': float(np.sqrt(np.mean((nt_result['T_pred'] - nt_result['T_true']) ** 2))),
         'logN_rmse': float(np.sqrt(np.mean((nt_result['logN_pred'] - nt_result['logN_true']) ** 2))),
         'full_T_rmse_K': float(np.sqrt(np.mean((full_result['T_pred'] - full_result['T_true']) ** 2))),

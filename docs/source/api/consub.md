@@ -37,6 +37,10 @@ The result includes `weak_support`, `reference_mask`, `fit_mask`, `cont_err`, an
 `cont_sensitivity`. `cont_err` combines a reference-anchor estimate and smoothing
 sensitivity; it is not a posterior uncertainty and is NaN where support is weak.
 `cont_sensitivity` is the baseline change when doubling the smoothing width.
+In `plot_consub`, green points are `reference_mask` calibration pixels, light red
+marks wavelengths requested in `exclude`, and orange marks `weak_support` where
+reference pixels are too distant or do not cover the wavelength. Red and orange
+may overlap; orange signals less reliable continuum placement.
 
 ```{eval-rst}
 .. autofunction:: diskmelts.consub.subtract_continuum

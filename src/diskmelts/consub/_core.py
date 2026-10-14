@@ -397,7 +397,7 @@ def save_consub(result, path):
 
 
 def plot_consub(result, ranges=None, *, title=None, output=None):
-    """Plot raw/baseline/corrected continuum and residual for each chosen range."""
+    """Plot the continuum and residual with reference, exclusion, and support masks."""
     import matplotlib.pyplot as plt
     x = result.wave.to_numpy()
     if ranges is None:
@@ -421,14 +421,20 @@ def plot_consub(result, ranges=None, *, title=None, output=None):
         a.plot(x[sel], result.cont[sel], color="tab:blue", lw=1.2, label="Continuum")
         ref = sel & result.reference_mask.to_numpy()
         if ref.any():
-            a.scatter(x[ref], result.raw_flux[ref], s=2, color="seagreen", label="Reference pixels")
+            a.scatter(x[ref], result.raw_flux[ref], s=7, color="seagreen",
+                      alpha=.8, zorder=4, label="Calibration pixels")
         b.plot(x[sel], result.flux[sel], color="0.2", lw=0.6)
         if "err" in result:
             b.fill_between(x[sel], -result.err[sel], result.err[sel], color="tab:blue", alpha=.15, label="Measurement/noise error")
         b.axhline(0, color="tab:blue", lw=.7)
         for axis in (a, b):
-            for _, row in _intervals(x, result.weak_support.to_numpy()).iterrows():
-                axis.axvspan(row.xmin, row.xmax, color="orange", alpha=.12)
+            if "excluded" in result:
+                for j, row in _intervals(x, result.excluded.to_numpy()).iterrows():
+                    axis.axvspan(row.xmin, row.xmax, color="lightcoral", alpha=.2,
+                                 label="Excluded" if axis is a and j == 0 else None)
+            for j, row in _intervals(x, result.weak_support.to_numpy()).iterrows():
+                axis.axvspan(row.xmin, row.xmax, color="orange", alpha=.12,
+                             label="Weak continuum support" if axis is a and j == 0 else None)
             axis.set_xlim(lo, hi)
             axis.set_ylabel("Flux density")
         a.legend(fontsize=8, ncol=4)

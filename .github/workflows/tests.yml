@@ -24,3 +24,25 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v
+
+  install-smoke:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install core package
+        run: python -m pip install -e .
+
+      - name: Load a bundled model and calculate a continuum
+        run: |
+          python -c "import diskmelts; models = diskmelts.load_fitting_models('C2H2'); assert 'C2H2' in models; print('model loaded')"
+          python -c "import numpy as np; from diskmelts import consub; w = np.linspace(5, 25, 3000); result = consub.calculate(w, np.ones_like(w), preset=None); assert len(result) == 5; print('continuum calculated')"

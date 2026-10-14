@@ -1,0 +1,10 @@
+# Core package plus FITS reading and JupyterLab. Run from the repository root.
+name: diskmelts-notebooks
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -e .[io,notebooks]

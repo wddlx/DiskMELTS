@@ -6,6 +6,18 @@ import pytest
 import torch
 
 
+def test_grid_fingerprint_changes_with_flux():
+    from diskmelts.trainmodel import grid_sha256
+
+    models = {(400., 16.): {
+        'wavelength': np.array([14., 15.]),
+        'flux': np.array([1., 2.]),
+    }}
+    original = grid_sha256(models)
+    models[(400., 16.)]['flux'][1] = 3.
+    assert grid_sha256(models) != original
+
+
 @pytest.mark.parametrize('temperature_transform', ['linear', 'log10'])
 def test_window_normalization_preserves_physical_targets_and_metadata(tmp_path, temperature_transform):
     from diskmelts.trainmodel import pretrain_forward_model
@@ -19,13 +31,18 @@ def test_window_normalization_preserves_physical_targets_and_metadata(tmp_path, 
     args = dict(mol='H2O', pretrain_csv=csv, wav_range=(6,8), device='cpu',
                 model_path=path, n_epochs=1, hidden=(4,), n_pca=2,
                 peak_normalization='window', shape_loss='spectral',
-                temperature_transform=temperature_transform)
+                temperature_transform=temperature_transform,
+                training_data_sha256='grid-version-a')
     result = pretrain_forward_model(**args)
     np.testing.assert_allclose(result['Y_pre_v'].max(axis=1), 1.)
     for x, shape, peak in zip(result['X_pre_v'], result['Y_pre_v'], result['log10p_v']):
         index = int((x[0]-100)/100)
         np.testing.assert_allclose(shape*10**peak, np.array([.01,.02,.03])*(index+1)*.01, rtol=2e-6)
     loaded = pretrain_forward_model('H2O', model_path=path, device='cpu')
+    assert torch.load(path, weights_only=False)['training_data_sha256'] == 'grid-version-a'
+    pretrain_forward_model(**args)
+    with pytest.raises(ValueError, match='training_data_sha256'):
+        pretrain_forward_model(**{**args, 'training_data_sha256': 'grid-version-b'})
     assert loaded['peak_normalization'] == 'window'
     assert loaded['shape_loss'] == 'spectral'
     assert loaded['temperature_transform'] == temperature_transform

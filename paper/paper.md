@@ -16,13 +16,13 @@ authors:
 affiliations:
   - name: Lunar and Planetary Laboratory, the University of Arizona, Tucson, AZ 85721, USA
     index: 1
-date: 12 May 2026
+date: 12 October 2026
 bibliography: paper.bib
 ---
 
 # Summary
 
-The James Webb Space Telescope (JWST) is delivering detailed infrared spectra of planet-forming disks around young stars. These spectra contain emission from water and other molecules, allowing astronomers to study the regions where planets form. However, interpreting them with traditional physical models can be computationally expensive. Machine-learning Enabled Line fitting Tool for (Disk) Spectra (`DiskMELTS`) is a Python package that uses pretrained neural networks to fit molecular emission rapidly and estimate molecular temperatures, column densities, and emitting areas. It is designed for large JWST surveys, removal of molecular contamination, and rapid estimates that guide detailed follow-up analysis.
+The James Webb Space Telescope (JWST) is delivering detailed infrared spectra of planet-forming disks around young stars. These spectra contain emission from water and other molecules, allowing astronomers to study the regions where planets form. However, interpreting them with traditional physical models can be computationally expensive. Machine-learning Enabled Line fitting Tool for (Disk) Spectra (`DiskMELTS`) is a Python package for continuum subtraction and rapid molecular fitting with pretrained neural networks. It estimates molecular temperatures, column densities, and emitting areas, and provides tools to inspect and subtract fitted components.
 
 # Statement of Need
 
@@ -30,7 +30,7 @@ The JWST Mid-Infrared Instrument (MIRI) Medium Resolution Spectrograph has opene
 
 Extracting physical parameters from these spectra commonly requires fitting local thermodynamic equilibrium (LTE) slab models to the observed molecular emission. The key parameters for each molecule are the excitation temperature $T$, molecular column density $N$, and emitting area $A$. Even accelerated slab-model fitting can require tens of minutes to several hours per molecule when the $(T,N,A)$ parameter space is explored thoroughly. For JWST surveys targeting tens to hundreds of disks, this cost becomes a major bottleneck, especially when multiple molecules must be fitted and subtracted sequentially.
 
-`DiskMELTS` addresses this bottleneck by replacing the radiative-transfer forward model with pretrained neural-network surrogates. A complete retrieval for one molecule in one source typically runs in under one minute on a standard laptop CPU, more than three orders of magnitude faster than conventional approaches while preserving accuracy comparable to classical LTE slab-model fits. The target users are astronomers who need to analyze continuum-subtracted mid-infrared molecular spectra efficiently and reproducibly.
+`DiskMELTS` addresses this bottleneck by using pretrained neural-network surrogates in repeated forward evaluations. It also provides continuum estimation from supplied spectra and reference windows. The target users are astronomers who need to prepare and analyze mid-infrared molecular spectra efficiently and reproducibly. Fit speed and accuracy depend on the selected molecules, wavelength coverage, search settings, and quality of the continuum estimate.
 
 The package is particularly well suited for (1) rapidly characterizing molecular abundances across large statistical samples of disks, (2) isolating and subtracting water or other molecular line contamination before measuring atomic or ionic line fluxes, or (3) obtaining quick parameter estimates to guide more detailed follow-up analysis.
 
@@ -38,13 +38,15 @@ The package is particularly well suited for (1) rapidly characterizing molecular
 
 Several tools are already available for fitting molecular emission from protoplanetary disks. CLIcK [@Liu19] provides a grid-based slab-model fitting approach, IRIS [@Romero24] implements JAX-accelerated line-by-line radiative transfer and supports Bayesian retrieval with `dynesty`, and DuCKLinG [@Kaeufer24] combines slab-model fitting with dust models based on precomputed dust and gas models, also with Bayesian retrieval and linear regression. These tools represent the current state of the art for direct physical evaluation and comprehensive modeling.
 
-`DiskMELTS` is complementary to these packages. Its unique contribution is to separate expensive physical model generation from repeated observational fitting through reusable neural-network surrogates. This prioritizes rapid analysis of continuum-subtracted spectra across large samples, while the existing tools prioritize direct radiative-transfer evaluation or joint gas-and-dust modeling. A focused package also provides a clear route for distributing pretrained models and training additional molecules.
+`DiskMELTS` separates expensive physical model generation from repeated observational fitting through reusable neural-network surrogates. It includes an optional direct-grid fitting path for comparison, along with continuum subtraction as a preparation step. The bundled checkpoints make the surrogate fitting workflow usable without distributing the full slab grids.
 
 # Software design
 
-The `DiskMELTS` framework is implemented across four Python modules for continuum-subtracted spectra [^1]. The core workflow relies on `fitting` to execute retrievals and `plotting` to generate diagnostic figures. For custom models, `trainmodel` provides surrogate-training and slab-grid utilities, while `validation` performs synthetic recovery tests. Precomputed LTE slab spectra train compact neural surrogates that are deployed within a global-to-local optimization routine.
+The package exposes `diskmelts.consub.calculate()` and `diskmelts.consub.plot()` for continuum subtraction and inspection. The `v2_fitting` workflow loads bundled molecular checkpoints, fits one or more components, and saves ordered fit-and-subtract results. `v2_grid_fitting` offers optional direct fitting from local slab grids; `v2_read_plot` reads and plots saved results. Lower-level `fitting`, `trainmodel`, `validation`, and `plotting` modules support retrieval, retraining, synthetic tests, and diagnostic figures. Precomputed LTE slab spectra train compact neural surrogates that are deployed within a global-to-local optimization routine.
 
-[^1]: Continuum subtraction tools are not currently implemented in the package.
+## Continuum subtraction
+
+`calculate(wav, flux, error, preset, exclude)` returns wavelength, continuum-subtracted flux, error, fitted continuum, and the baseline before a correction from line-free windows. The shipped `water`, `ttauri`, `carbon_rich`, and `carbon_extended` presets provide candidate windows and curated reference anchors. The water template uses $T=800$ K and $\log_{10}N=18$; the carbon templates use $T=400$ K and $\log_{10}N=16$. Carbon-rich presets also exclude $12.5$--$16.5\,\mu$m. Users can instead supply their own window CSV with `preset=None`, add excluded intervals, or adjust the automatic smoothing widths. A robust local baseline with line rejection is the default; an asymmetric reweighted penalized least-squares option is also available. These windows are candidates, so the fitted continuum should be inspected around broad blends and poorly anchored regions. Returned errors reflect input measurement noise or local estimates, not a full continuum uncertainty budget.
 
 ## Training set: Slab model
 
@@ -62,29 +64,30 @@ $$F(\lambda) = A \cdot B_\nu(T_{\mathrm{ex}})\bigl(1 - e^{-\tau(\lambda)}\bigr)$
 
 where $B_\nu$ is the Planck function. All molecular line parameters are taken from the HITRAN 2020 database [@HITRAN22]. In the default grids, the intrinsic line width is fixed to pure thermal broadening at the excitation temperature. The three free parameters per molecule are therefore $T_{\mathrm{ex}}$, $N_{\mathrm{mol}}$, and $A$.
 
-Because $A$ is a linear scaling factor, the default slab-model grids are precomputed only over $(T,\log_{10}N)$. They span $T=100$--$1400$ K in 25 K steps and $\log_{10}(N/\mathrm{cm}^{-2})=13.0$--19.0 in 0.125 dex steps. The wavelength grids cover $11$--$19\,\mu$m for H$_2$O and $11$--$17.5\,\mu$m for the carbon-bearing molecules. The reference distance is fixed to 140 pc. Longer-wavelength or otherwise customized grids can be trained separately.
+Because $A$ is a linear scaling factor, the deployed surrogate grids are restricted over $(T,\log_{10}N)$. The trained domain is $T=100$--$1400$ K, with $\log_{10}(N/\mathrm{cm}^{-2})=13.0$--19.0 for H$_2$O and 13.0--19.5 for the other molecules. The reference distance is 140 pc. At a supplied source distance $d$, the model flux scales as $A(140\,\mathrm{pc}/d)^2$. Custom grids can be trained separately.
 
-The spectra are compressed using principal component analysis (PCA). The current models use 21 components for H$_2$O and 15 components for the other molecules:
+The bundled release has five overlapping H$_2$O wavelength checkpoints and one checkpoint for each of thirteen other molecules. Each checkpoint uses 30 principal components of the normalized spectral shape:
 
-| Molecule | Components | Retained variance | Wavelength range ($\mu$m) |
-|:---------|-----------:|------------------:|---------------------------:|
-| H$_2$O | 21 | 99.981% | 11--19 |
-| C$_2$H$_2$ | 15 | 99.991% | 11--17.5 |
-| $^{13}$C$^{12}$CH$_2$ | 15 | 99.964% | 11--17.5 |
-| HCN | 15 | 99.979% | 11--17.5 |
-| CO$_2$ | 15 | 99.988% | 11--17.5 |
-| $^{13}$CO$_2$ | 15 | 99.981% | 11--17.5 |
+| Molecule | Wavelength coverage ($\mu$m) |
+|:---------|:-----------------------------|
+| H$_2$O | 4.9--7.4, 7.2--11.2, 9.9--15.1, 13.5--19.2, 19.0--25.0 |
+| C$_2$H$_2$, HCN, CO$_2$, $^{13}$C$^{12}$CH$_2$, $^{13}$CO$_2$ | 11.5--17.0 |
+| C$_4$H$_2$ | 14.0--18.0 |
+| HC$_3$N | 13.0--18.0 |
+| C$_2$H$_6$ | 9.0--15.0 |
+| C$_2$H$_4$ | 8.0--14.0 |
+| CH$_4$ | 5.0--9.0 |
 
 ## Neural surrogate forward model
 
-For each molecule, `DiskMELTS` trains two lightweight multilayer perceptrons (MLPs) that together emulate the slab-model forward evaluation at negligible cost:
+For each molecule, `DiskMELTS` trains two multilayer perceptrons (MLPs) that together emulate the slab-model forward evaluation:
 
 - **`net_shape`** maps $(T,\log_{10}N)$ to the first $n_{\mathrm{PCA}}$ principal-component coefficients of the peak-normalized spectral shape.
 - **`net_peak`** maps $(T,\log_{10}N)$ to $\log_{10}$ of the peak flux density at $A=1$.
 
 The training set is generated by evaluating each grid spectrum at $A=1$, peak-normalizing the spectrum so that its maximum absolute flux is unity, and storing both the normalized shape and the original peak flux. This separates the nonlinear spectral-shape problem from the absolute-amplitude problem.
 
-Both networks take standardized inputs and use three fully connected hidden layers with widths 64, 128, and 64 and ReLU activations. The spectral shape is compressed with PCA before training, reducing output dimensionality while retaining more than 99.9% of the variance [@scikitlearn11; @Halko11]. The networks are trained with mean-squared-error loss using Adam [@Kingma14], a learning rate of $10^{-4}$, a batch size of 128, learning-rate reduction on validation-loss plateaus, and early stopping.
+Both networks take standardized inputs and use three fully connected hidden layers with widths 64, 128, and 64 and ReLU activations. PCA reduces the spectral output dimensionality [@scikitlearn11; @Halko11]. The training implementation supports Adam [@Kingma14], validation-loss scheduling, and early stopping. Complete $(T,\log_{10}N)$ grid spectra are held out before fitting the scalers and PCA transform or training the networks; this supports testing on unseen grid points.
 
 The full flux prediction at arbitrary $(T,\log_{10}N,A)$ is reconstructed as
 
@@ -98,24 +101,24 @@ Retrieval follows a global-to-local search strategy. By default, $20{,}000$ cand
 
 The top distinct candidates are then refined with L-BFGS-B local optimization, again solving amplitudes by NNLS at each function evaluation. The best refined solution provides the point estimate. This combines the broad coverage of a global search with the efficiency of local optimization.
 
-For observed spectra, `DiskMELTS` applies a sequential fit-and-subtract strategy: H$_2$O is fitted first in wavelength regions where it dominates ($11$--$12\,\mu$m and $16.5$--$18.5\,\mu$m), the best-fit H$_2$O model is subtracted from the observation, and the carbon-bearing molecules are then jointly fitted on the residual. A $3\sigma$ detection screen can be applied before each stage so that non-detected molecules are automatically excluded. The sequential order and wavelength masks can be adjusted for individual spectra. This approach is faster than a fully joint nonlinear retrieval, although results can depend on the fitting order and the quality of continuum subtraction.
+For observed spectra, `fit_observation` runs user-defined stages on successive residuals. A common configuration fits H$_2$O first in $11$--$12\,\mu$m and $16.5$--$18.5\,\mu$m windows, then fits carbon-bearing molecules on the residual. A configurable detection screen can skip undetected stage molecules. The order, molecules, and wavelength masks can be adjusted for individual spectra. Results can depend on fitting order and continuum quality.
 
 Each distributed checkpoint contains the neural-network weights, PCA transformation, parameter scalers, and wavelength grid. Therefore, fitting real observations does not require the original pretraining CSV files. Those files and the full slab-model grids are needed only for retraining and complete validation.
 
 # Research impact statement
 
-The trained surrogates are validated against held-out slab-model grid points and against real JWST/MIRI spectra. On validation spectra withheld from training, `DiskMELTS` recovers the input physical parameters with $R^2>0.99$ for all default molecules. The package also computes the integrated fractional spectral mismatch,
+The package provides held-out slab-grid recovery tests and workflows for comparisons with observed JWST/MIRI spectra. A reconstruction diagnostic is the integrated fractional spectral mismatch,
 
 $$\Delta F/F = \sum_\lambda |F^{\mathrm{true}}_\lambda-\hat{F}_\lambda| / \sum_\lambda |F^{\mathrm{true}}_\lambda|$$
 
-to quantify flux-level agreement between the surrogate and the original slab model. The trained surrogates achieve a maximum $\Delta F/F\lesssim5\%$ for each molecule.
+which quantifies flux-level agreement between the surrogate and the original slab model. Its value depends on the checkpoint, position in the trained domain, and test set. Users can run the validation workflow with local grids and examine the saved per-spectrum results.
 
-When applied to real JWST/MIRI spectra, `DiskMELTS` yields molecular parameters consistent with classical LTE slab-model fitting, typically agreeing within $\sim0.5$ dex for $N\times A$ and $<150$ K for $T$ relative to literature benchmarks [@Romero24; Xie et al. in prep.; Raul et al. in prep.]. As with standard slab retrievals, $N$ and $A$ can exhibit strong degeneracies, particularly for optically thin emission; however, their product $N\times A$, which traces the total number of emitting molecules, is more robustly recovered. For blended C$_2$H$_2$ and HCN emission, multiple parameter combinations can produce comparably good fits.
+Comparisons with published LTE slab-model results can be generated from user-supplied tables. As with standard slab retrievals, $N$ and $A$ can exhibit strong degeneracies, particularly for optically thin emission; their product $N\times A$ traces the total number of emitting molecules. For blended C$_2$H$_2$ and HCN emission, multiple parameter combinations can produce comparably good fits. The fitting uncertainty summaries do not include systematic errors from the continuum or slab-model assumptions.
 
-The repository provides pretrained models for four molecules and two isotopes, real-observation examples, validation workflows, and automated tests. The tracked checkpoints and example spectrum allow `realobs.py` and the fitting notebook to run without the larger training datasets. With the complete local grids, users can run `pt_validation.py` and the training-validation notebook, retrain the surrogates, and extend the package to new molecules or parameter ranges.
+The repository provides checkpoints for 14 species, real-observation examples, validation workflows, and automated tests. The bundled checkpoints and tracked example spectrum allow `examples/dev_v2_realobs.py` and the fitting notebook to run without the larger training datasets. The continuum package bundles its own reference tables and does not need the local `0-Consub/` experiments. With complete local grids, users can run `examples/dev_v2_pt_validation.py` and the training-validation notebook to retrain and validate the surrogates or generate new continuum windows.
 
 # AI usage disclosure
 
-Generative AI tools (Codex 5.5 and Claude Opus 4.7) were used to assist with code review and refactoring, test and documentation updates, and language editing of this paper. The authors reviewed all suggested changes, verified software behavior with the automated tests and example workflows, checked numerical statements against the stored models and validation outputs, and retain responsibility for the correctness of the software and manuscript.
+Generative AI tools (Codex 5.5 and Claude Opus 4.7) were used to assist with code review and refactoring, test and documentation updates, and language editing of this paper. The authors retain responsibility for reviewing the software and manuscript and for the correctness of all scientific claims.
 
 # References

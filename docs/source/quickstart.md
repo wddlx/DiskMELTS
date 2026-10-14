@@ -84,6 +84,18 @@ current working directory. The source CSV may have a header row; the default
 reader skips one row and takes the first two columns as wavelength in µm and
 flux in Jy. Override `skiprows`, `wav_col`, or `flux_col` if needed.
 
+In a notebook, use `plot_saved_observation(..., show=True, savefig=False)`
+to display each stage and combined figure inline without writing PNGs.
+Set `savefig=True` to save them as well. With `savefig=False`, the returned
+entries for the figures are Matplotlib Figure objects; otherwise they are
+paths to the saved PNGs. The numeric plot-data CSV is written in either case.
+
+![Upper Sco J16120505 combined molecular fit and final residual](_static/examples/upper_sco_combined_fit.png)
+
+This combined figure is from {doc}`Example_Fitting <notebooks/Example_Fitting>`.
+The upper panel shows the observed spectrum, total model, and fitted molecular
+components. The lower panel shows the residual after subtracting that model.
+
 For the repository's J16120505 example, run
 `python examples/dev_v2_realobs.py`. The example uses the packaged API.
 

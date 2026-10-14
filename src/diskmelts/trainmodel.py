@@ -20,6 +20,7 @@ which molecules to train, architecture, PCA size, learning rate, etc.
 """
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -36,6 +37,16 @@ from sklearn.model_selection import train_test_split
 # ===========================================================================
 # Grid loading
 # ===========================================================================
+
+def grid_sha256(models):
+    """Fingerprint wavelength and flux arrays in a loaded model grid."""
+    digest = hashlib.sha256()
+    for key in sorted(models):
+        digest.update(np.asarray(key, dtype='<f8').tobytes())
+        for field in ('wavelength', 'flux'):
+            digest.update(np.asarray(models[key][field], dtype='<f8').tobytes())
+    return digest.hexdigest()
+
 
 def load_model_grid(grid_dir, T_range=None, logN_range=None, wav_range=None):
     """
@@ -365,6 +376,7 @@ def pretrain_forward_model(
     temperature_transform='linear',
     shape_edge_ranges=None,
     shape_edge_weight=10.0,
+    training_data_sha256=None,
 ):
     """
     Train (or load) the two-MLP forward model for one molecule.
@@ -421,6 +433,8 @@ def pretrain_forward_model(
             Stored in the checkpoint; inference still accepts temperature in K.
         shape_edge_ranges (list): wavelength intervals emphasized by the edge loss.
         shape_edge_weight (float): extra weight applied within those intervals.
+        training_data_sha256 (str or None): fingerprint of the selected raw grid;
+            reject reuse of a checkpoint trained from different grid values.
 
     Returns:
         (dict): with keys
@@ -622,10 +636,14 @@ def pretrain_forward_model(
             'shape_edge_ranges': [] if shape_edge_ranges is None else
                 [tuple(map(float, r)) for r in shape_edge_ranges],
             'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
+            'training_data_sha256': training_data_sha256,
         }
         incompatible = []
         for key, expected in expected_metadata.items():
             if key not in ckpt:
+                if key == 'training_data_sha256' and expected is not None:
+                    incompatible.append('training_data_sha256: missing from checkpoint')
+                    continue
                 defaults = {'peak_normalization': 'csv', 'shape_loss': 'standardized',
                             'temperature_transform': 'linear',
                             'peak_loss_excludes_dark': False,
@@ -866,6 +884,7 @@ def pretrain_forward_model(
                 'shape_edge_ranges': [] if shape_edge_ranges is None else
                     [tuple(map(float, r)) for r in shape_edge_ranges],
                 'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
+                'training_data_sha256': training_data_sha256,
                 'n_dark_training': int((~peak_tr_valid).sum()),
                 'n_dark_validation': int((~peak_v_valid).sum()),
             }, model_path)

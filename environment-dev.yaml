@@ -1,0 +1,10 @@
+# Tests, documentation, FITS reading, and JupyterLab. Run from the repository root.
+name: diskmelts-dev
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -e .[dev,io,notebooks]
