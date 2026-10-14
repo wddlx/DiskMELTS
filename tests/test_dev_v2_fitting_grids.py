@@ -114,3 +114,42 @@ def test_grid_stage_rejects_unapplied_isotope_constraints(tmp_path):
             output_dir=tmp_path / 'results', detection_screening=False,
         )
     assert not (tmp_path / 'results').exists()
+
+
+def test_repeated_molecule_has_independent_component_bounds(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    observed = 0.7 * spectrum(110, 13.04) + 1.4 * spectrum(140, 13.20)
+    stage = {
+        'name': 'acetylene', 'mol': ['C2H2', 'C2H2'],
+        'component_names': ['C2H2_thin', 'C2H2_thick'],
+        'wavelength_range': (11, 13), 'fit_ranges': (11, 13),
+        'T_bounds': (100, 150),
+        'logN_bounds': {'C2H2_thin': (13.0, 13.1),
+                        'C2H2_thick': (13.15, 13.25)},
+        'loga_bounds': {'C2H2_thin': (-1.0, 0.0),
+                        'C2H2_thick': (0.0, 1.0)},
+    }
+    input_path = tmp_path / 'observation.csv'
+    pd.DataFrame({'wave': wav, 'flux': observed}).to_csv(input_path, index=False)
+    result = fit_observation_grids(
+        input_path, [stage], grid_root=tmp_path / 'grids',
+        output_dir=tmp_path / 'results', sigma_noise=1e-4,
+        detection_screening=False, maxiter=12, popsize=5, n_refine=2,
+    )
+    params = result['fits']['acetylene']['params']
+    assert set(params) == {'C2H2_thin', 'C2H2_thick'}
+    assert 13.0 <= params['C2H2_thin']['logN'] <= 13.1
+    assert 13.15 <= params['C2H2_thick']['logN'] <= 13.25
+    assert 0.1 <= params['C2H2_thin']['A'] <= 1.0
+    assert 1.0 <= params['C2H2_thick']['A'] <= 10.0
+    spectrum_csv = pd.read_csv(result['products']['acetylene']['spectrum'])
+    assert {'C2H2_thin_model', 'C2H2_thick_model'} <= set(spectrum_csv.columns)
+
+
+def test_repeated_grid_molecule_requires_unique_labels(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    with pytest.raises(ValueError, match='component labels must be unique'):
+        fit_grid_stage(
+            wav, spectrum(125, 13.125), ['C2H2', 'C2H2'],
+            (11, 13), (11, 13), grid_root=tmp_path / 'grids',
+        )

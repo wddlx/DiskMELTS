@@ -10,8 +10,11 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-DiskMELTS 2.1 is available on [PyPI](https://pypi.org/project/diskmelts/).
-With Python 3.9 or newer, install it from any directory:
+DiskMELTS 2.1.1 is available on [PyPI](https://pypi.org/project/diskmelts/).
+With Python 3.9 or newer, install it from any directory. These commands use
+`python` in an activated environment; the
+[installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
+shows how to create one on macOS, Linux, Windows, or Conda:
 
 ```bash
 python -m pip install diskmelts
@@ -25,12 +28,9 @@ python -m pip install "diskmelts[io]"            # FITS input
 python -m pip install "diskmelts[io,notebooks]"  # FITS input and JupyterLab
 ```
 
-On Windows, use `py -m pip` if `python -m pip` does not select your intended
-Python. For an isolated environment and platform-specific instructions, see the
-[installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
-for details. The pip package includes the production checkpoints and continuum
-reference tables. Full slab grids for training and direct-grid fitting are
-separate downloads; pass their local path as `grid_root`.
+The pip package includes the production checkpoints and continuum reference
+tables. Full slab grids for training and direct-grid fitting are separate
+downloads; pass their local path as `grid_root`.
 Example notebooks and spectra can be downloaded from the repository when
 needed; they are not installed by pip.
 

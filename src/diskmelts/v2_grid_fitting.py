@@ -58,8 +58,8 @@ def _stage_ranges(fit_ranges, components):
 
 def _components(molecule, h2o_components, component_names):
     molecules = [molecule] if isinstance(molecule, str) else list(molecule)
-    if not molecules or len(molecules) != len(set(molecules)):
-        raise ValueError('molecule must contain distinct molecular names')
+    if not molecules:
+        raise ValueError('molecule must contain at least one molecular name')
     if h2o_components not in (1, 2):
         raise ValueError('h2o_components must be 1 or 2')
     parts = []
@@ -281,10 +281,6 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     noise_scale = float(sigma) * to_reference if sigma is not None else max(
         float(np.std(target)), np.finfo(float).tiny,
     )
-    lo_A, hi_A = 10.0 ** float(loga_bounds[0]), 10.0 ** float(loga_bounds[1])
-    if not 0 < lo_A < hi_A:
-        raise ValueError('loga_bounds must be increasing and finite')
-
     if n_refine < 1:
         raise ValueError('n_refine must be positive')
 
@@ -301,6 +297,14 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     bounds = [(bound_for(T_bounds, part, (100.0, 1400.0)),
                bound_for(logN_bounds, part, default_logN(part)))
               for part in parts]
+    area_bounds = [bound_for(loga_bounds, part, (-2.0, 2.0))
+                   for part in parts]
+    if any(len(pair) != 2 or not np.all(np.isfinite(pair)) or
+           pair[0] >= pair[1] or not 0 < 10.0 ** pair[0] < 10.0 ** pair[1]
+           for pair in area_bounds):
+        raise ValueError('loga_bounds must be increasing and finite')
+    area_lower = np.array([10.0 ** pair[0] for pair in area_bounds])
+    area_upper = np.array([10.0 ** pair[1] for pair in area_bounds])
     molecules = list(dict.fromkeys(part['model_mol'] for part in parts))
     libraries = {}
     for mol in molecules:
@@ -330,7 +334,7 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     def profile_amplitudes(nonlin):
         if (ordered_water and
                 nonlin[2 * water_indices[0]] > nonlin[2 * water_indices[1]]):
-            return np.inf, np.full(n_parts, lo_A)
+            return np.inf, area_lower.copy()
         matrix = templates(nonlin)
         scale = max(float(np.max(np.abs(target))),
                     float(np.max(np.abs(matrix))), np.finfo(float).tiny)
@@ -338,12 +342,12 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
             column = matrix[:, 0] / scale
             denom = float(np.dot(column, column))
             amplitude = (float(np.clip(np.dot(column, target / scale) / denom,
-                                       lo_A, hi_A)) if denom > 0 else lo_A)
+                                       area_lower[0], area_upper[0]))
+                         if denom > 0 else area_lower[0])
             amplitudes = np.array([amplitude])
         else:
             solution = lsq_linear(matrix / scale, target / scale,
-                                  bounds=(np.full(n_parts, lo_A),
-                                          np.full(n_parts, hi_A)))
+                                  bounds=(area_lower, area_upper))
             amplitudes = solution.x
         residual = matrix @ amplitudes - target
         return float(np.dot(residual, residual)), amplitudes
@@ -358,8 +362,8 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                         key=lambda x: profile_amplitudes(x)[0])
     if not candidates:
         raise RuntimeError('grid search found no feasible component ordering')
-    solution_bounds = [entry for pair in bounds
-                       for entry in (pair[0], pair[1], loga_bounds)]
+    solution_bounds = [entry for k, pair in enumerate(bounds)
+                       for entry in (pair[0], pair[1], area_bounds[k])]
     lower = np.array([item[0] for item in solution_bounds], dtype=float)
     upper = np.array([item[1] for item in solution_bounds], dtype=float)
     scales = np.array([
@@ -445,8 +449,8 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                                np.isclose(T, bounds[k][0][1], rtol=0, atol=1e-5)),
             'logN_at_bound': bool(np.isclose(logN, bounds[k][1][0], rtol=0, atol=1e-6) or
                                   np.isclose(logN, bounds[k][1][1], rtol=0, atol=1e-6)),
-            'log10A_at_bound': bool(np.isclose(logA, loga_bounds[0], rtol=0, atol=1e-6) or
-                                    np.isclose(logA, loga_bounds[1], rtol=0, atol=1e-6)),
+            'log10A_at_bound': bool(np.isclose(logA, area_bounds[k][0], rtol=0, atol=1e-6) or
+                                   np.isclose(logA, area_bounds[k][1], rtol=0, atol=1e-6)),
         }
     print(f'  Grid fit: {len(parts)} components, weighted SSE={best_loss:.4g}')
     return {
