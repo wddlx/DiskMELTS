@@ -10,40 +10,29 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-Requires Python 3.9 or newer. Start from a clone of this repository.
-
-### Python environment (macOS, Linux, Windows)
-
-From the repository root, use a native Python 3.10 or 3.11 interpreter to
-create a virtual environment. For FITS input and the example notebooks:
+DiskMELTS 2.1 is available on [PyPI](https://pypi.org/project/diskmelts/).
+With Python 3.9 or newer, install it from any directory:
 
 ```bash
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e ".[io,notebooks]"
-.venv/bin/python -c "import diskmelts; print(diskmelts.__name__)"
+python -m pip install diskmelts
+python -c "import diskmelts; print('DiskMELTS is ready')"
 ```
 
-Use `python3.10` if that is the native Python available on your machine.
-For core fitting and CSV/array inputs only, replace the install command with
-`.venv/bin/python -m pip install -e .`. See the
-[installation guide](docs/source/installation.md) for Windows commands.
+Optional features can be installed in the same way:
 
-### Conda or Mamba
+```bash
+python -m pip install "diskmelts[io]"            # FITS input
+python -m pip install "diskmelts[io,notebooks]"  # FITS input and JupyterLab
+```
 
-The YAML files use Conda only for Python and pip; pip installs the package and
-its declared dependencies. Choose one from the repository root:
-
-| File | Contents |
-| --- | --- |
-| `environment.yaml` | Core package |
-| `environment-notebooks.yaml` | Core package, FITS support, JupyterLab |
-| `environment-dev.yaml` | Notebook environment, tests, documentation tools |
-
-For the notebook setup, run `mamba env create --file environment-notebooks.yaml`
-then `conda activate diskmelts-notebooks`. `conda env create --file` works with
-the same files when using a current Conda release. On Apple Silicon, use a
-native `osx-arm64` installation such as Miniforge; an older Intel Conda can
-still spend a long time solving even these smaller files.
+On Windows, use `py -m pip` if `python -m pip` does not select your intended
+Python. For an isolated environment and platform-specific instructions, see the
+[installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
+for details. The pip package includes the production checkpoints and continuum
+reference tables. Full slab grids for training and direct-grid fitting are
+separate downloads; pass their local path as `grid_root`.
+Example notebooks and spectra can be downloaded from the repository when
+needed; they are not installed by pip.
 
 ## Runtime dependencies
 
@@ -58,10 +47,10 @@ still spend a long time solving even these smaller files.
 
 ## Continuum subtraction
 
-Try the [continuum subtraction notebook](notebooks/Example_Consub.ipynb)
+Try the [continuum subtraction notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Consub.ipynb)
 with the included raw Upper Sco J16120505 spectrum. It demonstrates the
 five-array result and a plot; change `RAW_CSV` to another file in
-[`Realobs_data/Raw_data/`](Realobs_data/Raw_data/) to process another source.
+[`Realobs_data/Raw_data/`](https://github.com/wddlx/DiskMELTS/tree/main/Realobs_data/Raw_data) to process another source.
 
 For a CSV with `wave,flux,err` columns (wavelength in µm and flux/error in the
 same units):
@@ -96,41 +85,51 @@ bundled references without that private directory.
 
 Returned `err` represents measurement/noise error, not correlated continuum
 uncertainty. Broad excluded intervals require inspection. See the
-[continuum guide](docs/source/continuum.md) for presets, regional box sizes,
+[continuum guide](https://diskmelts.readthedocs.io/en/latest/continuum.html) for presets, regional box sizes,
 special regions, FITS input, saving CSVs, and uncertainty diagnostics.
 
 ## Quick fitting example
 
-```python
-from diskmelts import load_fitting_models, load_observed_spectrum, fit_stage
+Use a continuum-subtracted CSV with a header and `wave,flux` as its first two
+columns, with wavelength in µm and flux in Jy. For a runnable example without
+cloning the repository, download the
+[J16120505 spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv)
+as `j16120505_contsub.csv`, or run:
 
-pretrained = load_fitting_models(['H2O'])
+```bash
+curl -L -o j16120505_contsub.csv https://raw.githubusercontent.com/wddlx/DiskMELTS/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv
+```
+
+```python
+from diskmelts import fit_stage, load_fitting_models, load_observed_spectrum
+
+models = load_fitting_models('C2H2')
 
 obs_wav, obs_flux = load_observed_spectrum(
-    'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv'
+    'j16120505_contsub.csv'
 )
 
 fit = fit_stage(
     obs_wav,
     obs_flux,
-    molecule='H2O',
-    wavelength_range=(11.0, 19.0),
-    pretrained=pretrained,
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
+    molecule='C2H2',
+    wavelength_range=(13.0, 15.0),
+    pretrained=models,
+    fit_ranges=(13.5, 14.1),
     distance_pc=122.5,
-    n_samples=20000,
-    n_refine=32,
-    n_top=20,
-    sigma=0.001,
+    n_samples=1024,
+    n_refine=4,
+    n_top=4,
 )
 
-print(fit['params'])
+print(fit['params']['C2H2'])
 ```
 
 You can also read spectra with your own code. DiskMELTS only requires
-one-dimensional `obs_wav` and `obs_flux` arrays.
+one-dimensional `obs_wav` and `obs_flux` arrays. Replace the sample CSV with
+your own file to fit your source; update `distance_pc` and fit intervals.
 
-For a complete staged fit-and-subtract workflow, edit and run:
+For a complete staged fit-and-subtract workflow from a checkout, edit and run:
 
 ```bash
 python examples/dev_v2_realobs.py
@@ -143,17 +142,17 @@ The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
 PCA counts and network layers, are in `diskmelts.MODEL_SPECS` and checked when
 loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
 sets the source distance and makes the returned emitting area physical.
-The [fitting notebook](notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
+The [fitting notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
 be no hotter than C2H2 and gives them the same emitting area. It ties 13CO2
 to CO2 in both temperature and area. Set
 `isotopologue_groups`, `Tshare` (`free`, `equal`, or `less`), and `Ashare` in a
 joint stage to choose those constraints. See the
-[fitting guide](docs/source/quickstart.md) for examples.
+[fitting guide](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for examples.
 
 For an optional fit directly from slab grids, use `fit_grid_stage` or
 `fit_observation_grids` and supply `grid_root='Model_grids'` explicitly. This
 separate method does require the full local grids. See the
-[quick start](docs/source/quickstart.md) for both workflows and saved-result
+[quick start](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for both workflows and saved-result
 plotting.
 
 ## Training and validation data

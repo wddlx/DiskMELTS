@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "diskmelts"
-version = "0.1.0"
+version = "2.1"
 description = "Machine-learning Enabled Line fitting Tool for Spectra of protoplanetary disks"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Chengyan Xie" },
     { name = "Dingshan Deng" },
@@ -16,7 +17,6 @@ authors = [
 keywords = ["astronomy", "protoplanetary disks", "JWST", "spectral fitting", "machine learning"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
@@ -30,6 +30,12 @@ dependencies = [
     "scikit-learn",
     "matplotlib",
 ]
+
+[project.urls]
+Homepage = "https://github.com/wddlx/DiskMELTS"
+Documentation = "https://diskmelts.readthedocs.io/en/latest/"
+Repository = "https://github.com/wddlx/DiskMELTS"
+Issues = "https://github.com/wddlx/DiskMELTS/issues"
 
 [project.optional-dependencies]
 io = ["astropy"]

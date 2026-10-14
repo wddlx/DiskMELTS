@@ -5,7 +5,65 @@ installation targets. The runtime dependencies are NumPy, pandas, SciPy,
 scikit-learn, PyTorch, and matplotlib. Astropy is optional and needed only for
 the FITS-reading helper.
 
-## Install from a checkout
+## Install with pip
+
+Install the published package from any directory; a Git checkout is not
+needed. Using a virtual environment keeps its dependencies separate from
+other Python projects.
+
+On macOS or Linux:
+
+```bash
+python3.11 -m venv diskmelts-env
+source diskmelts-env/bin/activate
+python -m pip install diskmelts
+```
+
+On Windows PowerShell:
+
+```powershell
+py -3.11 -m venv diskmelts-env
+.\diskmelts-env\Scripts\Activate.ps1
+python -m pip install diskmelts
+```
+
+Use `python3.10` or `py -3.10` if Python 3.10 is the native interpreter
+available on your machine.
+
+If you already have the Python environment you want, run just
+`python -m pip install diskmelts` there. To confirm the install:
+
+```bash
+python -c "from diskmelts import load_fitting_models; print(list(load_fitting_models('C2H2')))"
+```
+
+Choose the extras you need:
+
+| Use | Command |
+| --- | --- |
+| CSV or NumPy spectra, fitting, and continuum subtraction | `python -m pip install diskmelts` |
+| FITS input | `python -m pip install "diskmelts[io]"` |
+| FITS input and JupyterLab | `python -m pip install "diskmelts[io,notebooks]"` |
+
+The wheel includes production checkpoints and continuum reference data. You
+provide a spectrum; no model grids are needed for standard fitting. Begin
+with the {doc}`quick start <quickstart>` for your own CSV, or download the
+[J16120505 example CSV](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv)
+without cloning the repository. The `notebooks` extra installs JupyterLab;
+the example notebook files themselves live in the
+[repository](https://github.com/wddlx/DiskMELTS/tree/main/notebooks).
+
+To upgrade a previous installation:
+
+```bash
+python -m pip install --upgrade diskmelts
+```
+
+For direct-grid fitting, download the grids separately and provide
+`grid_root="/path/to/Model_grids"`; see the [quick start](quickstart.md).
+Training also uses `Pretrain_grid/` and its own generated checkpoints.
+
+## Development install from a checkout
 
 Clone the repository and create a virtual environment with Python 3.11. The
 following installs FITS support and JupyterLab for the supplied examples:

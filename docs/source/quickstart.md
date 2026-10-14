@@ -1,10 +1,23 @@
 # Quick Start: subtract the continuum, then fit
 
-# Step 1: subtract the continuum
+Install with `python -m pip install diskmelts`. You can fit your own
+continuum-subtracted spectrum without a repository checkout. For a sample,
+download the
+[J16120505 continuum-subtracted CSV](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv)
+as `j16120505_contsub.csv`, or use:
+
+```bash
+curl -L -o j16120505_contsub.csv https://raw.githubusercontent.com/wddlx/DiskMELTS/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv
+```
+
+The CSV reader uses the first two columns for wavelength (µm) and flux (Jy)
+and skips one header row. The sample's extra `err` and `cont` columns are fine.
+
+## Step 1: prepare the spectrum
 
 Start with the {doc}`continuum subtraction guide <continuum>` or
 {doc}`Example_Consub <notebooks/Example_Consub>` when your spectrum still
-contains its continuum. For an input CSV with `wave,flux,err` columns:
+contains its continuum. For your own input CSV with `wave,flux,err` columns:
 
 ```python
 from diskmelts import consub
@@ -19,31 +32,34 @@ The resulting `wave` and continuum-subtracted `flux` can be passed directly
 to `fit_stage`. The returned `error` is a measurement/noise estimate; it does
 not include correlated continuum uncertainty.
 
-# Step 2: fit one stage
-
-The installed package includes the production v2 checkpoints. Fitting needs
-no local model grids or training tables. Supply the source distance in parsecs.
-If you already have a continuum-subtracted CSV, load it instead of running
-the code above:
+If your spectrum is already continuum-subtracted, load it instead. This line
+uses the downloaded sample; change the path for your own CSV:
 
 ```python
-from diskmelts import load_fitting_models, fit_stage, load_observed_spectrum
+from diskmelts import load_observed_spectrum
+wave, flux = load_observed_spectrum('j16120505_contsub.csv')
+```
 
-wave, flux = load_observed_spectrum('my_continuum_subtracted.csv')
-models = load_fitting_models(['H2O'])
+## Step 2: fit one molecule
+
+The installed package includes the production v2 checkpoints. Fitting needs
+no local model grids or training tables. Run this after either Step 1 path;
+supply your source distance in parsecs when using your own spectrum:
+
+```python
+from diskmelts import load_fitting_models, fit_stage
+
+models = load_fitting_models('C2H2')
 fit = fit_stage(
     wave, flux,
-    molecule='H2O',
-    wavelength_range=(11.0, 19.0),
-    fit_ranges=[(11.0, 12.0), (16.5, 18.5)],
+    molecule='C2H2',
+    wavelength_range=(13.0, 15.0),
+    fit_ranges=(13.5, 14.1),
     pretrained=models,
-    h2o_components=2,
-    component_names=['H2O_warm', 'H2O_hot'],
-    T_bounds={'H2O_warm': (200, 600), 'H2O_hot': (600, 1100)},
-    sigma=0.001,
-    distance_pc=140.0,
+    distance_pc=122.5,
+    n_samples=1024, n_refine=4, n_top=4,
 )
-print(fit['params'])
+print(fit['params']['C2H2'])
 ```
 
 `fit_stage` returns fitted parameters, component spectra, the total model,
