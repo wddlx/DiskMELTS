@@ -30,6 +30,14 @@ def test_notebook_code_cells_compile(path):
             compile("".join(cell["source"]), f"{path.name}:cell-{index}", "exec")
 
 
+@pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK])
+def test_notebook_rejects_incompatible_sklearn(path, monkeypatch):
+    sklearn = pytest.importorskip("sklearn")
+    monkeypatch.setattr(sklearn, "__version__", "0.0")
+    with pytest.raises(RuntimeError, match="require scikit-learn 1.8.0"):
+        exec(_code_cell(_notebook(path), 1), {})
+
+
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
 def test_consub_notebook_reads_public_usco_csv(monkeypatch, start_dir):
     raw_dir = ROOT / "Realobs_data" / "Raw_data"
@@ -46,6 +54,9 @@ def test_consub_notebook_reads_public_usco_csv(monkeypatch, start_dir):
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
 def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
     pytest.importorskip("torch")
+    sklearn = pytest.importorskip("sklearn")
+    # This test checks paths and stage settings; the version guard is tested above.
+    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
     notebook = _notebook(FITTING_NOTEBOOK)
     namespace = {}
 
@@ -65,6 +76,8 @@ def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
 def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir):
     pytest.importorskip("torch")
+    sklearn = pytest.importorskip("sklearn")
+    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
     notebook = _notebook(TRAINING_NOTEBOOK)
     namespace = {}
 
