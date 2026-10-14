@@ -8,6 +8,44 @@ pytest.importorskip('torch')
 from diskmelts import fitting
 
 
+def test_repeated_model_molecule_uses_component_bounds(monkeypatch):
+    wave = np.linspace(13.0, 14.0, 41)
+    bases = (np.exp(-((wave - 13.3) / 0.1) ** 2),
+             np.exp(-((wave - 13.7) / 0.1) ** 2))
+
+    def fake_flux(model, T, logN, A, obs_wav):
+        shape = bases[0] + (logN - 14.0) * bases[1]
+        return A * np.interp(obs_wav, wave, shape)
+
+    monkeypatch.setattr(fitting, '_mol_flux_on_wav', fake_flux)
+    observed = fake_flux(None, 300, 14.5, 0.8, wave) + fake_flux(None, 500, 16.5, 1.5, wave)
+    fit = fitting.fit_molecules(
+        wave, observed, ['C2H2', 'C2H2'], {'C2H2': {'mol': 'C2H2'}},
+        (13.0, 14.0), component_names=['C2H2_thin', 'C2H2_thick'],
+        T_bounds=(200, 600),
+        logN_bounds={'C2H2_thin': (14.0, 15.0),
+                     'C2H2_thick': (16.0, 17.0)},
+        loga_bounds={'C2H2_thin': (-1.0, 0.0),
+                     'C2H2_thick': (0.0, 1.0)},
+        n_samples=16, n_refine=2, n_top=2, seed=7, verbose=False,
+    )
+    params = fit['params']
+    assert set(params) == {'C2H2_thin', 'C2H2_thick'}
+    assert 14.0 <= params['C2H2_thin']['logN'] <= 15.0
+    assert 16.0 <= params['C2H2_thick']['logN'] <= 17.0
+    assert 0.1 <= params['C2H2_thin']['A'] <= 1.0
+    assert 1.0 <= params['C2H2_thick']['A'] <= 10.0
+
+
+def test_repeated_model_molecule_requires_unique_labels():
+    with pytest.raises(ValueError, match='component labels must be unique'):
+        fitting.fit_molecules(
+            np.array([13.0, 14.0]), np.array([1.0, 1.0]),
+            ['C2H2', 'C2H2'], {'C2H2': {}}, (13.0, 14.0),
+            verbose=False,
+        )
+
+
 def test_shared_area_groups_use_one_amplitude_in_joint_fit(monkeypatch):
     wave = np.linspace(13.0, 16.0, 80)
     profiles = {

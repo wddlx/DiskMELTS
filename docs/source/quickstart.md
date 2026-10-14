@@ -104,12 +104,34 @@ Column densities remain independent in every mode.
 
 The same three keys work in a `fit_observation` stage. Each group needs a main
 and at least one distinct rare component; groups cannot overlap. Incompatible
-temperature bounds raise an error. `T_bounds` and `logN_bounds` may differ by
-molecule, while global `loga_bounds` limits fitted areas in log10(au²). If
+temperature bounds raise an error. `T_bounds`, `logN_bounds`, and
+`loga_bounds` may differ by component label or molecule; a tuple applies to
+every component. For a shared-area group, the allowed areas must overlap. If
 detection screening removes a group member, use `detection_screening=False`
 or omit that group. The older `shared_area_groups` option still ties areas
 without specifying a temperature relationship. No constraint spans separate
 stages, because each stage fits the preceding residual.
+
+To fit two components of the same molecule together, repeat its name in
+`mol`, assign unique `component_names`, and key bounds by those labels. This
+works in both `fit_observation` and `fit_observation_grids` stages:
+
+```python
+acetylene_stage = {
+    'name': 'acetylene',
+    'mol': ['C2H2', 'C2H2'],
+    'component_names': ['C2H2_thin', 'C2H2_thick'],
+    'wavelength_range': (12.9, 14.8),
+    'fit_ranges': (12.9, 14.8),
+    'T_bounds': (100, 1400),
+    'logN_bounds': {'C2H2_thin': (13, 18), 'C2H2_thick': (19, 22)},
+    'loga_bounds': {'C2H2_thin': (-4, 2), 'C2H2_thick': (-2, 4)},
+}
+```
+
+Set `detection_screening=False` when you require both components regardless
+of the detection screen. Direct-grid fits also require grid files covering
+the full requested T and logN rectangle.
 
 ## Ordered stages, saved results, and plots
 

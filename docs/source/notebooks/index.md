@@ -8,6 +8,13 @@ does not run the fitting or training cells. The figures below were rendered
 from the included Upper Sco example and the notebook's current constrained
 fitting run.
 
+The fitting and training notebooks load checkpoints containing scikit-learn
+1.8.0 objects. The repository's notebook Conda environment pins that version.
+If you use another Python 3.11+ environment, run
+`python -m pip install scikit-learn==1.8.0` in it and restart its notebook
+kernel before loading the checkpoints. This avoids an unsupported
+cross-version unpickle.
+
 ## 1. Subtract the continuum
 
 {doc}`Example_Consub` reads the raw J16120505 CSV, estimates the continuum,

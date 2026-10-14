@@ -1,207 +1,126 @@
 # Installation
 
-DiskMELTS requires Python 3.9 or newer; Python 3.10 and 3.11 are practical
-installation targets. The runtime dependencies are NumPy, pandas, SciPy,
-scikit-learn, PyTorch, and matplotlib. Astropy is optional and needed only for
-the FITS-reading helper.
+DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/). You do
+not need to clone the repository to fit spectra or subtract a continuum. The
+package requires Python 3.9 or newer. Python 3.11 or 3.12 is a practical
+choice for a new installation.
 
-## Install with pip
+## Install in a new Python environment
 
-Install the published package from any directory; a Git checkout is not
-needed. Using a virtual environment keeps its dependencies separate from
-other Python projects.
+First, check which Python you have. On macOS or Linux run `python3 --version`;
+on Windows run `py --version`. If the command is missing, install Python from
+[python.org](https://www.python.org/downloads/) or use the Conda instructions
+below. If you have several versions, use an installed one throughout the steps
+below. For example, replace `python3` with `python3.11` or `python3.12` if that
+is the version available on your machine. A command such as
+`python3.11` only works when that specific interpreter is installed and on your
+PATH.
 
-On macOS or Linux:
+### macOS or Linux
 
 ```bash
-python3.11 -m venv diskmelts-env
+python3 -m venv diskmelts-env
 source diskmelts-env/bin/activate
 python -m pip install diskmelts
 ```
 
-On Windows PowerShell:
+### Windows PowerShell
 
 ```powershell
-py -3.11 -m venv diskmelts-env
+py -3 -m venv diskmelts-env
 .\diskmelts-env\Scripts\Activate.ps1
 python -m pip install diskmelts
 ```
 
-Use `python3.10` or `py -3.10` if Python 3.10 is the native interpreter
-available on your machine.
+If Windows has several Python versions, use `py -0p` to list them and replace
+`py -3` with a specific installed version, such as `py -3.11`.
 
-If you already have the Python environment you want, run just
-`python -m pip install diskmelts` there. To confirm the install:
+The environment is active when its name appears in your terminal prompt. Use
+`python` for later commands and scripts in that terminal. Run `deactivate` to
+leave the environment.
+
+### If you already use Conda or Mamba
+
+Create a fresh environment without a repository checkout:
 
 ```bash
-python -c "from diskmelts import load_fitting_models; print(list(load_fitting_models('C2H2')))"
+conda create -n diskmelts python=3.11 pip
+conda activate diskmelts
+python -m pip install diskmelts
 ```
 
-Choose the extras you need:
+Use `mamba create` instead of `conda create` if you prefer Mamba. After
+activation, `python` refers to the environment's Python. Run `conda deactivate`
+to leave it. If you already have an environment where you want DiskMELTS,
+activate that environment and run `python -m pip install diskmelts` there.
 
-| Use | Command |
+## Check the installation
+
+With the environment active, run:
+
+```bash
+python --version
+python -c "import diskmelts; print('DiskMELTS is ready')"
+```
+
+The second command should print `DiskMELTS is ready`.
+Use the same environment in your terminal, script, or Jupyter kernel. Restart
+an existing notebook kernel after installing or upgrading the package.
+
+## Choose optional features
+
+The basic install handles CSV or NumPy spectra, continuum subtraction, and
+fitting with the bundled production models. Add an extra only when you need it:
+
+| Need | Command |
 | --- | --- |
-| CSV or NumPy spectra, fitting, and continuum subtraction | `python -m pip install diskmelts` |
-| FITS input | `python -m pip install "diskmelts[io]"` |
-| FITS input and JupyterLab | `python -m pip install "diskmelts[io,notebooks]"` |
+| Read FITS files with the DiskMELTS helper | `python -m pip install "diskmelts[io]"` |
+| FITS support and JupyterLab | `python -m pip install "diskmelts[io,notebooks]"` |
 
-The wheel includes production checkpoints and continuum reference data. You
-provide a spectrum; no model grids are needed for standard fitting. Begin
-with the {doc}`quick start <quickstart>` for your own CSV, or download the
-[J16120505 example CSV](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv)
-without cloning the repository. The `notebooks` extra installs JupyterLab;
-the example notebook files themselves live in the
-[repository](https://github.com/wddlx/DiskMELTS/tree/main/notebooks).
+On Windows PowerShell, the same quoted commands work. The `notebooks` extra
+installs JupyterLab; the example notebook files are in the
+[GitHub repository](https://github.com/wddlx/DiskMELTS/tree/main/notebooks)
+and are not installed by pip.
+For the fitting and training notebooks, use Python 3.11 or newer and also
+install `scikit-learn==1.8.0` in the notebook environment, then restart its kernel;
+the bundled PCA and scaler objects were saved with that version.
 
-To upgrade a previous installation:
+To update an existing installation later, run
+`python -m pip install --upgrade diskmelts` in its active environment.
 
-```bash
-python -m pip install --upgrade diskmelts
-```
+## Your first spectrum
 
-For direct-grid fitting, download the grids separately and provide
-`grid_root="/path/to/Model_grids"`; see the [quick start](quickstart.md).
-Training also uses `Pretrain_grid/` and its own generated checkpoints.
+The package includes 18 production checkpoints and continuum reference data.
+You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
+CSV, subtract a continuum if needed, fit a molecule, and use a
+[downloadable example spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv).
+Ordinary fitting needs neither the repository nor the full slab grids.
 
-## Development install from a checkout
+Full `Model_grids/` data are separate and needed only for direct-grid fitting
+or training. Set `grid_root` to their local directory when using the grid API.
+See {doc}`quickstart` and {doc}`training` for those workflows.
 
-Clone the repository and create a virtual environment with Python 3.11. The
-following installs FITS support and JupyterLab for the supplied examples:
+## For contributors: install from a checkout
+
+Clone the repository only when you want to edit the code or run its example
+notebooks and tests:
 
 ```bash
 git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e ".[io,notebooks]"
-.venv/bin/python -c "import diskmelts; print(diskmelts.__name__)"
-```
-
-Use `python3.10` if that is your native Python. On Apple Silicon, check
-`python3.10 -c "import platform; print(platform.machine())"` (or use your
-Python 3.11 command); it should print `arm64`. An existing Intel Conda does
-not affect `.venv/bin/python` when the environment was created with native
-Python. For core fitting and CSV/array inputs only, install `-e .` instead.
-For FITS without notebooks, install `-e ".[io]"`.
-
-On Windows PowerShell, run the equivalent commands from the repository root:
-
-```powershell
-py -3.11 -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[io,notebooks]"
-.venv\Scripts\python.exe -c "import diskmelts; print(diskmelts.__name__)"
-```
-
-Use the virtual environment's Python for later scripts. If you prefer to type
-`python` and `pytest` directly, activate it with `source .venv/bin/activate`
-on macOS/Linux or `.venv\Scripts\Activate.ps1` in PowerShell. The `.venv/`
-directory is ignored by Git.
-
-Run installation commands in the environment used by your Python interpreter or
-Jupyter kernel. Restart existing notebook kernels after upgrading the package.
-Editable installation makes source changes available without reinstalling;
-changes to dependencies or package metadata may still require reinstalling.
-
-## Conda environment
-
-The three YAML files keep Conda's solve small by requesting only Python and
-pip. pip then installs the local package and its dependencies from
-`pyproject.toml`. From the repository root, choose one file:
-
-| File | Environment name | Installed features |
-| --- | --- | --- |
-| `environment.yaml` | `diskmelts` | Core fitting and continuum subtraction |
-| `environment-notebooks.yaml` | `diskmelts-notebooks` | Core, FITS, JupyterLab |
-| `environment-dev.yaml` | `diskmelts-dev` | Core, FITS, JupyterLab, tests and docs |
-
-For most users of the supplied notebooks, the command is:
-
-```bash
-mamba env create --file environment-notebooks.yaml
-conda activate diskmelts-notebooks
-python -c "import diskmelts; print(diskmelts.__name__)"
-```
-
-With a current Conda release,
-`conda env create --file environment-notebooks.yaml` works too. Substitute
-another filename and its environment name from the table when you need a
-different feature set. All
-three files use conda-forge only and install DiskMELTS in editable mode.
-Select the matching environment as your Jupyter kernel when using notebooks.
-
-On Apple Silicon, use a native `osx-arm64` Conda installation such as Miniforge.
-Older Intel (`osx-64`) Anaconda installations run through Rosetta and may solve
-slowly, even with the smaller YAML files. Miniforge includes Mamba and has a
-native Apple Silicon installer. If you already have native Python 3.10 or
-3.11, the virtual environment commands above need no Conda installation.
-
-Check the active Conda platform with `conda info` (look for `platform: osx-arm64`)
-before creating the environment. An existing Intel Conda installation can be
-kept separately; the new installation does not need to replace it.
-
-If an existing Intel macOS environment reports that PyTorch was compiled with
-NumPy 1.x but NumPy 2 is installed, update the editable package from the
-repository root:
-
-```bash
-conda run -n diskmelts-notebooks python -m pip install -e ".[io,notebooks]"
-```
-
-DiskMELTS now requires NumPy 1.26 or newer but below 2 on Intel macOS, where the available PyTorch
-2.2 wheels need NumPy 1.x. The same package metadata allows NumPy 2 on other
-platforms with compatible PyTorch wheels. Restart the Jupyter kernel after
-updating the environment.
-
-On Linux and Windows, the core pip install uses the PyTorch wheel selected for
-that platform. For a particular NVIDIA CUDA or AMD ROCm build, choose the
-command for your system from the
-[PyTorch installation selector](https://pytorch.org/get-started/locally/)
-before installing DiskMELTS.
-
-## What is bundled?
-
-The installed package contains:
-
-- 18 production checkpoints: five H2O tiles and one checkpoint for each of thirteen
-  other molecules, plus the H2O bank manifest;
-- four continuum reference presets and the curated correction windows.
-
-Ordinary model fitting and continuum subtraction need no `Model_grids/`,
-`Pretrain_grid/`, or repository example directory. You supply your spectrum.
-The checkout additionally contains example spectra, scripts, and notebooks.
-
-The full slab grids are optional local data, excluded from Git and distributions.
-`Model_grids/` is required for direct-grid fitting, retraining, or generating
-new continuum reference windows. `Pretrain_grid/` is used by training and
-related validation. The top-level `Trained_model/` holds optional local training
-outputs; normal inference loads checkpoints inside the installed package.
-
-## Verify and test
-
-```bash
-python -c "import diskmelts; print(diskmelts.consub.calculate.__name__)"
-```
-
-For development, from the repository root:
-
-```bash
-python -m pip install -e ".[dev,io]"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev,io,notebooks]"
 pytest
 ```
 
-`pytest` runs the distributed tests in `tests/`, including the continuum
-API and bundled-reference checks. The private `0-Consub/`
-directory is ignored by Git and is not required for installation or testing.
-If you have that local directory, run its additional continuum tests explicitly:
+On Windows, create the environment with `py -3 -m venv .venv` and activate it
+with `.\.venv\Scripts\Activate.ps1`. The repository also provides Conda YAML
+files for local development. These install DiskMELTS in editable mode from the
+checkout; they are not needed for a PyPI installation.
 
-```bash
-pytest -q 0-Consub/consub_test.py
-```
-
-## Build the documentation
-
-```bash
-python -m pip install -r docs/requirements.txt
-sphinx-build -E -W -b html docs/source docs/_build/html
-```
-
-The build does not download external API inventories.
+On Linux or Windows, pip selects the PyTorch wheel for the platform. If you
+need a particular CUDA or ROCm build, follow the
+[PyTorch installation selector](https://pytorch.org/get-started/locally/)
+before installing DiskMELTS. On Intel macOS, DiskMELTS constrains NumPy below
+2 for compatibility with the available PyTorch wheels.

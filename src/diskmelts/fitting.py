@@ -519,6 +519,9 @@ def _build_components(molecules, h2o_components=1, component_names=None):
             raise ValueError('component_names must match the number of fitted components')
         for comp, label in zip(components, component_names):
             comp['label'] = label
+    labels = [comp['label'] for comp in components]
+    if len(labels) != len(set(labels)):
+        raise ValueError('component labels must be unique; name repeated molecules with component_names')
     return components
 
 
@@ -697,8 +700,9 @@ def fit_molecules(
             molecule names or component labels.
         logN_bounds (tuple or dict or None): default (14, 19).  A dict can use
             molecule names or component labels.
-        loga_bounds (tuple or None): bounds on log10(A).  None means A >= 0
-            with no upper bound; otherwise bounded least squares is used.
+        loga_bounds (tuple, dict, or None): bounds on log10(A), optionally
+            keyed by component label or molecule. None means A >= 0 with no
+            upper bound. Shared-area groups use the intersection of bounds.
         shared_area_groups (list of sequences or None): component labels whose
             emitting areas must be equal, e.g. [('C2H2', '13C12CH2')]. Each
             component may appear in at most one group. Unlisted components
@@ -914,10 +918,22 @@ def fit_molecules(
                 )
         return physical
 
-    if loga_bounds is None:
-        A_bounds = (0.0, np.inf)
-    else:
-        A_bounds = (10.0 ** float(loga_bounds[0]), 10.0 ** float(loga_bounds[1]))
+    component_area_bounds = []
+    for comp in components:
+        pair = _bounds_for(comp, loga_bounds, None)
+        if pair is None:
+            component_area_bounds.append((0.0, np.inf))
+            continue
+        if (len(pair) != 2 or not np.all(np.isfinite(pair)) or
+                pair[0] >= pair[1] or not 0 < 10.0 ** pair[0] < 10.0 ** pair[1]):
+            raise ValueError(f'{comp["label"]} needs finite increasing loga_bounds')
+        component_area_bounds.append((10.0 ** pair[0], 10.0 ** pair[1]))
+    area_lower = np.array([max(component_area_bounds[i][0] for i in members)
+                           for members in area_group_members])
+    area_upper = np.array([min(component_area_bounds[i][1] for i in members)
+                           for members in area_group_members])
+    if np.any(area_lower >= area_upper):
+        raise ValueError('shared area group has no overlap in loga_bounds')
 
     def _matrix_for(params):
         cols = []
@@ -939,12 +955,11 @@ def fit_molecules(
         flux_scale = max(float(np.max(np.abs(obs_fit))),
                          float(np.max(np.abs(M_group))), np.finfo(float).tiny)
         M_scaled, obs_scaled = M_group / flux_scale, obs_fit / flux_scale
-        if np.isfinite(A_bounds[1]):
+        if np.any(area_lower > 0) or np.any(np.isfinite(area_upper)):
             res = scipy.optimize.lsq_linear(
                 M_scaled,
                 obs_scaled,
-                bounds=(np.full(len(area_group_members), A_bounds[0]),
-                        np.full(len(area_group_members), A_bounds[1])),
+                bounds=(area_lower, area_upper),
             )
             A_group = np.asarray(res.x, dtype=np.float64)
         else:

@@ -8,3 +8,5 @@ dependencies:
   - pip
   - pip:
       - -e .[io,notebooks]
+      # Production checkpoints contain scikit-learn 1.8.0 PCA/scaler objects.
+      - scikit-learn==1.8.0

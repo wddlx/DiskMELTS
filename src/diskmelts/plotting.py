@@ -270,7 +270,8 @@ def plot_fit(
         ax_bot.text(0.99, 0.92, rf'$\chi^2_{{\rm red}} = {chi2_red:.2f}$',
                     transform=ax_bot.transAxes, ha='right', va='top', fontsize=9)
 
-        plt.tight_layout()
+        fig.subplots_adjust(left=0.11, right=0.98, bottom=0.10, top=0.92,
+                            hspace=0.08)
         if show:
             plt.show()
         if save_path is not None:
