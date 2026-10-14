@@ -66,7 +66,7 @@ where $B_\nu$ is the Planck function. All molecular line parameters are taken fr
 
 Because $A$ is a linear scaling factor, the deployed surrogate grids are restricted over $(T,\log_{10}N)$. The trained domain is $T=100$--$1400$ K, with $\log_{10}(N/\mathrm{cm}^{-2})=13.0$--19.0 for H$_2$O and 13.0--19.5 for the other molecules. The reference distance is 140 pc. At a supplied source distance $d$, the model flux scales as $A(140\,\mathrm{pc}/d)^2$. Custom grids can be trained separately.
 
-The bundled release has five overlapping H$_2$O wavelength checkpoints and one checkpoint for each of ten other molecules. Each checkpoint uses 30 principal components of the normalized spectral shape:
+The bundled release has five overlapping H$_2$O wavelength checkpoints and one checkpoint for each of thirteen other molecules. Each checkpoint uses 30 principal components of the normalized spectral shape:
 
 | Molecule | Wavelength coverage ($\mu$m) |
 |:---------|:-----------------------------|
@@ -115,7 +115,7 @@ which quantifies flux-level agreement between the surrogate and the original sla
 
 Comparisons with published LTE slab-model results can be generated from user-supplied tables. As with standard slab retrievals, $N$ and $A$ can exhibit strong degeneracies, particularly for optically thin emission; their product $N\times A$ traces the total number of emitting molecules. For blended C$_2$H$_2$ and HCN emission, multiple parameter combinations can produce comparably good fits. The fitting uncertainty summaries do not include systematic errors from the continuum or slab-model assumptions.
 
-The repository provides checkpoints for 11 species, real-observation examples, validation workflows, and automated tests. The bundled checkpoints and tracked example spectrum allow `examples/dev_v2_realobs.py` and the fitting notebook to run without the larger training datasets. The continuum package bundles its own reference tables and does not need the local `0-Consub/` experiments. With complete local grids, users can run `examples/dev_v2_pt_validation.py` and the training-validation notebook to retrain and validate the surrogates or generate new continuum windows.
+The repository provides checkpoints for 14 species, real-observation examples, validation workflows, and automated tests. The bundled checkpoints and tracked example spectrum allow `examples/dev_v2_realobs.py` and the fitting notebook to run without the larger training datasets. The continuum package bundles its own reference tables and does not need the local `0-Consub/` experiments. With complete local grids, users can run `examples/dev_v2_pt_validation.py` and the training-validation notebook to retrain and validate the surrogates or generate new continuum windows.
 
 # AI usage disclosure
 

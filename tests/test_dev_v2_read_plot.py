@@ -59,6 +59,33 @@ def test_saved_stage_can_be_replotted_without_models(saved_observation, tmp_path
                                plotted['residual'])
 
 
+def test_saved_stage_can_show_without_saving_figures(saved_observation, tmp_path,
+                                                     monkeypatch):
+    from matplotlib.figure import Figure
+    from matplotlib import pyplot as plt
+    from diskmelts import v2_read_plot
+
+    shown = []
+    monkeypatch.setattr(v2_read_plot.plt, 'show', lambda: shown.append(True))
+    spectrum, _ = saved_observation
+    figure_dir = tmp_path / 'figures'
+    figures = plot_saved_observation(
+        spectrum, tmp_path,
+        [{'name': 'C2H2', 'wavelength_range': (11, 13),
+          'fit_ranges': [(11, 12), (12, 13)]}],
+        name='source', figure_dir=figure_dir,
+        active_stages=['C2H2'], line_free_windows=(), skiprows=1,
+        show=True, savefig=False,
+    )
+    assert len(shown) == 2
+    assert isinstance(figures['C2H2'], Figure)
+    assert isinstance(figures['combined'], Figure)
+    assert not figure_dir.exists()
+    assert figures['plot_data'].is_file()
+    plt.close(figures['C2H2'])
+    plt.close(figures['combined'])
+
+
 def test_saved_stage_rejects_inconsistent_running_spectrum(saved_observation, tmp_path):
     _, running_path = saved_observation
     running = pd.read_csv(running_path)

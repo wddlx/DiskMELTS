@@ -22,7 +22,9 @@ classifiers = [
 ]
 dependencies = [
     "torch",
-    "numpy",
+    # Intel macOS wheels stop at PyTorch 2.2, whose NumPy bridge needs NumPy 1.x.
+    "numpy>=1.26,<2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "numpy; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "pandas",
     "scipy",
     "scikit-learn",
@@ -31,7 +33,9 @@ dependencies = [
 
 [project.optional-dependencies]
 io = ["astropy"]
-dev = ["pytest", "sphinx", "sphinx-rtd-theme", "myst-parser"]
+dev = ["pytest", "sphinx", "furo", "myst-parser", "sphinx-design",
+       "nbsphinx", "nbsphinx-link"]
+notebooks = ["jupyterlab", "ipykernel"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -6,31 +6,44 @@ mid-infrared spectra of protoplanetary disks. Its fitting workflow loads
 pretrained molecular surrogate models and retrieves temperature (`T`), column
 density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
+**Documentation:** [diskmelts.readthedocs.io](https://diskmelts.readthedocs.io/en/latest/)
+
 ## Installation
 
 Requires Python 3.9 or newer. Start from a clone of this repository.
 
-### Conda
+### Python environment (macOS, Linux, Windows)
 
-From the repository root, create and activate the supplied environment. It
-installs DiskMELTS in editable mode, with FITS and notebook support:
-
-```bash
-conda env create --file environment.yaml
-conda activate diskmelts
-```
-
-### Custom environment
-
-In an existing Python environment, run from the repository root:
+From the repository root, use a native Python 3.10 or 3.11 interpreter to
+create a virtual environment. For FITS input and the example notebooks:
 
 ```bash
-python -m pip install -e .
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e ".[io,notebooks]"
+.venv/bin/python -c "import diskmelts; print(diskmelts.__name__)"
 ```
 
-For FITS reading, use `python -m pip install -e ".[io]"`. CSV and array inputs
-need no optional dependencies. Select this same environment as your Jupyter kernel;
-restart an existing kernel after upgrading the package.
+Use `python3.10` if that is the native Python available on your machine.
+For core fitting and CSV/array inputs only, replace the install command with
+`.venv/bin/python -m pip install -e .`. See the
+[installation guide](docs/source/installation.md) for Windows commands.
+
+### Conda or Mamba
+
+The YAML files use Conda only for Python and pip; pip installs the package and
+its declared dependencies. Choose one from the repository root:
+
+| File | Contents |
+| --- | --- |
+| `environment.yaml` | Core package |
+| `environment-notebooks.yaml` | Core package, FITS support, JupyterLab |
+| `environment-dev.yaml` | Notebook environment, tests, documentation tools |
+
+For the notebook setup, run `mamba env create --file environment-notebooks.yaml`
+then `conda activate diskmelts-notebooks`. `conda env create --file` works with
+the same files when using a current Conda release. On Apple Silicon, use a
+native `osx-arm64` installation such as Miniforge; an older Intel Conda can
+still spend a long time solving even these smaller files.
 
 ## Runtime dependencies
 
@@ -44,6 +57,11 @@ restart an existing kernel after upgrading the package.
 | `matplotlib` | Plotting |
 
 ## Continuum subtraction
+
+Try the [continuum subtraction notebook](notebooks/Example_Consub.ipynb)
+with the included raw Upper Sco J16120505 spectrum. It demonstrates the
+five-array result and a plot; change `RAW_CSV` to another file in
+[`Realobs_data/Raw_data/`](Realobs_data/Raw_data/) to process another source.
 
 For a CSV with `wave,flux,err` columns (wavelength in µm and flux/error in the
 same units):
@@ -148,6 +166,13 @@ IRIS grids to the intended physical domain. H2O uses five overlapping
 wavelength checkpoints covering 4.9–25.0 µm, all sharing `T=100–1400 K` and
 `logN=13–19`. Primary carbon-bearing and rarer molecules use one checkpoint
 each, the same temperature range, and `logN=13–19.5`.
+The new C2HD checkpoint spans 11.5–20.5 µm to include its 19 µm band;
+CO17O and CO18O span 13–18 µm. The updated 13C12CH2 checkpoint keeps
+11.5–17 µm. To retrain these four grids, run:
+
+```bash
+DISKMELTS_MOLECULES=13C12CH2,C2HD,CO17O,CO18O python examples/dev_v2_pt_validation.py
+```
 
 Five to ten percent of complete `(T, logN)` grid spectra are excluded before
 PCA or neural-network training. They are used to select the PCA dimension and

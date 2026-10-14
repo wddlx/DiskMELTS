@@ -1,6 +1,10 @@
 sphinx>=7.0
-sphinx-rtd-theme
+furo
 myst-parser
+sphinx-design
+nbsphinx
+nbsphinx-link
+ipykernel
 numpy
 pandas
 matplotlib

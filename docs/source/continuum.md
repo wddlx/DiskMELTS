@@ -16,8 +16,12 @@ Nonfinite flux becomes NaN in the result.
 
 ## Read, calculate, and plot
 
-This notebook example reads a CSV containing `wave,flux,err` columns. `err` may
-be omitted from the file; in that case the helper returns `None` for error.
+The runnable `notebooks/Example_Consub.ipynb` in the repository reads the
+included raw Upper Sco J16120505 CSV from `Realobs_data/Raw_data/`. It selects
+4.9–25 µm, uses the `ttauri` preset and robust method, and excludes 12–13 µm
+from the continuum fit. Change `RAW_CSV` to another source to repeat the
+workflow. A CSV needs `wave,flux` columns; `err` is optional, in which case
+the helper returns `None` for error.
 
 ```python
 import diskmelts
@@ -153,8 +157,33 @@ spectra may have too few pixels in the narrow preset windows, particularly for
 
 For support masks and indicative continuum uncertainties, the advanced
 `diskmelts.consub.subtract_continuum()` interface returns a diagnostic DataFrame;
-`plot_consub()` shades its weakly supported regions. The five-array `plot()`
-cannot reconstruct those masks. See {doc}`api/consub` for these helpers.
+`plot_consub()` marks calibration pixels in green, shades excluded intervals in
+light red, and shades weakly supported regions in orange. Green points are
+the `reference_mask` pixels used to calibrate the continuum correction. Red
+marks the `excluded` pixels omitted by the requested `exclude` intervals;
+red shading appears only when an exclusion is supplied. Orange marks
+`weak_support`: wavelengths too far from the nearest reference pixel relative
+to the local smoothing width or correction scale, or beyond the reference
+coverage. The continuum there relies more on interpolation or extrapolation,
+so its placement is less reliable; `cont_err` is `NaN` for those pixels.
+Orange and red may overlap. For example:
+
+![Upper Sco J16120505 raw spectrum, continuum, calibration pixels, and continuum-subtracted residual](_static/examples/upper_sco_continuum.png)
+
+The figure above comes from {doc}`Example_Consub <notebooks/Example_Consub>`
+with `exclude=None`. Its orange spans are weak-support regions; no light red
+spans appear because this run requested no exclusions.
+
+```python
+diagnostics = diskmelts.consub.subtract_continuum(
+    wav, flux, error=err, preset="ttauri", exclude=[[12.0, 13.0]],
+)
+fig = diskmelts.consub.plot_consub(diagnostics, ranges=[(5, 12), (12, 25)])
+```
+
+The five-array `plot()` cannot reconstruct those masks. See
+{doc}`api/consub` for these helpers and `notebooks/Example_Consub.ipynb` for
+the Upper Sco CSV example.
 
 ## Research and checks
 

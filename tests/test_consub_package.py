@@ -67,3 +67,33 @@ def test_plot_optional_inputs_and_save_directory(tmp_path):
     fig = consub.plot(*result, savedir=directory, ranges=[(5, 12), (12, 25)])
     assert (directory / "continuum.png").is_file()
     plt.close(fig)
+
+
+def test_diagnostic_plot_marks_calibration_pixels_and_exclusions():
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_rgba
+
+    wave, flux, error = _spectrum()
+    result = consub.subtract_continuum(
+        wave, flux, error=error, preset="ttauri", exclude=[[12.4, 12.6]],
+    )
+    assert result.reference_mask.any()
+    assert result.excluded.any()
+
+    fig = consub.plot_consub(result, ranges=(11, 14))
+    try:
+        upper, lower = fig.axes
+        calibration = next(collection for collection in upper.collections
+                           if collection.get_label() == "Calibration pixels")
+        plotted_reference = result.reference_mask.to_numpy() & (wave >= 11) & (wave <= 14)
+        np.testing.assert_allclose(
+            calibration.get_offsets()[:, 0],
+            wave[plotted_reference],
+        )
+        assert any(patch.get_label() == "Excluded" for patch in upper.patches)
+        assert any(patch.get_label() == "Weak continuum support"
+                   for patch in upper.patches)
+        assert any(np.allclose(patch.get_facecolor()[:3], to_rgba("lightcoral")[:3])
+                   for patch in lower.patches)
+    finally:
+        plt.close(fig)

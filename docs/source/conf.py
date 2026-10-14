@@ -21,6 +21,9 @@ extensions = [
     'sphinx.ext.viewcode',      # add [source] links to API pages
     'sphinx.ext.mathjax',       # render the equations used in the guides
     'myst_parser',              # write docs in Markdown
+    'sphinx_design',            # guide cards on the landing page
+    'nbsphinx',                 # render tutorial notebooks
+    'nbsphinx_link',            # use the maintained notebooks/ files directly
 ]
 
 # ---------------------------------------------------------------------------
@@ -55,6 +58,7 @@ napoleon_use_rtype         = True
 # MyST-Parser settings
 # ---------------------------------------------------------------------------
 myst_enable_extensions = ['colon_fence', 'dollarmath']
+nbsphinx_execute = 'never'     # fitting/training examples are expensive or need local grids
 source_suffix = {
     '.rst': 'restructuredtext',
     '.md':  'markdown',
@@ -63,13 +67,11 @@ source_suffix = {
 # ---------------------------------------------------------------------------
 # HTML output
 # ---------------------------------------------------------------------------
-html_theme = 'sphinx_rtd_theme'
-html_theme_options = {
-    'navigation_depth': 3,
-    'titles_only':      False,
-}
+html_theme = 'furo'
+html_title = 'DiskMELTS documentation'
+html_static_path = ['_static']
 
 # ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']

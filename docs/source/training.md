@@ -49,6 +49,22 @@ inside these domains:
 | C2H6 | 9–15 | 100–1400 | 13–19.5 |
 | C2H4 | 8–14 | 100–1400 | 13–19.5 |
 | CH4 | 5–9 | 100–1400 | 13–19.5 |
+| C2HD | 11.5–20.5 | 100–1400 | 13–19.5 |
+| CO17O, CO18O | 13–18 | 100–1400 | 13–19.5 |
+
+The new C2HD grid has its strongest sampled band around 14.5 µm and a
+substantial second band near 19 µm, particularly in cooler models. Its
+temperature, column-density, network, and holdout settings follow 13C12CH2,
+while the wavelength window includes both bands. Sampled CO17O and CO18O
+grids peak near 14.5–15.5 µm. Their 13–18 µm windows retain the weaker
+high-temperature wings beyond the initial 13.5–17.5 µm estimate.
+
+The four grids were trained with 2,528 spectra and validated on 281 excluded
+spectra each. A 30-component PCA was selected for every checkpoint. On the
+sampled noiseless holdouts, the median spectral reconstruction error relative
+to the model peak was 0.16% (13C12CH2), 0.17% (C2HD), 0.22% (CO17O), and
+0.21% (CO18O). Full fits can exchange column density against emitting area;
+these reconstruction values are not observational parameter uncertainties.
 
 No spectra outside the listed T/logN domains enter the pretraining CSV, PCA,
 scalers, or neural networks. All five H2O wavelength models use the same
@@ -69,8 +85,11 @@ tuned independently for each wavelength checkpoint; carbon/rarer species are
 tuned once for their single checkpoint.
 
 New checkpoints store the selected PCA object, input/output scalers, wavelength
-axis, molecule name, physical ranges, and PCA count. They can therefore be
-loaded later with only `model_paths`.
+axis, molecule name, physical ranges, PCA count, and a fingerprint of the input
+grid. If the grid values change, the script rebuilds the pretraining table and
+rejects reuse of a checkpoint made from the old grid. Choose a new checkpoint
+path for retraining after such a change.
+Checkpoints can be loaded later with only `model_paths`.
 
 ## Water normalization and optimization
 
@@ -141,6 +160,16 @@ run_rarer = True
 `run_rarer` selects `C4H2`, `HC3N`, `C2H6`, `C2H4`, and `CH4`.
 For an isolated run without editing the file, set a comma-separated override,
 for example `DISKMELTS_MOLECULES=HCN,C2H2`.
+To train the updated 13C12CH2 grid and the three new molecules together:
+
+```bash
+DISKMELTS_MOLECULES=13C12CH2,C2HD,CO17O,CO18O python examples/dev_v2_pt_validation.py
+```
+
+The updated 13C12CH2 output uses the local `_single_v2_newgrid` directory so
+the previous local checkpoint remains available for comparison. Production
+checkpoints are copied into `src/diskmelts/models/Trained_model/` only after
+holdout validation.
 The default `DISKMELTS_V2_MODE=train` runs this molecule workflow. The
 `water_compare` and `water_seam_trial` modes above run separately and ignore
 the molecule switches.

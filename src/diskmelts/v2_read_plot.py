@@ -99,12 +99,18 @@ def plot_saved_observation(input_path, result_dir, stages, *, name=None,
                            figure_dir=None, active_stages=None,
                            line_free_windows=LINE_FREE_WINDOWS,
                            sigma_noise=None, skiprows=1, delimiter=',',
-                           wav_col=0, flux_col=1):
-    """Read stage CSVs, validate their subtraction sequence, and save v1-style plots.
+                           wav_col=0, flux_col=1, show=False, savefig=True):
+    """Read saved stage CSVs, validate their sequence, and plot the fits.
 
     ``active_stages`` should be the names returned by a fresh fitting run. If
     omitted, stages with complete saved CSV products are plotted. This also
     permits replotting without loading a trained checkpoint or fitting again.
+
+    ``show=True`` calls ``plt.show()`` for each stage and combined figure, which
+    displays them inline in a notebook. ``savefig=False`` avoids writing PNGs;
+    the returned dict then contains open Figure objects for those entries
+    instead of paths. Numeric plot-data CSV output is still written. Defaults
+    preserve the batch behavior of saving and closing figures.
     """
     input_path = Path(input_path)
     result_dir = Path(result_dir)
@@ -124,7 +130,18 @@ def plot_saved_observation(input_path, result_dir, stages, *, name=None,
     configured = {stage['name'] for stage in stages}
     if requested is not None and not requested <= configured:
         raise ValueError(f'Unknown active stages: {sorted(requested - configured)}')
-    figure_dir.mkdir(parents=True, exist_ok=True)
+    if savefig:
+        figure_dir.mkdir(parents=True, exist_ok=True)
+
+    def finish_figure(fig, path):
+        if savefig:
+            fig.savefig(path, dpi=200, bbox_inches='tight')
+        if show:
+            plt.show()
+        if savefig:
+            plt.close(fig)
+            return path
+        return fig
 
     prior_residual = obs_flux.copy()
     cumulative = np.zeros_like(obs_flux)
@@ -164,11 +181,10 @@ def plot_saved_observation(input_path, result_dir, stages, *, name=None,
         fig = plot_fit(
             obs_wav, fit['obs_flux'], fit, sigma=sigma_noise,
             fit_ranges=fit_ranges, wav_plot_range=wav_plot_range,
-            name=f'{source_name}_{stage_name}', save_path=str(figure_path),
+            name=f'{source_name}_{stage_name}', save_path=None,
             params=fit['params'], uncertainty=fit['uncertainty'], show=False,
         )
-        plt.close(fig)
-        figures[stage_name] = figure_path
+        figures[stage_name] = finish_figure(fig, figure_path)
 
     if fits:
         final_path = result_dir / f'{source_name}_final_running.csv'
@@ -196,10 +212,9 @@ def plot_saved_observation(input_path, result_dir, stages, *, name=None,
             fit_ranges=combined_ranges,
             wav_plot_range=(min(lo for lo, _ in displayed_ranges),
                             max(hi for _, hi in displayed_ranges)),
-            name=source_name, save_path=str(combined_path),
+            name=source_name, save_path=None,
             params=params, uncertainty=uncertainty, show=False,
         )
-        plt.close(fig)
-        figures['combined'] = combined_path
+        figures['combined'] = finish_figure(fig, combined_path)
         figures['plot_data'] = plot_data_path
     return figures

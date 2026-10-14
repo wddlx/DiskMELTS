@@ -6,12 +6,32 @@ DiskMELTS subtracts spectral continua and uses neural surrogates to retrieve
 molecular gas parameters — temperature ($T$), column density ($\log N$), and
 emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
 
-Most users should start with the pretrained models bundled in the installed
-package. The checkpoints are self-contained and require no large local training
-grids or pretraining CSV files.
+Most users can start with the pretrained models bundled in the installed
+package. The checkpoints require no local training grids.
 
-For raw spectra, start with {doc}`continuum` and `diskmelts.consub.calculate`.
-For spectra that are already continuum-subtracted, start with {doc}`quickstart`.
+::::{grid} 1 2 2 2
+:gutter: 2
+
+:::{grid-item-card} Raw spectrum → continuum subtraction
+:link: notebooks/Example_Consub
+:link-type: doc
+
+Work through the Upper Sco J16120505 spectrum. See calibration pixels,
+excluded wavelengths, and regions where the continuum has weak support.
+:::
+
+:::{grid-item-card} Continuum-subtracted spectrum → molecular fit
+:link: notebooks/Example_Fitting
+:link-type: doc
+
+Fit the bundled models in stages and inspect each component and the
+combined residual.
+:::
+
+::::
+
+Start with {doc}`installation`, browse the {doc}`notebook gallery <notebooks/index>`,
+or read the detailed {doc}`continuum` and {doc}`quickstart` guides.
 
 ---
 
@@ -33,6 +53,7 @@ area scaling solved analytically during the fit.
 :caption: User Guide
 
 installation
+notebooks/index
 quickstart
 continuum
 training

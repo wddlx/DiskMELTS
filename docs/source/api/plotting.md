@@ -46,3 +46,6 @@ Visualisation functions for fitting and validation results.
 | `C2H6` | blue (`C0`) |
 | `C2H4` | olive |
 | `CH4` | pink |
+| `C2HD` | teal |
+| `CO17O` | slate blue |
+| `CO18O` | goldenrod |

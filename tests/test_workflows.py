@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 FITTING_NOTEBOOK = ROOT / "notebooks" / "Example_Fitting.ipynb"
 TRAINING_NOTEBOOK = ROOT / "notebooks" / "Example_Training_Validation.ipynb"
+CONSUB_NOTEBOOK = ROOT / "notebooks" / "Example_Consub.ipynb"
 
 def _notebook(path):
     return json.loads(path.read_text())
@@ -22,11 +23,24 @@ def _code_cell(notebook, index):
     return "".join(notebook["cells"][index]["source"])
 
 
-@pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK])
+@pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK, CONSUB_NOTEBOOK])
 def test_notebook_code_cells_compile(path):
     for index, cell in enumerate(_notebook(path)["cells"]):
         if cell["cell_type"] == "code":
             compile("".join(cell["source"]), f"{path.name}:cell-{index}", "exec")
+
+
+@pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
+def test_consub_notebook_reads_public_usco_csv(monkeypatch, start_dir):
+    raw_dir = ROOT / "Realobs_data" / "Raw_data"
+    assert len(list(raw_dir.glob("*_1d_v9.0.csv"))) == 14
+    namespace = {}
+    monkeypatch.chdir(start_dir)
+    exec(_code_cell(_notebook(CONSUB_NOTEBOOK), 1), namespace)
+
+    assert namespace["RAW_CSV"] == raw_dir / "j16120505_1d_v9.0.csv"
+    assert len(namespace["wav"]) == len(namespace["flux"]) == len(namespace["error"])
+    assert len(namespace["wav"]) > 10_000
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
@@ -69,11 +83,25 @@ def test_production_checkpoint_files_are_bundled():
     from diskmelts import MODEL_SPECS
     from diskmelts.v2_fitting import MODEL_ROOT
 
-    assert len(MODEL_SPECS) == 11
+    assert len(MODEL_SPECS) == 14
     for molecule, spec in MODEL_SPECS.items():
         path = MODEL_ROOT / spec['path']
         assert path.is_file(), f'missing bundled checkpoint for {molecule}: {path}'
-    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 15
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 18
+
+
+def test_new_grid_checkpoints_load_and_generate_finite_spectra():
+    import numpy as np
+    from diskmelts import load_fitting_models
+    from diskmelts.fitting import generate_spectrum
+
+    molecules = ('13C12CH2', 'C2HD', 'CO17O', 'CO18O')
+    models = load_fitting_models(molecules)
+    for molecule in molecules:
+        flux = generate_spectrum(400., 16., 1., models[molecule])
+        assert flux.size == models[molecule]['wav'].size
+        assert np.isfinite(flux).all()
+        assert flux.max() > 0
 
 
 def test_gitignore_separates_fitting_assets_from_training_data():
@@ -91,6 +119,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
                  'src/diskmelts/consub/regions/ttauri.csv',
                  'src/diskmelts/consub/cont_ranges.csv',
                  'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',
+        'Realobs_data/Raw_data/j16120505_1d_v9.0.csv',
                  'notebooks/Example_Fitting.ipynb',
                  'figures/realobs_validations/H2O_parameter_comparison.pdf'):
         result = subprocess.run(['git', 'check-ignore', '--no-index', '-q', path],
@@ -107,7 +136,10 @@ def test_git_index_contains_fitting_distribution_only():
     from diskmelts import MODEL_SPECS
 
     for spec in MODEL_SPECS.values():
-        assert f"src/diskmelts/models/{spec['path']}" in tracked
+        path = f"src/diskmelts/models/{spec['path']}"
+        assert (ROOT / path).is_file()
+        assert subprocess.run(['git', 'check-ignore', '--no-index', '-q', path],
+                              cwd=ROOT).returncode == 1
     from diskmelts.consub._core import HERE, PRESETS
 
     for preset in PRESETS:
