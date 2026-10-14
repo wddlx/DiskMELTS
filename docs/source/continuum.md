@@ -35,6 +35,11 @@ fig = diskmelts.consub.plot(
 )
 ```
 
+After inspecting the residual, continue with the {doc}`fitting quick start
+<quickstart>` or {doc}`Example_Fitting <notebooks/Example_Fitting>`. The latter
+uses an included continuum-subtracted Upper Sco CSV and ties each illustrated
+rare isotopologue to its main species in temperature and area.
+
 The FITS helper reads extension 1 columns `wavelength`, `fluxdensity`, and
 `fluxdensity_stddev`, matching the supplied USco/PPan files. FITS reading requires
 the optional `io` extra; array and CSV workflows do not. For other FITS layouts,

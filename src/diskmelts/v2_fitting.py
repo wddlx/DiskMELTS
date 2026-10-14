@@ -195,7 +195,9 @@ def fit_observation(input_path, stages, *, name=None, root=None,
     Each stage specifies ``name``, ``mol``, ``wavelength_range``, and
     ``fit_ranges``. A stage may contain multiple molecules or fit windows.
     Optional stage keys include ``detect_peaks``, ``h2o_components``,
-    ``component_names``, and bounds passed to ``fit_stage``.
+    ``component_names``, ``shared_area_groups``, ``isotopologue_groups``,
+    ``Tshare``, ``Ashare``, and bounds passed to
+    ``fit_stage``.
     """
     model_root = MODEL_ROOT if root is None else Path(root)
     input_path = Path(input_path)
@@ -262,6 +264,9 @@ def fit_observation(input_path, stages, *, name=None, root=None,
             T_bounds=stage.get('T_bounds', {mol: MODEL_SPECS[mol]['T_bounds'] for mol in detected}),
             logN_bounds=stage.get('logN_bounds', {mol: MODEL_SPECS[mol]['logN_bounds'] for mol in detected}),
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
+            shared_area_groups=stage.get('shared_area_groups'),
+            isotopologue_groups=stage.get('isotopologue_groups'),
+            Tshare=stage.get('Tshare'), Ashare=stage.get('Ashare'),
             n_samples=n_samples, sample_method=sample_method,
             n_refine=n_refine, n_top=n_top, sigma=sigma_noise, seed=seed,
             distance_pc=distance_pc,

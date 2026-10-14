@@ -53,9 +53,9 @@ area scaling solved analytically during the fit.
 :caption: User Guide
 
 installation
+continuum
 notebooks/index
 quickstart
-continuum
 training
 ```
 
@@ -63,10 +63,10 @@ training
 :maxdepth: 2
 :caption: API Reference
 
-api/trainmodel
+api/consub
 api/fitting
 api/v2
-api/consub
+api/trainmodel
 api/validation
 api/plotting
 ```

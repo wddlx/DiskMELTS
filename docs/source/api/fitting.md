@@ -23,6 +23,15 @@ compatibility options for legacy checkpoints.
 `model_paths` may also point to a segmented model-bank JSON manifest. DiskMELTS
 then blends overlapping tiles while fitting one shared physical parameter set.
 
+For a joint fit of main and rare isotopologues, `fit_molecules` accepts
+`isotopologue_groups=[('C2H2', '13C12CH2')]`, `Tshare=['equal']`, and
+`Ashare=[True]`. The first label is the main species. Each group can instead
+use `Tshare='less'` (every rare temperature at most the main temperature) or
+`'free'`; column densities stay independent. Constraints are enforced during
+both global sampling and local refinement. The earlier `shared_area_groups`
+option remains available for area ties alone. See the
+{doc}`quick start <../quickstart>` for a complete example and bounds.
+
 ```python
 from diskmelts import load_fitting_models
 pretrained = load_fitting_models(['H2O'])

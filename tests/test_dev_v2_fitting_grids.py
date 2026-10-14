@@ -96,3 +96,21 @@ def test_fixed_area_is_excluded_from_covariance(tmp_path):
     assert details['log10A_fit_sigma'] == 0
     assert details['T_total_sigma'] >= 25
     assert details['logN_total_sigma'] >= 0.125
+
+
+def test_grid_stage_rejects_unapplied_isotope_constraints(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    input_path = tmp_path / 'observation.csv'
+    pd.DataFrame({'wave': wav, 'flux': spectrum(113, 13.07)}).to_csv(
+        input_path, index=False,
+    )
+    stages = [{'name': 'carbon', 'mol': ['C2H2', '13C12CH2'],
+               'wavelength_range': (11, 13), 'fit_ranges': (11, 13),
+               'isotopologue_groups': [('C2H2', '13C12CH2')],
+               'Tshare': ['less'], 'Ashare': [True]}]
+    with pytest.raises(ValueError, match='does not support.*Tshare'):
+        fit_observation_grids(
+            input_path, stages, grid_root=tmp_path / 'grids',
+            output_dir=tmp_path / 'results', detection_screening=False,
+        )
+    assert not (tmp_path / 'results').exists()

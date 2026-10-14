@@ -1,16 +1,30 @@
-# Quick Start: fit an observed spectrum
+# Quick Start: subtract the continuum, then fit
 
-The installed `diskmelts` package includes the production v2 checkpoints. A
-model fit needs no `Model_grids/`, `Pretrain_grid/`, training script, or network
-configuration file. Inputs are a continuum-subtracted spectrum in Jy and its
-source distance in parsecs. Run this example from a writable working directory.
+# Step 1: subtract the continuum
 
-If your spectrum still includes its continuum, first use
-`diskmelts.consub.calculate` as described in {doc}`continuum`. Its returned
-`wav` and `consub` arrays can be passed directly to `fit_stage` below. Its `err`
-array can be passed as `sigma`, but does not include continuum uncertainty.
+Start with the {doc}`continuum subtraction guide <continuum>` or
+{doc}`Example_Consub <notebooks/Example_Consub>` when your spectrum still
+contains its continuum. For an input CSV with `wave,flux,err` columns:
 
-## One stage
+```python
+from diskmelts import consub
+
+raw_wave, raw_flux, raw_error = consub.read_spectrum('my_raw_spectrum.csv')
+wave, flux, error, continuum, baseline = consub.calculate(
+    raw_wave, raw_flux, raw_error, preset='ttauri',
+)
+```
+
+The resulting `wave` and continuum-subtracted `flux` can be passed directly
+to `fit_stage`. The returned `error` is a measurement/noise estimate; it does
+not include correlated continuum uncertainty.
+
+# Step 2: fit one stage
+
+The installed package includes the production v2 checkpoints. Fitting needs
+no local model grids or training tables. Supply the source distance in parsecs.
+If you already have a continuum-subtracted CSV, load it instead of running
+the code above:
 
 ```python
 from diskmelts import load_fitting_models, fit_stage, load_observed_spectrum
@@ -41,13 +55,54 @@ molecule-to-ranges mapping. Every fit interval must lie within
 PCA, and network settings; the loader verifies them. Only requested models are
 loaded.
 
+## Isotopologue temperature and area constraints
+
+Fit the main and rare isotopologues in the **same stage**. The first label
+in each `isotopologue_groups` entry is the main species. `Tshare` and `Ashare`
+have one entry per group:
+
+```python
+models = load_fitting_models(['C2H2', '13C12CH2'])
+fit = fit_stage(
+    wave, flux,
+    molecule=['C2H2', '13C12CH2'],
+    wavelength_range=(11.5, 17.0),
+    fit_ranges=(12.9, 16.25),
+    pretrained=models,
+    isotopologue_groups=[('C2H2', '13C12CH2')],
+    Tshare=['equal'], Ashare=[True],
+    T_bounds={'C2H2': (300, 900), '13C12CH2': (300, 900)},
+    logN_bounds={'C2H2': (14, 19), '13C12CH2': (13, 18)},
+    loga_bounds=(-2, 2),
+    distance_pc=140.0,
+)
+```
+
+`Tshare='equal'` fits one temperature for a group. `Tshare='less'` enforces
+each rare species' temperature to be no greater than the main species'
+temperature; it does not order the rare species among themselves.
+`Tshare='free'` leaves their temperatures independent. These modes appear in
+a list, such as `Tshare=['less', 'equal']` for two groups. `Ashare=[True]`
+fits one emitting area for the group; `False` leaves areas independent.
+Column densities remain independent in every mode.
+
+The same three keys work in a `fit_observation` stage. Each group needs a main
+and at least one distinct rare component; groups cannot overlap. Incompatible
+temperature bounds raise an error. `T_bounds` and `logN_bounds` may differ by
+molecule, while global `loga_bounds` limits fitted areas in log10(au²). If
+detection screening removes a group member, use `detection_screening=False`
+or omit that group. The older `shared_area_groups` option still ties areas
+without specifying a temperature relationship. No constraint spans separate
+stages, because each stage fits the preceding residual.
+
 ## Ordered stages, saved results, and plots
 
 ```python
 from pathlib import Path
 from diskmelts import fit_observation, plot_saved_observation
 
-source = Path('my_continuum_subtracted.csv')
+# This configuration follows notebooks/Example_Fitting.ipynb (J16120505).
+source = Path('Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv')
 stages = [
     {
         'name': 'water', 'mol': 'H2O',
@@ -58,20 +113,30 @@ stages = [
         'T_bounds': {'H2O_warm': (200, 600), 'H2O_hot': (600, 1100)},
     },
     {
-        'name': 'carbon', 'mol': ['C2H2', 'HCN'],
+        'name': 'carbon', 'mol': ['C2H2', 'HCN', '13C12CH2'],
         'wavelength_range': (11.5, 17.0),
-        'fit_ranges': (12.9, 16.25),
+        'fit_ranges': (12.9, 14.8),
+        'isotopologue_groups': [('C2H2', '13C12CH2')],
+        'Tshare': ['less'], 'Ashare': [True],
+    },
+    {
+        'name': 'CO2', 'mol': ['CO2', '13CO2', 'HC3N'],
+        'wavelength_range': (11.5, 17.0),
+        'fit_ranges': [(14.8, 15.2), (16.1, 16.4)],
+        'isotopologue_groups': [('CO2', '13CO2')],
+        'Tshare': ['equal'], 'Ashare': [True],
     },
 ]
-output = Path('results/my_source')
+output = Path('realobs_results/notebook_v2_tied/J16120505')
 result = fit_observation(
-    source, stages, name='my_source', output_dir=output,
+    source, stages, name='J16120505', output_dir=output,
     distance_pc=122.5, detection_screening=False,
+    n_samples=4096, n_refine=12, n_top=10, seed=42,
 )
 figures = plot_saved_observation(
-    source, output, stages, name='my_source',
-    figure_dir='figures/my_source', active_stages=result['fits'],
-    sigma_noise=result['sigma_noise'],
+    source, output, stages, name='J16120505',
+    active_stages=result['fits'], sigma_noise=result['sigma_noise'],
+    show=True, savefig=False,
 )
 ```
 
@@ -79,8 +144,9 @@ The stages run in order. Each stage fits the previous stage's residual and
 writes parameter, spectrum, and running-residual CSVs. The plotter checks the
 saved subtraction sequence and creates stage and combined figures. It can be
 called later without loading checkpoints or rerunning optimization. Set
-`output_dir` and `figure_dir` explicitly; otherwise fit CSVs go under the
-current working directory. The source CSV may have a header row; the default
+`output_dir` explicitly; otherwise fit CSVs go under the current working
+directory. Set `figure_dir` when saving figures. The source CSV may have a
+header row; the default
 reader skips one row and takes the first two columns as wavelength in µm and
 flux in Jy. Override `skiprows`, `wav_col`, or `flux_col` if needed.
 
@@ -90,11 +156,12 @@ Set `savefig=True` to save them as well. With `savefig=False`, the returned
 entries for the figures are Matplotlib Figure objects; otherwise they are
 paths to the saved PNGs. The numeric plot-data CSV is written in either case.
 
-![Upper Sco J16120505 combined molecular fit and final residual](_static/examples/upper_sco_combined_fit.png)
+![Upper Sco J16120505 constrained carbon isotopologue fit](_static/examples/upper_sco_carbon_tied_fit.png)
 
-This combined figure is from {doc}`Example_Fitting <notebooks/Example_Fitting>`.
-The upper panel shows the observed spectrum, total model, and fitted molecular
-components. The lower panel shows the residual after subtracting that model.
+This carbon-stage figure is from
+{doc}`Example_Fitting <notebooks/Example_Fitting>`. Its parameter box shows
+that 13C12CH2 is no hotter than C2H2 and shares its area; their
+column densities differ. The lower panel shows the residual for that stage.
 
 For the repository's J16120505 example, run
 `python examples/dev_v2_realobs.py`. The example uses the packaged API.
@@ -117,13 +184,19 @@ the package and are **not** consulted by model fitting.
 ```python
 from diskmelts import fit_observation_grids, plot_saved_observation
 
+grid_stages = [
+    {key: value for key, value in stage.items()
+     if key not in ('isotopologue_groups', 'Tshare', 'Ashare',
+                    'shared_area_groups')}
+    for stage in stages
+]
 result = fit_observation_grids(
-    source, stages, name='my_source',
+    source, grid_stages, name='my_source',
     grid_root='Model_grids', output_dir='results/my_source_grids',
     distance_pc=122.5,
 )
 plot_saved_observation(
-    source, 'results/my_source_grids', stages, name='my_source',
+    source, 'results/my_source_grids', grid_stages, name='my_source',
     figure_dir='figures/my_source_grids', active_stages=result['fits'],
 )
 ```
