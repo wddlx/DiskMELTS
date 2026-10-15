@@ -71,6 +71,13 @@ molecule-to-ranges mapping. Every fit interval must lie within
 PCA, and network settings; the loader verifies them. Only requested models are
 loaded.
 
+For C6H6 and C3H4, load `['C6H6', 'C3H4']` and fit them in separate stages
+with `wavelength_range` `(13.0, 17.0)` and `(15.0, 18.0)`, respectively.
+The cool C6H6 grids peak near 14.84 µm, so include that region in its
+`fit_ranges` if your observation covers it. The bundled C6H6 checkpoint is
+trained for `T=100–675 K`; C3H4 covers `T=100–1400 K`. Both cover
+`logN=13–19.5`. Fit hotter C6H6 with the direct grid workflow below.
+
 ## Isotopologue temperature and area constraints
 
 Fit the main and rare isotopologues in the **same stage**. The first label
@@ -218,6 +225,32 @@ and degeneracies require caution.
 
 The separate grid API requires local slab CSVs. They are **not** included in
 the package and are **not** consulted by model fitting.
+
+For C6H6 and C3H4, use the same stage dictionaries for grid fitting with
+`grid_root='Model_grids'`, provided both local grid directories exist. Grid
+fitting reads the complete spectra for each requested T/logN point and rejects
+nonfinite flux values. Set `sigma_noise` or choose `line_free_windows` outside
+the C3H4 feature near 15.71–15.81 µm when estimating noise for that stage.
+
+```python
+from diskmelts import fit_observation, fit_observation_grids
+
+new_stages = [
+    {'name': 'c6h6', 'mol': 'C6H6',
+     'wavelength_range': (13.0, 17.0), 'fit_ranges': (14.5, 15.2)},
+    {'name': 'c3h4', 'mol': 'C3H4',
+     'wavelength_range': (15.0, 18.0), 'fit_ranges': (15.7, 15.9)},
+]
+model_fits = fit_observation(
+    source, new_stages, output_dir='results/new_models',
+    distance_pc=122.5, detection_screening=False,
+)
+grid_fits = fit_observation_grids(
+    source, new_stages, grid_root='Model_grids',
+    output_dir='results/new_grids', distance_pc=122.5,
+    detection_screening=False,
+)
+```
 
 ```python
 from diskmelts import fit_observation_grids, plot_saved_observation

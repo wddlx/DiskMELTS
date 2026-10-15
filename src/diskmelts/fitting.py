@@ -1347,14 +1347,14 @@ def save_fitted_comparison(csv_path, source_name, all_fits):
 
     def _v(comp, key):
         if comp not in all_params:
-            return ''
+            return np.nan
         return round(all_params[comp][key], 4)
 
     def _e(comp, key, which):
         if comp not in all_unc:
-            return ''
+            return np.nan
         v = all_unc[comp].get(key, {}).get(which, float('nan'))
-        return round(v, 4) if np.isfinite(v) else ''
+        return round(v, 4) if np.isfinite(v) else np.nan
 
     row = {
         'Source':               source_name,

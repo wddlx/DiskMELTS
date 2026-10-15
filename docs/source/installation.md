@@ -90,7 +90,8 @@ To update an existing installation later, run
 
 ## Your first spectrum
 
-The package includes 18 production checkpoints and continuum reference data.
+The package includes 20 production checkpoints for 16 species and continuum
+reference data.
 You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
 CSV, subtract a continuum if needed, fit a molecule, and use a
 [downloadable example spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv).

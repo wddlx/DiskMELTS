@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -53,3 +55,26 @@ def test_save_running_spectrum(tmp_path):
     assert list(df.columns) == ["wave", "residual", "cumulative_model"]
     assert len(df) == 50
     assert df["wave"].iloc[0] == pytest.approx(11.0)
+
+
+def test_save_fitted_comparison_updates_missing_numeric_fields(tmp_path):
+    pytest.importorskip("torch")
+    from diskmelts import save_fitted_comparison
+
+    path = tmp_path / "comparison.csv"
+    water = {"water": {"params": {
+        "H2O_warm": {"logN": 17.0, "T": 400.0, "log10A": 1.0},
+    }}}
+    carbon = {"carbon": {"params": {
+        "C2H2": {"logN": 18.0, "T": 600.0, "log10A": 2.0},
+    }}}
+    save_fitted_comparison(path, "source", water)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        save_fitted_comparison(path, "source", carbon)
+
+    df = pd.read_csv(path)
+    assert len(df) == 1
+    assert pd.isna(df.loc[0, "H2O_N_warm"])
+    assert pd.isna(df.loc[0, "C2H2_N_err_low"])
+    assert df.loc[0, "C2H2_N"] == pytest.approx(18.0)
