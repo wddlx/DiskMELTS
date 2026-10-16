@@ -96,11 +96,11 @@ def test_production_checkpoint_files_are_bundled():
     from diskmelts import MODEL_SPECS
     from diskmelts.v2_fitting import MODEL_ROOT
 
-    assert len(MODEL_SPECS) == 14
+    assert len(MODEL_SPECS) == 16
     for molecule, spec in MODEL_SPECS.items():
         path = MODEL_ROOT / spec['path']
         assert path.is_file(), f'missing bundled checkpoint for {molecule}: {path}'
-    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 18
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 20
 
 
 def test_new_grid_checkpoints_load_and_generate_finite_spectra():
@@ -108,7 +108,7 @@ def test_new_grid_checkpoints_load_and_generate_finite_spectra():
     from diskmelts import load_fitting_models
     from diskmelts.fitting import generate_spectrum
 
-    molecules = ('13C12CH2', 'C2HD', 'CO17O', 'CO18O')
+    molecules = ('13C12CH2', 'C2HD', 'CO17O', 'CO18O', 'C6H6', 'C3H4')
     models = load_fitting_models(molecules)
     for molecule in molecules:
         flux = generate_spectrum(400., 16., 1., models[molecule])

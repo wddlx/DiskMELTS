@@ -10,7 +10,8 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-DiskMELTS 2.1.1 is available on [PyPI](https://pypi.org/project/diskmelts/).
+DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/).
+The C6H6 and C3H4 checkpoints are included starting with version 2.1.2.
 With Python 3.9 or newer, install it from any directory. These commands use
 `python` in an activated environment; the
 [installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
@@ -157,9 +158,9 @@ plotting.
 
 ## Training and validation data
 
-`Model_grids/` and `Pretrain_grid/` are intentionally ignored by Git because
-they contain the full local training data. The generated checkpoint directories
-under the top-level `Trained_model/` are also optional; the package bundles
+Generated data under `Model_grids/` and `Pretrain_grid/` are intentionally
+ignored by Git because they contain the full local training data. Generated
+checkpoint directories under the top-level `Trained_model/` are also optional; the package bundles
 only the production checkpoints needed for v2 fitting. To run
 `examples/dev_v2_pt_validation.py` or
 `notebooks/Example_Training_Validation.ipynb`, place the complete model grids
@@ -170,7 +171,8 @@ The maintained v2 workflow uses a hybrid design after restricting the expanded
 IRIS grids to the intended physical domain. H2O uses five overlapping
 wavelength checkpoints covering 4.9–25.0 µm, all sharing `T=100–1400 K` and
 `logN=13–19`. Primary carbon-bearing and rarer molecules use one checkpoint
-each, the same temperature range, and `logN=13–19.5`.
+each and `logN=13–19.5`; C6H6 is limited to `T=100–675 K`, while the others
+use `T=100–1400 K`.
 The new C2HD checkpoint spans 11.5–20.5 µm to include its 19 µm band;
 CO17O and CO18O span 13–18 µm. The updated 13C12CH2 checkpoint keeps
 11.5–17 µm. To retrain these four grids, run:
@@ -178,6 +180,13 @@ CO17O and CO18O span 13–18 µm. The updated 13C12CH2 checkpoint keeps
 ```bash
 DISKMELTS_MOLECULES=13C12CH2,C2HD,CO17O,CO18O python examples/dev_v2_pt_validation.py
 ```
+
+C6H6 and C3H4 also have bundled fitting checkpoints. The C6H6 checkpoint
+covers 13–17 µm and 100–675 K; C3H4 covers 15–18 µm and 100–1400 K. Load
+either by name with `load_fitting_models`. Direct grid fitting
+uses the same names with local `Model_grids/C6H6/` and `Model_grids/C3H4/`
+files. See the [training guide](https://diskmelts.readthedocs.io/en/latest/training.html)
+for peak audits and retraining commands.
 
 Five to ten percent of complete `(T, logN)` grid spectra are excluded before
 PCA or neural-network training. They are used to select the PCA dimension and

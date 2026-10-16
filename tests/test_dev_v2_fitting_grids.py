@@ -14,12 +14,13 @@ from diskmelts.v2_grid_fitting import (
 )
 
 
-def _small_grid(tmp_path):
-    grid_dir = tmp_path / 'grids' / 'C2H2'
+def _small_grid(tmp_path, molecule='C2H2', wavelength_range=(11.0, 13.0)):
+    grid_dir = tmp_path / 'grids' / molecule
     grid_dir.mkdir(parents=True)
-    wav = np.linspace(11.0, 13.0, 60)
+    lo, hi = wavelength_range
+    wav = np.linspace(lo, hi, 60)
     basis = np.stack([np.exp(-((wav - center) / 0.09) ** 2)
-                      for center in (11.3, 12.0, 12.7)])
+                      for center in (lo + 0.3, (lo + hi) / 2, hi - 0.3)])
 
     def spectrum(T, logN):
         return 0.01 * (basis[0] + (1 + (T - 100) / 25) * basis[1]
@@ -31,6 +32,25 @@ def _small_grid(tmp_path):
                 grid_dir / f'T{T}N{logN}.csv', index=False,
             )
     return wav, spectrum
+
+
+@pytest.mark.parametrize('molecule,wavelength_range', [
+    ('C6H6', (13.0, 17.0)),
+    ('C3H4', (15.0, 18.0)),
+])
+def test_new_molecules_fit_from_direct_grids(tmp_path, molecule,
+                                             wavelength_range):
+    wav, spectrum = _small_grid(tmp_path, molecule, wavelength_range)
+    observed = spectrum(113.0, 13.07)
+    fit = fit_grid_stage(
+        wav, observed, molecule, wavelength_range, wavelength_range,
+        grid_root=tmp_path / 'grids', T_bounds=(100, 150),
+        logN_bounds=(13, 13.25), sigma=1e-4,
+        maxiter=20, popsize=5, n_refine=2,
+    )
+    assert molecule in fit['params']
+    assert np.isfinite(fit['model_flux']).all()
+    assert np.linalg.norm(fit['residual']) < np.linalg.norm(observed)
 
 
 def test_grid_fit_and_saved_errors(tmp_path):

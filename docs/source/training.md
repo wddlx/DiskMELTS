@@ -11,7 +11,7 @@ They are not read by `load_fitting_models` or `fit_observation`.
 
 ## Local-only data
 
-The following directories are intentionally ignored by Git:
+The following local directories are intentionally ignored by Git:
 
 ```text
 Model_grids/
@@ -23,6 +23,13 @@ Place each molecule's slab-model CSV files under:
 ```text
 Model_grids/<molecule>/
 ```
+
+If you have the local `Generating-Grids.py` and `generate_grids_sig2.slurm`
+scripts, submit the SLURM script from `Model_grids/` to generate 2.0 km/s
+grids under `Model_grids/<molecule>_sig2/`. Those scripts and generated grids
+are local files and are not included in Git or the pip package. The
+direct-grid fitter looks for `<grid_root>/<molecule>/`, so choose a grid root
+with that layout when fitting the new grids.
 
 Grid files must use names such as `T500N17.0.csv` and contain `wave` and `Line`
 columns. The v2 workflow writes a domain-restricted training table:
@@ -51,6 +58,60 @@ inside these domains:
 | CH4 | 5–9 | 100–1400 | 13–19.5 |
 | C2HD | 11.5–20.5 | 100–1400 | 13–19.5 |
 | CO17O, CO18O | 13–18 | 100–1400 | 13–19.5 |
+| C6H6 | 13–17 | 100–675 | 13–19.5 |
+| C3H4 | 15–18 | 100–1400 | 13–19.5 |
+
+## C6H6 and C3H4 checkpoints
+
+Across the full C6H6 grids, strongest peaks span 13.42–14.85 µm. The cool
+100–675 K subset peaks at 14.84–14.85 µm; its checkpoint retains the
+13–17 µm window used for the earlier comparison. C3H4 peaks at
+15.71–15.81 µm within its 15–18 µm window. C6H6 uses 1,145 training spectra
+and 127 separate holdouts
+with 30 PCA components; C3H4 uses 2,528 training spectra and 281 holdouts
+with 75 components. Retrain from local grids with:
+
+```bash
+python examples/train_band_checkpoint.py C6H6 13 17 --t-min 100 --t-max 675 --pca-candidates 10 15 20 25 30
+python examples/train_band_checkpoint.py C3H4 15 18 --pca-candidates 10 15 20 25 30 50 75
+```
+
+Median reconstruction error relative to the grid peak is 0.051% for C6H6
+(maximum 0.263%) and 0.29% for C3H4 (maximum 0.68%). A C6H6 trial limited
+to 100–600 K had 0.060% median error. Extending it to 800 K introduced a
+sharp spectral change at 700 K: holdouts at 700–800 K had 7.45% median error
+and 12.02% maximum error. Use direct grid fitting for hotter C6H6 rather than
+extrapolating the bundled checkpoint. These numbers measure spectra, not
+uncertainty in fitted parameters.
+
+Use `--audit-only` to inspect peak positions before training, or `--tune-only`
+to also compare PCA sizes without starting neural-network training. The
+checkpoints under `src/diskmelts/models/Trained_model/` are bundled for model
+fitting. Direct grid fitting uses separate local `Model_grids/C6H6/` and
+`Model_grids/C3H4/` directories. In the supplied C6H6 grids, some high-column
+files had nonfinite flux; those entries must be replaced or regenerated before
+fitting those column densities.
+
+## Separate C2H2 6–9 µm checkpoint
+
+Use the separate band trainer to make a 6–9 µm checkpoint without replacing
+the production C2H2 model:
+
+```bash
+python examples/train_band_checkpoint.py C2H2 6 9
+```
+
+Pass `--audit-only` to inspect signal counts and peak wavelengths before
+training. In the local grids used for this run, C2H2's 6–9 µm peaks lie at
+7.32–7.81 µm. The trainer stops if every selected spectrum is zero. This run
+uses T=100–1400 K and logN=13–19.5, keeps 10% of complete grid spectra out of
+training, and reports
+reconstruction errors on that holdout.
+
+New checkpoints are written under `Trained_model/<molecule>_w<range>_v2/`,
+with training tables in `Pretrain_grid/` and validation summaries under
+`figures/validation/`. Those directories are local and ignored by Git; these
+checkpoints are not automatically included in the pip package.
 
 The new C2HD grid has its strongest sampled band around 14.5 µm and a
 substantial second band near 19 µm, particularly in cooler models. Its

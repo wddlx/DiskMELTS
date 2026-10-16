@@ -34,7 +34,8 @@ CARBON_RANGES = {
     'HC3N': (13.0, 18.0), 'C2H6': (9.0, 15.0),
     'C2H4': (8.0, 14.0), 'CH4': (5.0, 9.0),
     'C2HD': (11.5, 20.5), 'CO17O': (13.0, 18.0),
-    'CO18O': (13.0, 18.0),
+    'CO18O': (13.0, 18.0), 'C6H6': (13.0, 17.0),
+    'C3H4': (15.0, 18.0),
 }
 MODEL_SPECS = {
     'H2O': {
@@ -49,9 +50,9 @@ MODEL_SPECS = {
         mol: {
             'path': f'Trained_model/{mol}_single_v2/net_{mol}_forward.pt',
             'wavelength_ranges': (wav_range,),
-            'T_bounds': (100.0, 1400.0),
+            'T_bounds': (100.0, 675.0) if mol == 'C6H6' else (100.0, 1400.0),
             'logN_bounds': (13.0, 19.5),
-            'n_pca': 30,
+            'n_pca': 75 if mol == 'C3H4' else 30,
             'hidden': (64, 128, 64),
         }
         for mol, wav_range in CARBON_RANGES.items()
