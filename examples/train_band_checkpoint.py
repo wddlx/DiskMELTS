@@ -67,7 +67,7 @@ def main():
     if tag in {'.', '..'} or not re.fullmatch(r'[A-Za-z0-9_.-]+', tag):
         parser.error('tag must be a simple directory name')
 
-    grid_dir = ROOT / 'Model_grids' / args.molecule
+    grid_dir = ROOT / 'Model_grids' / 'sigma0' / args.molecule
     if not grid_dir.is_dir():
         raise FileNotFoundError(f'Missing grid directory: {grid_dir}')
     models = load_model_grid(

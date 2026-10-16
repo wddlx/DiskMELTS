@@ -1136,7 +1136,7 @@ if __name__ == '__main__':
     # -- Paths ---------------------------------------------------------------
     _here        = os.path.dirname(os.path.abspath(__file__))
     ROOT_DIR     = os.path.join(_here, '..', '..')              # project root
-    GRID_ROOT    = os.path.join(ROOT_DIR, 'Model_grids')
+    GRID_ROOT    = os.path.join(ROOT_DIR, 'Model_grids', 'sigma0')
     DATA_DIR     = os.path.join(ROOT_DIR, 'Pretrain_grid')
     MODEL_DIR    = os.path.join(ROOT_DIR, 'Trained_model')
     FIG_DIR      = os.path.join(ROOT_DIR, 'figures', 'trainmodel')

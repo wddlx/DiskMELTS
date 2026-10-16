@@ -15,21 +15,24 @@ The following local directories are intentionally ignored by Git:
 
 ```text
 Model_grids/
+  sigma0/
+    <molecule>/
+  sigma2/
+    <molecule>/
 Pretrain_grid/
 ```
 
 Place each molecule's slab-model CSV files under:
 
 ```text
-Model_grids/<molecule>/
+Model_grids/sigma0/<molecule>/
 ```
 
-If you have the local `Generating-Grids.py` and `generate_grids_sig2.slurm`
-scripts, submit the SLURM script from `Model_grids/` to generate 2.0 km/s
-grids under `Model_grids/<molecule>_sig2/`. Those scripts and generated grids
-are local files and are not included in Git or the pip package. The
-direct-grid fitter looks for `<grid_root>/<molecule>/`, so choose a grid root
-with that layout when fitting the new grids.
+All currently trained checkpoints use the `sigma0` grids. Put future sigma=2
+grids under `Model_grids/sigma2/<molecule>/`. The grid fitter reads
+`<grid_root>/<molecule>/`, so pass `Model_grids/sigma0` for current grids or
+`Model_grids/sigma2` for complete new grids. The sigma=2 grids and checkpoints
+are not yet part of model fitting.
 
 Grid files must use names such as `T500N17.0.csv` and contain `wave` and `Line`
 columns. The v2 workflow writes a domain-restricted training table:
@@ -38,7 +41,7 @@ columns. The v2 workflow writes a domain-restricted training table:
 Pretrain_grid/pretrain_<molecule>_single_<domain>.csv
 ```
 
-If `Model_grids/<molecule>/` is absent, the example script and notebook stop
+If `Model_grids/sigma0/<molecule>/` is absent, the example script and notebook stop
 early with a message explaining that the local data is missing.
 
 ## Hybrid v2 domains
@@ -60,6 +63,25 @@ inside these domains:
 | CO17O, CO18O | 13–18 | 100–1400 | 13–19.5 |
 | C6H6 | 13–17 | 100–675 | 13–19.5 |
 | C3H4 | 15–18 | 100–1400 | 13–19.5 |
+| CH3 | 15–18 | 100–1400 | 13–19.5 |
+
+## CH3 checkpoint
+
+The refreshed CH3 grid has signal in every one of its 2,809 spectra within
+the trained domain. Peaks in the 15–18 µm window lie at 16.396–16.596 µm.
+Training used 2,528 spectra and held out 281 complete grid points. The
+held-out PCA comparison selected 75 components. The trained checkpoint's
+relative spectral RMSE on those grid points was 0.166% median and 0.376%
+maximum, measured against each spectrum's peak flux. Reproduce the training
+from local grids with:
+
+```bash
+python examples/train_band_checkpoint.py CH3 15 18 --pca-candidates 10 15 20 25 30 50 75
+```
+
+The source checkout bundles the CH3 checkpoint for model fitting. PyPI 2.1.2
+does not contain it; a later release is needed for direct pip installation.
+Direct grid fitting uses the local `Model_grids/sigma0/CH3/` files.
 
 ## C6H6 and C3H4 checkpoints
 
@@ -87,8 +109,8 @@ uncertainty in fitted parameters.
 Use `--audit-only` to inspect peak positions before training, or `--tune-only`
 to also compare PCA sizes without starting neural-network training. The
 checkpoints under `src/diskmelts/models/Trained_model/` are bundled for model
-fitting. Direct grid fitting uses separate local `Model_grids/C6H6/` and
-`Model_grids/C3H4/` directories. In the supplied C6H6 grids, some high-column
+fitting. Direct grid fitting uses separate local `Model_grids/sigma0/C6H6/` and
+`Model_grids/sigma0/C3H4/` directories. In the supplied C6H6 grids, some high-column
 files had nonfinite flux; those entries must be replaced or regenerated before
 fitting those column densities.
 
@@ -259,7 +281,7 @@ notebooks/Example_Training_Validation.ipynb
 ```
 
 The notebook starts with training disabled. Set `RUN_TRAINING=True` after
-placing the complete grids under `Model_grids/`. Use
+placing the complete grids under `Model_grids/sigma0/`. Use
 `examples/dev_v2_pt_validation.py` for the authoritative domains, holdout,
 PCA selection, and validation settings.
 

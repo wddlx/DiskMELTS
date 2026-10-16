@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diskmelts"
-version = "2.1.2"
+version = "2.1.3.dev0"
 description = "Machine-learning Enabled Line fitting Tool for Spectra of protoplanetary disks"
 readme = "README.md"
 requires-python = ">=3.9"

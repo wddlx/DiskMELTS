@@ -37,6 +37,7 @@ def _small_grid(tmp_path, molecule='C2H2', wavelength_range=(11.0, 13.0)):
 @pytest.mark.parametrize('molecule,wavelength_range', [
     ('C6H6', (13.0, 17.0)),
     ('C3H4', (15.0, 18.0)),
+    ('CH3', (15.0, 18.0)),
 ])
 def test_new_molecules_fit_from_direct_grids(tmp_path, molecule,
                                              wavelength_range):

@@ -28,6 +28,7 @@ def test_bundled_model_fit_without_grids(tmp_path, monkeypatch):
 @pytest.mark.parametrize('molecule,window', [
     ('C6H6', (14.5, 15.2)),
     ('C3H4', (15.68, 15.85)),
+    ('CH3', (16.4, 16.6)),
 ])
 def test_new_bundled_molecules_fit_without_grids(tmp_path, monkeypatch,
                                                   molecule, window):

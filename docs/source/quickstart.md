@@ -78,6 +78,12 @@ The cool C6H6 grids peak near 14.84 µm, so include that region in its
 trained for `T=100–675 K`; C3H4 covers `T=100–1400 K`. Both cover
 `logN=13–19.5`. Fit hotter C6H6 with the direct grid workflow below.
 
+The source checkout also has a CH3 checkpoint covering 15–18 µm,
+`T=100–1400 K`, and `logN=13–19.5`. Its strongest feature lies around
+16.4–16.6 µm, so a CH3 stage can use `wavelength_range=(15.0, 18.0)` and
+`fit_ranges=(16.3, 16.7)`. This checkpoint is not in PyPI version 2.1.2;
+install the source checkout to use it until a new release is published.
+
 ## Isotopologue temperature and area constraints
 
 Fit the main and rare isotopologues in the **same stage**. The first label
@@ -227,7 +233,7 @@ The separate grid API requires local slab CSVs. They are **not** included in
 the package and are **not** consulted by model fitting.
 
 For C6H6 and C3H4, use the same stage dictionaries for grid fitting with
-`grid_root='Model_grids'`, provided both local grid directories exist. Grid
+`grid_root='Model_grids/sigma0'`, provided both local grid directories exist. Grid
 fitting reads the complete spectra for each requested T/logN point and rejects
 nonfinite flux values. Set `sigma_noise` or choose `line_free_windows` outside
 the C3H4 feature near 15.71–15.81 µm when estimating noise for that stage.
@@ -246,7 +252,7 @@ model_fits = fit_observation(
     distance_pc=122.5, detection_screening=False,
 )
 grid_fits = fit_observation_grids(
-    source, new_stages, grid_root='Model_grids',
+    source, new_stages, grid_root='Model_grids/sigma0',
     output_dir='results/new_grids', distance_pc=122.5,
     detection_screening=False,
 )
@@ -263,7 +269,7 @@ grid_stages = [
 ]
 result = fit_observation_grids(
     source, grid_stages, name='my_source',
-    grid_root='Model_grids', output_dir='results/my_source_grids',
+    grid_root='Model_grids/sigma0', output_dir='results/my_source_grids',
     distance_pc=122.5,
 )
 plot_saved_observation(
@@ -272,7 +278,7 @@ plot_saved_observation(
 )
 ```
 
-`Model_grids/<molecule>/T{temperature}N{log_column}.csv` must contain `wave`
+`Model_grids/sigma0/<molecule>/T{temperature}N{log_column}.csv` must contain `wave`
 and `Line` columns and cover the fitted domain. The grid fitter interpolates
 between T/logN points, refines the best solutions, and adds the full local grid
 step in quadrature to the formal T/logN errors. For example, a 25 K step gives

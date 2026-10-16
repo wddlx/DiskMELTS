@@ -61,7 +61,7 @@ if V2_MODE == 'water_compare':
     keys = [tuple(key) for key in metadata['keys']]
     np.random.default_rng(42).shuffle(keys)
     paths = {}
-    for path in (ROOT / 'Model_grids' / 'H2O').glob('*.csv'):
+    for path in (ROOT / 'Model_grids' / 'sigma0' / 'H2O').glob('*.csv'):
         match = re.fullmatch(r'T(\d+)N([\d.]+)\.csv', path.name)
         if match:
             paths[(float(match[1]), float(match[2]))] = path
@@ -168,7 +168,7 @@ if V2_MODE == 'water_seam_trial':
     holdout_keys = [tuple(row) for row in json.loads(HOLDOUT.read_text(encoding='utf-8'))['keys']]
     np.random.default_rng(SEED).shuffle(holdout_keys)
     paths = {}
-    for path in (ROOT / 'Model_grids' / 'H2O').glob('*.csv'):
+    for path in (ROOT / 'Model_grids' / 'sigma0' / 'H2O').glob('*.csv'):
         match = re.fullmatch(r'T(\d+)N([\d.]+)\.csv', path.name)
         if match:
             paths[(float(match[1]), float(match[2]))] = path
@@ -366,7 +366,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         )
         T_range = tuple(config['T_range'])
         logN_range = tuple(config['logN_range'])
-        grid_dir = os.path.join(BASE_DIR, 'Model_grids', MOL)
+        grid_dir = os.path.join(BASE_DIR, 'Model_grids', 'sigma0', MOL)
         pretrain_csv = os.path.join(
             BASE_DIR, 'Pretrain_grid', 'pretrain_H2O_wavelength_bank_T100to1400_N13to19.csv'
         )
@@ -688,7 +688,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
     T_range = tuple(config['T_range'])
     logN_range = tuple(config['logN_range'])
 
-    grid_dir = os.path.join(BASE_DIR, 'Model_grids', MOL)
+    grid_dir = os.path.join(BASE_DIR, 'Model_grids', 'sigma0', MOL)
     data_tag = 'single_T100to1400_N13to19p5' if MOL != 'H2O' else 'single_T100to1400_N13to19'
     # Preserve the older checkpoint while training this newly supplied grid.
     artifact_tag = f'{MOL}_single_v2_newgrid' if MOL == '13C12CH2' else f'{MOL}_single_v2'

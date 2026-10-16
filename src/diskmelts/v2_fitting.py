@@ -1,6 +1,6 @@
 """Reusable v2 fitting workflow for continuum-subtracted observations.
 
-``MODEL_SPECS`` records the trained domain, PCA size, and network layers for
+``MODEL_SPECS`` records the grid sigma, trained domain, PCA size, and network layers for
 each checkpoint. ``fit_stage`` fits one or several molecules over one or more
 wavelength intervals. ``fit_observation`` runs stages on successive residuals
 and writes their numerical results for later reading and plotting.
@@ -35,10 +35,11 @@ CARBON_RANGES = {
     'C2H4': (8.0, 14.0), 'CH4': (5.0, 9.0),
     'C2HD': (11.5, 20.5), 'CO17O': (13.0, 18.0),
     'CO18O': (13.0, 18.0), 'C6H6': (13.0, 17.0),
-    'C3H4': (15.0, 18.0),
+    'C3H4': (15.0, 18.0), 'CH3': (15.0, 18.0),
 }
 MODEL_SPECS = {
     'H2O': {
+        'grid_sigma': 0,
         'path': 'Trained_model/H2O_wavelength_bank_v2_fixed/H2O_model_bank.json',
         'wavelength_ranges': WATER_RANGES,
         'T_bounds': (100.0, 1400.0),
@@ -48,11 +49,12 @@ MODEL_SPECS = {
     },
     **{
         mol: {
+            'grid_sigma': 0,
             'path': f'Trained_model/{mol}_single_v2/net_{mol}_forward.pt',
             'wavelength_ranges': (wav_range,),
             'T_bounds': (100.0, 675.0) if mol == 'C6H6' else (100.0, 1400.0),
             'logN_bounds': (13.0, 19.5),
-            'n_pca': 75 if mol == 'C3H4' else 30,
+            'n_pca': 75 if mol in {'C3H4', 'CH3'} else 30,
             'hidden': (64, 128, 64),
         }
         for mol, wav_range in CARBON_RANGES.items()
