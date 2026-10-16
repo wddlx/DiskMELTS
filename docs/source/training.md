@@ -11,7 +11,7 @@ They are not read by `load_fitting_models` or `fit_observation`.
 
 ## Local-only data
 
-Generated grid data and pretraining tables are intentionally ignored by Git:
+The following local directories are intentionally ignored by Git:
 
 ```text
 Model_grids/
@@ -24,13 +24,12 @@ Place each molecule's slab-model CSV files under:
 Model_grids/<molecule>/
 ```
 
-The repository also includes `Model_grids/Generating-Grids.py` and
-`Model_grids/generate_grids_sig2.slurm` for generating new 2.0 km/s grids on
-an HPC system. Submit the SLURM script from `Model_grids/`; it writes each
-molecule to `Model_grids/<molecule>_sig2/`. The direct-grid fitter looks for
-`<grid_root>/<molecule>/`, so choose a grid root with that layout when fitting
-the new grids. The `_sig2` files are separate from the original grids and
-from the checkpoints bundled in the pip package.
+If you have the local `Generating-Grids.py` and `generate_grids_sig2.slurm`
+scripts, submit the SLURM script from `Model_grids/` to generate 2.0 km/s
+grids under `Model_grids/<molecule>_sig2/`. Those scripts and generated grids
+are local files and are not included in Git or the pip package. The
+direct-grid fitter looks for `<grid_root>/<molecule>/`, so choose a grid root
+with that layout when fitting the new grids.
 
 Grid files must use names such as `T500N17.0.csv` and contain `wave` and `Line`
 columns. The v2 workflow writes a domain-restricted training table:

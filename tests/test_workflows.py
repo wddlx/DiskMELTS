@@ -124,7 +124,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
         if line.strip() and not line.lstrip().startswith("#")
     }
 
-    for pattern in ('/Model_grids/*', '/Pretrain_grid/', '/Trained_model/',
+    for pattern in ('/Model_grids/', '/Pretrain_grid/', '/Trained_model/',
                     '/0-Consub/',
                     '/docs/_build/', '/realobs_results/', '/figures/*'):
         assert pattern in patterns

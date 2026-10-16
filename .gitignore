@@ -75,9 +75,7 @@ latex/*.synctex.gz
 
 # Production fitting checkpoints live under src/diskmelts/models/ and are
 # included in the wheel. The following are optional local training assets.
-/Model_grids/*
-!/Model_grids/Generating-Grids.py
-!/Model_grids/generate_grids_sig2.slurm
+/Model_grids/
 /Pretrain_grid/
 /Trained_model/
 /Realobs_data/Consub_data0/
