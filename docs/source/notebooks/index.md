@@ -33,6 +33,13 @@ shares its emitting area. In the COâ‚‚ stage, 13CO2 shares both values with COâ‚
 the column densities remain independent. The plots below come from the
 notebook's updated J16120505 fit.
 
+The notebook uses the original sigma=0 checkpoints. To try the version 2.2.0
+sigma=2 models in your own fit, load them with
+`load_fitting_models(['H2O', 'C2H2'], sigma=2)`, or pass `sigma=2` to
+`fit_observation`. The latter selects the corresponding checkpoints for all
+stages. The {doc}`../quickstart` lists the available molecules and wavelength
+bands; keep each fitting window inside its trained band.
+
 ![Upper Sco J16120505 water-stage fit](../_static/examples/upper_sco_water_fit.png)
 
 ![Upper Sco J16120505 constrained carbon isotopologue fit](../_static/examples/upper_sco_carbon_tied_fit.png)

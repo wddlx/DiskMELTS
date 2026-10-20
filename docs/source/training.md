@@ -28,11 +28,153 @@ Place each molecule's slab-model CSV files under:
 Model_grids/sigma0/<molecule>/
 ```
 
-All currently trained checkpoints use the `sigma0` grids. Put future sigma=2
+The original checkpoints use the `sigma0` grids. Put sigma=2
 grids under `Model_grids/sigma2/<molecule>/`. The grid fitter reads
 `<grid_root>/<molecule>/`, so pass `Model_grids/sigma0` for current grids or
-`Model_grids/sigma2` for complete new grids. The sigma=2 grids and checkpoints
-are not yet part of model fitting.
+`Model_grids/sigma2` for complete new grids. Bundled sigma=2 checkpoints are
+available for all 17 sigma=0 species, plus OH.
+
+Train or validate sigma=2 water without overwriting the sigma=0 artifacts:
+
+```bash
+DISKMELTS_GRID_SIGMA=2 DISKMELTS_MOLECULES=H2O python examples/dev_v2_pt_validation.py
+```
+
+The generated pretraining table is under `Pretrain_grid/sigma2/`, the local
+bank under `Trained_model/sigma2/`, and validation results under
+`figures/validation/sigma2/`. Bundled checkpoints live in
+`src/diskmelts/models/Trained_model/sigma0/` and `sigma2/`.
+The separate band trainer also accepts `--sigma 2`; its default remains
+`--sigma 0`, and it writes sigma=2 artifacts to separate output folders.
+
+To reproduce the five sigma=2 carbon checkpoints, run:
+
+```bash
+DISKMELTS_GRID_SIGMA=2 DISKMELTS_MOLECULES=C2H2,HCN,CO2,13C12CH2,13CO2 python examples/dev_v2_pt_validation.py
+python examples/train_band_checkpoint.py C2H2 6 9 --sigma 2
+```
+
+The first command trains the 11.5–17 µm band for each molecule. The second
+trains the separate C2H2 6–9 µm band. Both use 10% unseen grid points for
+holdout checks. The packaged sigma=2 C2H2 manifest combines these two
+checkpoints and leaves the 9–11.5 µm gap uncovered.
+
+The additional single molecule sigma=2 checkpoints use the same 10% complete
+grid holdout and the maintained wavelength windows. Run the standard group with:
+
+```bash
+DISKMELTS_GRID_SIGMA=2 DISKMELTS_MOLECULES=C4H2,HC3N,C2H6,C2H4,CH4,C2HD,CO17O,CO18O DISKMELTS_COMPARE_V1=0 python examples/dev_v2_pt_validation.py
+```
+
+C3H4 and CH3 use 15–18 µm, while OH uses 15–26 µm. Their dense bands selected
+75 PCA components from candidates through 75. C6H6 retains the 13–17 µm,
+100–675 K production domain and selected 30 components:
+
+```bash
+python examples/train_band_checkpoint.py C3H4 15 18 --sigma 2 --pca-candidates 10 15 20 25 30 50 75 --validate-retrieval
+python examples/train_band_checkpoint.py CH3 15 18 --sigma 2 --pca-candidates 10 15 20 25 30 50 75 --validate-retrieval
+python examples/train_band_checkpoint.py OH 15 26 --sigma 2 --pca-candidates 10 15 20 25 30 50 75 --validate-retrieval
+python examples/train_band_checkpoint.py C6H6 13 17 --t-min 100 --t-max 675 --sigma 2 --pca-candidates 10 15 20 25 30 --validate-retrieval
+```
+
+The first eleven additional models held out 281 of 2,809 in domain spectra.
+C6H6 held out 127 of 1,272 cool grid spectra. Median and
+maximum full window reconstruction RMSE, relative to each spectrum's peak,
+were:
+
+| Molecule | Band (µm) | Checked spectra | Median | Maximum |
+| --- | --- | ---: | ---: | ---: |
+| C4H2 | 14–18 | 100 | 0.271% | 3.180% |
+| HC3N | 13–18 | 100 | 0.248% | 1.462% |
+| C2H6 | 9–15 | 100 | 0.132% | 0.416% |
+| C2H4 | 8–14 | 100 | 0.121% | 0.567% |
+| CH4 | 5–9 | 100 | 0.163% | 0.800% |
+| C2HD | 11.5–20.5 | 100 | 0.161% | 0.620% |
+| CO17O | 13–18 | 100 | 0.222% | 0.941% |
+| CO18O | 13–18 | 100 | 0.160% | 0.975% |
+| C3H4 | 15–18 | 281 | 0.275% | 0.513% |
+| CH3 | 15–18 | 281 | 0.152% | 0.346% |
+| OH | 15–26 | 281 | 0.054% | 0.571% |
+| C6H6 | 13–17 | 127 | 0.060% | 0.484% |
+
+All twelve also passed T/logN retrieval checks on 30 unseen spectra and full
+T/logN/A fits on ten. For C3H4, CH3, and OH respectively, T retrieval RMSE
+was 7.55, 2.06, and 6.32 K; logN RMSE was 0.017, 0.010, and 0.067 dex.
+For C6H6, those errors were 5.45 K and 0.025 dex. The band trainer checks
+all held out spectra for reconstruction.
+
+Each of the five initial carbon runs selected 2,809 grid spectra in T=100–1400 K and
+logN=13–19.5, trained on 2,528, and held out 281. All six checkpoints
+selected 30 PCA components. Spectral reconstruction RMSE relative to each
+held-out spectrum's peak flux was:
+
+| Molecule | Band (µm) | Checked spectra | Median | Maximum |
+| --- | --- | ---: | ---: | ---: |
+| HCN | 11.5–17 | 100 | 0.198% | 0.909% |
+| C2H2 | 11.5–17 | 100 | 0.220% | 1.362% |
+| C2H2 | 6–9 | 281 | 0.089% | 1.516% |
+| CO2 | 11.5–17 | 100 | 0.203% | 1.541% |
+| 13C12CH2 | 11.5–17 | 100 | 0.187% | 1.545% |
+| 13CO2 | 11.5–17 | 100 | 0.215% | 0.756% |
+
+For C2H2 at 6–9 µm, the nonzero grid spectra peak between 7.317 and
+7.785 µm; 28 of the 2,809 selected spectra are dark in this window and
+are excluded from the peak loss.
+In the 11.5–17 µm training windows, the peak wavelengths span 13.94–14.04
+µm (HCN), 13.70–13.71 µm (C2H2), 14.94–14.98 µm (CO2), 13.67–13.73 µm
+(13C12CH2), and 15.38–15.42 µm (13CO2).
+
+The main-band validation also ran T/logN retrieval on 30 unseen spectra
+and full T/logN/A fits on ten per molecule, matching the sigma=0 settings.
+Temperature retrieval RMSE was 10.0 K (HCN), 10.3 K (C2H2), 11.0 K
+(CO2), 13.8 K (13C12CH2), and 11.8 K (13CO2). The 6–9 µm C2H2 band
+has a separate spectral reconstruction check; it was not given a separate
+parameter retrieval check. Column density and emitting area can trade off
+in a fit, so the reconstruction errors are not parameter uncertainties.
+
+The sigma=2 water bank trained on 2,337 grid points, with 260 complete points
+held out. All five wavelength tiles selected 30 PCA components. On 100 held-out
+spectra, the assembled bank had 0.0368% median and 0.184% maximum spectral
+RMSE relative to each spectrum's peak flux. Per-tile T/logN retrieval used
+30 held-out spectra per tile. A separate 10-spectrum full-bank fit check gave
+1.85 K temperature and 0.170 dex logN RMSE; logN and emitting area remain
+partly degenerate. These are held-out checks, not uncertainty estimates for
+observed spectra.
+
+### Sigma=0 and sigma=2 holdout comparison
+
+The two versions withheld the same `(T, logN)` grid keys in each matching
+domain. The table compares median peak-relative reconstruction RMSE against
+each version's **own** grids, over the same wavelength window. H2O and the
+standard single models use 100 held out spectra, C6H6 uses 127, and C3H4/CH3
+use 281. C2H2 refers to its shared 11.5–17 µm band. Broadened sigma=2
+spectra are different physical targets, so these ratios measure surrogate
+fidelity rather than whether one broadening is preferable for observations.
+
+| Molecule | Sigma=0 | Sigma=2 |
+| --- | ---: | ---: |
+| H2O | 0.058% | 0.037% |
+| HCN | 0.232% | 0.198% |
+| C2H2 | 0.161% | 0.220% |
+| CO2 | 0.168% | 0.203% |
+| 13C12CH2 | 0.157% | 0.187% |
+| 13CO2 | 0.165% | 0.215% |
+| C4H2 | 0.211% | 0.271% |
+| HC3N | 0.213% | 0.248% |
+| C2H6 | 0.155% | 0.132% |
+| C2H4 | 0.146% | 0.121% |
+| CH4 | 0.150% | 0.163% |
+| C2HD | 0.173% | 0.161% |
+| CO17O | 0.217% | 0.222% |
+| CO18O | 0.208% | 0.160% |
+| C6H6 | 0.051% | 0.060% |
+| C3H4 | 0.292% | 0.275% |
+| CH3 | 0.166% | 0.152% |
+
+Sigma=2 is lower for eight of the 17 matching species and higher for nine.
+Every median remains below 0.3% of the grid peak. OH is sigma=2 only, so it
+has no sigma=0 comparator. These tests use noiseless grid spectra and do not
+measure observational fit bias or parameter uncertainty.
 
 Grid files must use names such as `T500N17.0.csv` and contain `wave` and `Line`
 columns. The v2 workflow writes a domain-restricted training table:
@@ -79,8 +221,7 @@ from local grids with:
 python examples/train_band_checkpoint.py CH3 15 18 --pca-candidates 10 15 20 25 30 50 75
 ```
 
-The source checkout bundles the CH3 checkpoint for model fitting. PyPI 2.1.2
-does not contain it; a later release is needed for direct pip installation.
+Version 2.2.0 bundles the CH3 checkpoint for model fitting.
 Direct grid fitting uses the local `Model_grids/sigma0/CH3/` files.
 
 ## C6H6 and C3H4 checkpoints
@@ -106,9 +247,17 @@ and 12.02% maximum error. Use direct grid fitting for hotter C6H6 rather than
 extrapolating the bundled checkpoint. These numbers measure spectra, not
 uncertainty in fitted parameters.
 
+The sigma=2 C6H6 checkpoint uses the same 127 withheld `(T, logN)` keys and
+cool domain as sigma=0. Its median/maximum reconstruction error is
+0.060%/0.484%, compared with 0.051%/0.263% for sigma=0. On 30 matching
+unseen grid keys, T RMSE is 5.45 K versus 5.52 K and logN RMSE is 0.025
+versus 0.062 dex for sigma=2 and sigma=0 respectively. The sigma=2 grid
+also changes sharply between 675 and 700 K, so the same upper temperature
+limit applies.
+
 Use `--audit-only` to inspect peak positions before training, or `--tune-only`
 to also compare PCA sizes without starting neural-network training. The
-checkpoints under `src/diskmelts/models/Trained_model/` are bundled for model
+checkpoints under `src/diskmelts/models/Trained_model/sigma0/` are bundled for model
 fitting. Direct grid fitting uses separate local `Model_grids/sigma0/C6H6/` and
 `Model_grids/sigma0/C3H4/` directories. In the supplied C6H6 grids, some high-column
 files had nonfinite flux; those entries must be replaced or regenerated before
@@ -130,10 +279,12 @@ uses T=100–1400 K and logN=13–19.5, keeps 10% of complete grid spectra out o
 training, and reports
 reconstruction errors on that holdout.
 
-New checkpoints are written under `Trained_model/<molecule>_w<range>_v2/`,
+New checkpoints are written under `Trained_model/<molecule>_w<range>_v2/`
+for sigma=0 or `Trained_model/sigma2/<molecule>_w<range>_v2/` for sigma=2,
 with training tables in `Pretrain_grid/` and validation summaries under
-`figures/validation/`. Those directories are local and ignored by Git; these
-checkpoints are not automatically included in the pip package.
+`figures/validation/`. Those directories are local and ignored by Git; a new
+training run must be copied into `src/diskmelts/models/Trained_model/` to be
+included in a future pip package build.
 
 The new C2HD grid has its strongest sampled band around 14.5 µm and a
 substantial second band near 19 µm, particularly in cooler models. Its
@@ -221,7 +372,8 @@ DISKMELTS_V2_MODE=water_seam_trial python examples/dev_v2_pt_validation.py
 It emphasizes the shared 19.0–19.2 µm interval and writes a separate bank under
 `Trained_model/H2O_wavelength_bank_v2_seam_trial/`. On the 100-spectrum
 reconstruction check it worsened median error from 0.058% to 2.03% of peak.
-The fit workflow continues to use `H2O_wavelength_bank_v2_fixed`.
+The default fit workflow continues to use the sigma=0
+`H2O_wavelength_bank_v2_fixed`; pass `sigma=2` to select the new water bank.
 
 ## Example script
 
@@ -251,7 +403,8 @@ DISKMELTS_MOLECULES=13C12CH2,C2HD,CO17O,CO18O python examples/dev_v2_pt_validati
 
 The updated 13C12CH2 output uses the local `_single_v2_newgrid` directory so
 the previous local checkpoint remains available for comparison. Production
-checkpoints are copied into `src/diskmelts/models/Trained_model/` only after
+checkpoints are copied into `src/diskmelts/models/Trained_model/sigma0/` or
+`src/diskmelts/models/Trained_model/sigma2/` only after
 holdout validation.
 The default `DISKMELTS_V2_MODE=train` runs this molecule workflow. The
 `water_compare` and `water_seam_trial` modes above run separately and ignore
@@ -280,8 +433,9 @@ for one molecule, verify local grid availability, and inspect its checkpoint:
 notebooks/Example_Training_Validation.ipynb
 ```
 
-The notebook starts with training disabled. Set `RUN_TRAINING=True` after
-placing the complete grids under `Model_grids/sigma0/`. Use
+The notebook starts with training disabled and `GRID_SIGMA=0`. Set
+`GRID_SIGMA=2` for the new grid set and `RUN_TRAINING=True` after placing
+the complete grids under the matching `Model_grids/sigma*/` directory. Use
 `examples/dev_v2_pt_validation.py` for the authoritative domains, holdout,
 PCA selection, and validation settings.
 
@@ -292,6 +446,8 @@ Normal v2 fitting loads the package's checkpoints without a path:
 ```python
 from diskmelts import load_fitting_models
 pretrained = load_fitting_models(['H2O', 'C2H2'])
+# Select separately trained sigma=2 checkpoints:
+broadened = load_fitting_models(['H2O', 'C2H2', 'C3H4', 'OH'], sigma=2)
 ```
 
 To use a newly trained checkpoint before bundling it, pass an alternate root

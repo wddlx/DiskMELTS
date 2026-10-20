@@ -74,7 +74,9 @@ def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
-def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir):
+@pytest.mark.parametrize("grid_sigma", [0, 2])
+def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir,
+                                                        grid_sigma):
     pytest.importorskip("torch")
     sklearn = pytest.importorskip("sklearn")
     monkeypatch.setattr(sklearn, "__version__", "1.8.0")
@@ -84,16 +86,21 @@ def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir)
     monkeypatch.chdir(start_dir)
     exec(_code_cell(notebook, 1), namespace)
     namespace['TRAIN_MOLECULE'] = 'CO2'
-    exec(_code_cell(notebook, 5), namespace)
+    source = _code_cell(notebook, 5).replace(
+        'GRID_SIGMA = 0  #', f'GRID_SIGMA = {grid_sigma}  #')
+    exec(source, namespace)
 
     assert namespace["BASE_DIR"] == ROOT
-    assert namespace["GRID_DIR"] == ROOT / "Model_grids" / "sigma0" / namespace["TRAIN_MOLECULE"]
-    assert namespace['LOCAL_MODEL'].parent == ROOT / 'Trained_model/CO2_single_v2'
+    assert namespace["GRID_DIR"] == ROOT / "Model_grids" / f"sigma{grid_sigma}" / namespace["TRAIN_MOLECULE"]
+    output = ROOT / 'Trained_model'
+    if grid_sigma == 2:
+        output /= 'sigma2'
+    assert namespace['LOCAL_MODEL'].parent == output / 'CO2_single_v2'
     assert namespace['RUN_TRAINING'] is False
 
 
 def test_production_checkpoint_files_are_bundled():
-    from diskmelts import MODEL_SPECS
+    from diskmelts import MODEL_SPECS, SIGMA2_MODEL_SPECS
     from diskmelts.v2_fitting import MODEL_ROOT
 
     assert len(MODEL_SPECS) == 17
@@ -101,7 +108,15 @@ def test_production_checkpoint_files_are_bundled():
         assert spec['grid_sigma'] == 0
         path = MODEL_ROOT / spec['path']
         assert path.is_file(), f'missing bundled checkpoint for {molecule}: {path}'
-    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 21
+    assert set(SIGMA2_MODEL_SPECS) == {
+        'H2O', 'C2H2', 'HCN', 'CO2', '13C12CH2', '13CO2',
+        'C4H2', 'HC3N', 'C2H6', 'C2H4', 'CH4', 'C2HD',
+        'CO17O', 'CO18O', 'C3H4', 'CH3', 'C6H6', 'OH',
+    }
+    for molecule, spec in SIGMA2_MODEL_SPECS.items():
+        assert spec['grid_sigma'] == 2
+        assert (MODEL_ROOT / spec['path']).is_file(), molecule
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 44
 
 
 def test_new_grid_checkpoints_load_and_generate_finite_spectra():
@@ -129,7 +144,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
                     '/0-Consub/',
                     '/docs/_build/', '/realobs_results/', '/figures/*'):
         assert pattern in patterns
-    for path in ('src/diskmelts/models/Trained_model/C2H2_single_v2/net_C2H2_forward.pt',
+    for path in ('src/diskmelts/models/Trained_model/sigma0/C2H2_single_v2/net_C2H2_forward.pt',
                  'src/diskmelts/consub/regions/ttauri.csv',
                  'src/diskmelts/consub/cont_ranges.csv',
                  'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',
@@ -147,11 +162,18 @@ def test_git_index_contains_fitting_distribution_only():
         pytest.skip('Git index is unavailable in an installed source archive')
     tracked = set(subprocess.check_output(
         ['git', 'ls-files', '--cached'], cwd=ROOT, text=True).splitlines())
-    from diskmelts import MODEL_SPECS
+    from diskmelts import MODEL_SPECS, SIGMA2_MODEL_SPECS
 
-    for spec in MODEL_SPECS.values():
+    for spec in (*MODEL_SPECS.values(), *SIGMA2_MODEL_SPECS.values()):
         path = f"src/diskmelts/models/{spec['path']}"
         assert (ROOT / path).is_file()
+        assert path in tracked
+        if path.endswith('.json'):
+            manifest = json.loads((ROOT / path).read_text())
+            for tile in manifest['tiles']:
+                tile_path = str(Path(path).parent / tile['path'])
+                assert tile_path in tracked
+                assert (ROOT / tile_path).is_file()
         assert subprocess.run(['git', 'check-ignore', '--no-index', '-q', path],
                               cwd=ROOT).returncode == 1
     from diskmelts.consub._core import HERE, PRESETS

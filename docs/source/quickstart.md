@@ -1,4 +1,4 @@
-# Quick Start: subtract the continuum, then fit
+# Your first spectrum
 
 Install with `python -m pip install diskmelts`. You can fit your own
 continuum-subtracted spectrum without a repository checkout. For a sample,
@@ -71,6 +71,17 @@ molecule-to-ranges mapping. Every fit interval must lie within
 PCA, and network settings; the loader verifies them. Only requested models are
 loaded.
 
+The default checkpoints use sigma=0 grids. Sigma=2 checkpoints cover H2O,
+C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4,
+CH4, C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
+`load_fitting_models(['H2O', 'C2H2'], sigma=2)`. For a saved staged fit, pass
+`sigma=2` to `fit_observation`. The sigma=2 C2H2 bank covers 6–9 and
+11.5–17 µm. Fit either band with a window inside its range; wavelengths
+between 9 and 11.5 µm have no C2H2 checkpoint. OH covers 15–26 µm.
+C6H6 covers 13–17 µm and 100–675 K in both sigma versions.
+`fit_stage` selects the corresponding parameter bounds from the loaded
+checkpoints, including OH, which is available only at sigma=2.
+
 For C6H6 and C3H4, load `['C6H6', 'C3H4']` and fit them in separate stages
 with `wavelength_range` `(13.0, 17.0)` and `(15.0, 18.0)`, respectively.
 The cool C6H6 grids peak near 14.84 µm, so include that region in its
@@ -78,11 +89,10 @@ The cool C6H6 grids peak near 14.84 µm, so include that region in its
 trained for `T=100–675 K`; C3H4 covers `T=100–1400 K`. Both cover
 `logN=13–19.5`. Fit hotter C6H6 with the direct grid workflow below.
 
-The source checkout also has a CH3 checkpoint covering 15–18 µm,
+Version 2.2.0 includes a CH3 checkpoint covering 15–18 µm,
 `T=100–1400 K`, and `logN=13–19.5`. Its strongest feature lies around
 16.4–16.6 µm, so a CH3 stage can use `wavelength_range=(15.0, 18.0)` and
-`fit_ranges=(16.3, 16.7)`. This checkpoint is not in PyPI version 2.1.2;
-install the source checkout to use it until a new release is published.
+`fit_ranges=(16.3, 16.7)`.
 
 ## Isotopologue temperature and area constraints
 
