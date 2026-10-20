@@ -1,6 +1,6 @@
 """Reusable v2 fitting workflow for continuum-subtracted observations.
 
-``MODEL_SPECS`` records the trained domain, PCA size, and network layers for
+``MODEL_SPECS`` records the grid sigma, trained domain, PCA size, and network layers for
 each checkpoint. ``fit_stage`` fits one or several molecules over one or more
 wavelength intervals. ``fit_observation`` runs stages on successive residuals
 and writes their numerical results for later reading and plotting.
@@ -35,11 +35,12 @@ CARBON_RANGES = {
     'C2H4': (8.0, 14.0), 'CH4': (5.0, 9.0),
     'C2HD': (11.5, 20.5), 'CO17O': (13.0, 18.0),
     'CO18O': (13.0, 18.0), 'C6H6': (13.0, 17.0),
-    'C3H4': (15.0, 18.0),
+    'C3H4': (15.0, 18.0), 'CH3': (15.0, 18.0),
 }
 MODEL_SPECS = {
     'H2O': {
-        'path': 'Trained_model/H2O_wavelength_bank_v2_fixed/H2O_model_bank.json',
+        'grid_sigma': 0,
+        'path': 'Trained_model/sigma0/H2O_wavelength_bank_v2_fixed/H2O_model_bank.json',
         'wavelength_ranges': WATER_RANGES,
         'T_bounds': (100.0, 1400.0),
         'logN_bounds': (13.0, 19.0),
@@ -48,16 +49,55 @@ MODEL_SPECS = {
     },
     **{
         mol: {
-            'path': f'Trained_model/{mol}_single_v2/net_{mol}_forward.pt',
+            'grid_sigma': 0,
+            'path': f'Trained_model/sigma0/{mol}_single_v2/net_{mol}_forward.pt',
             'wavelength_ranges': (wav_range,),
             'T_bounds': (100.0, 675.0) if mol == 'C6H6' else (100.0, 1400.0),
             'logN_bounds': (13.0, 19.5),
-            'n_pca': 75 if mol == 'C3H4' else 30,
+            'n_pca': 75 if mol in {'C3H4', 'CH3'} else 30,
             'hidden': (64, 128, 64),
         }
         for mol, wav_range in CARBON_RANGES.items()
     },
 }
+SIGMA2_MODEL_SPECS = {
+    'H2O': {
+        **MODEL_SPECS['H2O'],
+        'grid_sigma': 2,
+        'path': 'Trained_model/sigma2/H2O_wavelength_bank_v2_fixed/H2O_model_bank.json',
+    },
+    **{
+        mol: {
+            **MODEL_SPECS[mol],
+            'grid_sigma': 2,
+            'path': f'Trained_model/sigma2/{mol}_single_v2/net_{mol}_forward.pt',
+        }
+        for mol in ('HCN', 'CO2', '13C12CH2', '13CO2',
+                    'C4H2', 'HC3N', 'C2H6', 'C2H4', 'CH4',
+                    'C2HD', 'CO17O', 'CO18O', 'C3H4', 'CH3', 'C6H6')
+    },
+    'C2H2': {
+        **MODEL_SPECS['C2H2'],
+        'grid_sigma': 2,
+        'path': 'Trained_model/sigma2/C2H2_wavelength_bank_v2/C2H2_model_bank.json',
+        'wavelength_ranges': ((6.0, 9.0), (11.5, 17.0)),
+    },
+    'OH': {
+        'grid_sigma': 2,
+        'path': 'Trained_model/sigma2/OH_single_v2/net_OH_forward.pt',
+        'wavelength_ranges': ((15.0, 26.0),),
+        'T_bounds': (100.0, 1400.0),
+        'logN_bounds': (13.0, 19.5),
+        'n_pca': 75,
+        'hidden': (64, 128, 64),
+    },
+}
+
+
+def _model_specs_for_sigma(sigma):
+    if isinstance(sigma, bool) or sigma not in (0, 2):
+        raise ValueError('sigma must be 0 or 2')
+    return MODEL_SPECS if sigma == 0 else SIGMA2_MODEL_SPECS
 
 
 def _ranges(value):
@@ -78,6 +118,9 @@ def _fit_ranges(value):
 
 def _validate_loaded_model(mol, model, spec):
     """Catch a checkpoint/registry mismatch before fitting observations."""
+    if (model.get('grid_sigma') is not None and
+            model['grid_sigma'] != spec['grid_sigma']):
+        raise ValueError(f'{mol} checkpoint grid_sigma differs from MODEL_SPECS')
     if model.get('is_model_bank', False):
         entries = [(tuple(tile['wav_range']), tile['model']) for tile in model['tiles']]
     else:
@@ -85,7 +128,12 @@ def _validate_loaded_model(mol, model, spec):
     expected_ranges = [tuple(item) for item in spec['wavelength_ranges']]
     if [item[0] for item in entries] != expected_ranges:
         raise ValueError(f'{mol} checkpoint wavelength ranges differ from MODEL_SPECS')
-    for wav_range, checkpoint in entries:
+    expected_pca = spec['n_pca']
+    if np.isscalar(expected_pca):
+        expected_pca = [int(expected_pca)] * len(entries)
+    elif len(expected_pca) != len(entries):
+        raise ValueError(f'{mol} checkpoint PCA counts differ from MODEL_SPECS')
+    for (wav_range, checkpoint), expected_count in zip(entries, expected_pca):
         pca = checkpoint.get('pca')
         n_pca = None if pca is None else pca.n_components_
         shape_layers = [layer.out_features for layer in checkpoint['net_shape'].net
@@ -94,12 +142,12 @@ def _validate_loaded_model(mol, model, spec):
                        if isinstance(layer, torch.nn.Linear)]
         shape_hidden = tuple(shape_layers[:-1])
         peak_hidden = tuple(peak_layers[:-1])
-        if (n_pca != spec['n_pca'] or shape_hidden != tuple(spec['hidden']) or
+        if (n_pca != expected_count or shape_hidden != tuple(spec['hidden']) or
                 peak_hidden != tuple(spec['hidden'])):
             raise ValueError(
                 f'{mol} {wav_range} checkpoint has PCA={n_pca}, '
                 f'shape layers={shape_hidden}, peak layers={peak_hidden}; '
-                f"MODEL_SPECS expects PCA={spec['n_pca']}, layers={spec['hidden']}"
+                f"MODEL_SPECS expects PCA={expected_count}, layers={spec['hidden']}"
             )
         for key, expected in (('T_range', spec['T_bounds']),
                               ('logN_range', spec['logN_bounds'])):
@@ -107,18 +155,26 @@ def _validate_loaded_model(mol, model, spec):
                 raise ValueError(f'{mol} {wav_range} checkpoint {key} differs from MODEL_SPECS')
 
 
-def load_fitting_models(molecules, root=None, model_specs=MODEL_SPECS):
+def load_fitting_models(molecules, root=None, model_specs=None, *, sigma=0):
     """Load requested bundled v2 checkpoints, or checkpoints below ``root``.
 
     The bundled files contain networks, scalers, PCA, and wavelength axes.
     Neither slab grids nor pretraining tables are read during inference.
     ``root`` may point to an alternate directory containing ``Trained_model``.
+    ``sigma`` selects the grid broadening (0 or 2). Observational noise is a
+    separate fitting input.
     """
     root = MODEL_ROOT if root is None else Path(root)
+    if model_specs is None:
+        model_specs = _model_specs_for_sigma(sigma)
+    else:
+        _model_specs_for_sigma(sigma)
+        if any(spec.get('grid_sigma', sigma) != sigma for spec in model_specs.values()):
+            raise ValueError('model_specs grid_sigma must match sigma')
     molecules = list(dict.fromkeys([molecules] if isinstance(molecules, str) else molecules))
     unknown = [mol for mol in molecules if mol not in model_specs]
     if unknown:
-        raise ValueError(f'No v2 model configuration for {unknown}')
+        raise ValueError(f'No v2 model checkpoint for {unknown} at sigma={sigma}')
     paths = {mol: str(Path(root) / model_specs[mol]['path']) for mol in molecules}
     missing = [path for path in paths.values() if not Path(path).is_file()]
     if missing:
@@ -129,11 +185,12 @@ def load_fitting_models(molecules, root=None, model_specs=MODEL_SPECS):
     )
     for mol in molecules:
         _validate_loaded_model(mol, pretrained[mol], model_specs[mol])
+        pretrained[mol]['grid_sigma'] = sigma
     return pretrained
 
 
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
-              pretrained, *, model_specs=MODEL_SPECS, distance_pc=140.0,
+              pretrained, *, model_specs=None, distance_pc=140.0,
               **options):
     """Fit molecules jointly within selected windows on the full observed grid.
 
@@ -147,6 +204,13 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     molecules = [molecule] if isinstance(molecule, str) else list(molecule)
     if not molecules or any(mol not in pretrained for mol in molecules):
         raise ValueError('every stage molecule must have a loaded checkpoint')
+    if model_specs is None:
+        sigmas = {pretrained[mol].get('grid_sigma', 0)
+                  if isinstance(pretrained[mol], dict) else 0
+                  for mol in molecules}
+        if len(sigmas) != 1:
+            raise ValueError('stage molecules must use the same grid sigma')
+        model_specs = _model_specs_for_sigma(sigmas.pop())
     plot_ranges = _ranges(wavelength_range)
     selected_ranges = _fit_ranges(fit_ranges)
     if any(not any(a <= lo and hi <= b for a, b in plot_ranges)
@@ -182,7 +246,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     return fit
 
 
-def fit_observation(input_path, stages, *, name=None, root=None,
+def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
                     output_dir=None, comparison_csv=None,
                     distance_pc=140.0,
                     line_free_windows=((11.45, 11.55), (13.10, 13.20),
@@ -199,8 +263,11 @@ def fit_observation(input_path, stages, *, name=None, root=None,
     ``component_names``, ``shared_area_groups``, ``isotopologue_groups``,
     ``Tshare``, ``Ashare``, and bounds passed to
     ``fit_stage``.
+    ``sigma`` selects the bundled grid broadening (0 or 2), whereas estimated
+    ``sigma_noise`` represents the observed flux uncertainty.
     """
     model_root = MODEL_ROOT if root is None else Path(root)
+    model_specs = _model_specs_for_sigma(sigma)
     input_path = Path(input_path)
     if not input_path.is_file():
         raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
@@ -214,13 +281,16 @@ def fit_observation(input_path, stages, *, name=None, root=None,
         mol for stage in stages
         for mol in ([stage['mol']] if isinstance(stage['mol'], str) else stage['mol'])
     ))
-    pretrained = load_fitting_models(molecules, root=model_root)
+    pretrained = load_fitting_models(molecules, root=model_root, sigma=sigma)
     obs_wav, obs_flux = load_observed_spectrum(
         input_path, skiprows=skiprows, delimiter=delimiter,
         wav_col=wav_col, flux_col=flux_col,
     )
     source_name = name or input_path.stem
-    output_dir = Path(output_dir) if output_dir else Path.cwd() / 'realobs_results'
+    default_output_dir = Path.cwd() / 'realobs_results'
+    if sigma == 2:
+        default_output_dir /= 'sigma2'
+    output_dir = Path(output_dir) if output_dir else default_output_dir
     comparison_csv = (Path(comparison_csv) if comparison_csv else
                       output_dir / 'Fitted_Parameters.csv')
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -259,11 +329,11 @@ def fit_observation(input_path, stages, *, name=None, root=None,
         selected = detected[0] if len(detected) == 1 else detected
         fit = fit_stage(
             obs_wav, residual, selected, stage['wavelength_range'],
-            stage['fit_ranges'], pretrained,
+            stage['fit_ranges'], pretrained, model_specs=model_specs,
             h2o_components=stage.get('h2o_components', 1),
             component_names=stage.get('component_names'),
-            T_bounds=stage.get('T_bounds', {mol: MODEL_SPECS[mol]['T_bounds'] for mol in detected}),
-            logN_bounds=stage.get('logN_bounds', {mol: MODEL_SPECS[mol]['logN_bounds'] for mol in detected}),
+            T_bounds=stage.get('T_bounds', {mol: model_specs[mol]['T_bounds'] for mol in detected}),
+            logN_bounds=stage.get('logN_bounds', {mol: model_specs[mol]['logN_bounds'] for mol in detected}),
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
             shared_area_groups=stage.get('shared_area_groups'),
             isotopologue_groups=stage.get('isotopologue_groups'),
@@ -295,5 +365,5 @@ def fit_observation(input_path, stages, *, name=None, root=None,
     return {
         'fits': all_fits, 'obs_wav': obs_wav, 'obs_flux': obs_flux,
         'residual': residual, 'cumulative_model': cumulative_model,
-        'sigma_noise': sigma_noise, 'products': products,
+        'sigma_noise': sigma_noise, 'grid_sigma': sigma, 'products': products,
     }

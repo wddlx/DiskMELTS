@@ -945,6 +945,7 @@ def train_model_bank(
     scheduler_patience=10,
     min_lr=0.0,
     temperature_transform='linear',
+    grid_sigma=None,
 ):
     """Train a bank of overlapping forward-surrogate tiles for one molecule.
 
@@ -968,6 +969,8 @@ def train_model_bank(
     Returns:
         dict: manifest data plus in-memory ``models`` and ``model_bank``.
     """
+    if grid_sigma is not None and grid_sigma not in (0, 2):
+        raise ValueError('grid_sigma must be 0 or 2')
     wavelength_ranges = [tuple(map(float, item)) for item in wavelength_ranges]
     logN_ranges = [tuple(map(float, item)) for item in logN_ranges]
     T_ranges = [tuple(map(float, item)) for item in T_ranges]
@@ -1087,6 +1090,8 @@ def train_model_bank(
         'T_ranges': [list(item) for item in T_ranges],
         'tiles': tiles,
     }
+    if grid_sigma is not None:
+        manifest['grid_sigma'] = grid_sigma
     os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
     with open(manifest_path, 'w', encoding='utf-8') as stream:
         json.dump(manifest, stream, indent=2)
@@ -1136,7 +1141,7 @@ if __name__ == '__main__':
     # -- Paths ---------------------------------------------------------------
     _here        = os.path.dirname(os.path.abspath(__file__))
     ROOT_DIR     = os.path.join(_here, '..', '..')              # project root
-    GRID_ROOT    = os.path.join(ROOT_DIR, 'Model_grids')
+    GRID_ROOT    = os.path.join(ROOT_DIR, 'Model_grids', 'sigma0')
     DATA_DIR     = os.path.join(ROOT_DIR, 'Pretrain_grid')
     MODEL_DIR    = os.path.join(ROOT_DIR, 'Trained_model')
     FIG_DIR      = os.path.join(ROOT_DIR, 'figures', 'trainmodel')

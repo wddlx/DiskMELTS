@@ -151,7 +151,7 @@ def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4
             )
         elif method == 'grids':
             result = fit_observation_grids(
-                path, stages, name=source, grid_root=ROOT / 'Model_grids',
+                path, stages, name=source, grid_root=ROOT / 'Model_grids' / 'sigma0',
                 output_dir=result_dir, detection_screening=False,
                 distance_pc=distance_pc,
                 maxiter=grid_maxiter, popsize=grid_popsize,

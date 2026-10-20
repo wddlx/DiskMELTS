@@ -133,10 +133,12 @@ def test_train_model_bank_writes_cartesian_manifest(tmp_path, monkeypatch):
         logN_ranges=[(13, 19), (18.5, 22)],
         T_ranges=[(50, 700), (600, 1300)],
         n_epochs=1,
+        grid_sigma=2,
     )
 
     assert len(calls) == 8
     assert len(manifest['tiles']) == 8
+    assert manifest['grid_sigma'] == 2
     assert (tmp_path / 'models' / 'H2O_model_bank.json').is_file()
     assert {call['T_range'] for call in calls} == {(50.0, 700.0), (600.0, 1300.0)}
 

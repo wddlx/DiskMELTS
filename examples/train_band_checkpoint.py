@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 from diskmelts.fitting import generate_spectrum
+from diskmelts.plotting import plot_validation
 from diskmelts.trainmodel import (
     generate_pre_training_set,
     grid_sha256,
@@ -25,6 +26,7 @@ from diskmelts.trainmodel import (
     select_grid_holdout,
     tune_pca_components,
 )
+from diskmelts.validation import validate_full, validate_nt_holdout
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +42,8 @@ def main():
     parser.add_argument('wave_max', type=float)
     parser.add_argument('--t-min', type=float, default=T_RANGE[0])
     parser.add_argument('--t-max', type=float, default=T_RANGE[1])
+    parser.add_argument('--sigma', type=int, choices=(0, 2), default=0,
+                        help='Grid broadening directory (default: 0)')
     parser.add_argument('--tag', help='Output name under Trained_model/')
     parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--patience', type=int, default=500)
@@ -49,6 +53,8 @@ def main():
     parser.add_argument('--audit-only', action='store_true')
     parser.add_argument('--tune-only', action='store_true',
                         help='Audit grids and PCA sizes without training')
+    parser.add_argument('--validate-retrieval', action='store_true',
+                        help='Check T/logN on 30 holdouts and full fits on 10')
     args = parser.parse_args()
 
     wav_range = (args.wave_min, args.wave_max)
@@ -67,7 +73,7 @@ def main():
     if tag in {'.', '..'} or not re.fullmatch(r'[A-Za-z0-9_.-]+', tag):
         parser.error('tag must be a simple directory name')
 
-    grid_dir = ROOT / 'Model_grids' / args.molecule
+    grid_dir = ROOT / 'Model_grids' / f'sigma{args.sigma}' / args.molecule
     if not grid_dir.is_dir():
         raise FileNotFoundError(f'Missing grid directory: {grid_dir}')
     models = load_model_grid(
@@ -101,9 +107,10 @@ def main():
         models, fraction=0.1, seed=SEED, preserve_boundaries=True,
     )
     fingerprint = grid_sha256(models)
-    pretrain_dir = ROOT / 'Pretrain_grid'
-    model_dir = ROOT / 'Trained_model' / tag
-    figure_dir = ROOT / 'figures' / 'validation' / tag
+    output_subdir = () if args.sigma == 0 else (f'sigma{args.sigma}',)
+    pretrain_dir = ROOT / 'Pretrain_grid' / Path(*output_subdir)
+    model_dir = ROOT / 'Trained_model' / Path(*output_subdir) / tag
+    figure_dir = ROOT / 'figures' / 'validation' / Path(*output_subdir) / tag
     pretrain_dir.mkdir(parents=True, exist_ok=True)
     model_dir.mkdir(parents=True, exist_ok=True)
     figure_dir.mkdir(parents=True, exist_ok=True)
@@ -111,7 +118,8 @@ def main():
     holdout_path = pretrain_dir / f'holdout_{tag}.json'
     model_path = model_dir / f'net_{args.molecule}_forward.pt'
     metadata = {
-        'mol': args.molecule, 'wav_range': list(wav_range),
+        'mol': args.molecule, 'grid_sigma': args.sigma,
+        'wav_range': list(wav_range),
         'T_range': list(t_range), 'logN_range': list(LOGN_RANGE),
         'seed': SEED, 'holdout_keys': [list(key) for key in holdout_keys],
         'grid_sha256': fingerprint,
@@ -166,6 +174,38 @@ def main():
         'reconstruction_relative_rmse_median': float(np.median(errors)),
         'reconstruction_relative_rmse_max': float(np.max(errors)),
     }
+    if args.validate_retrieval:
+        shuffled = list(holdout_keys)
+        np.random.default_rng(SEED).shuffle(shuffled)
+        nt_keys = shuffled[:30]
+        full_keys = shuffled[:10]
+        nt = validate_nt_holdout(
+            args.molecule, {args.molecule: trained}, models, nt_keys,
+            wav_range, T_bounds=t_range, logN_bounds=LOGN_RANGE,
+            n_starts=100, n_steps=300, lr=0.03,
+        )
+        plot_validation(
+            args.molecule, nt,
+            save_path=str(figure_dir / f'{args.molecule}_holdout_nt.png'),
+        )
+        full = validate_full(
+            args.molecule, {key: models[key] for key in full_keys},
+            {args.molecule: trained}, wav_range, n_samples=len(full_keys),
+            noise_scale=0.0, T_bounds=t_range, logN_bounds=LOGN_RANGE,
+            n_restarts=50, seed=SEED,
+        )
+        plot_validation(
+            args.molecule, full,
+            save_path=str(figure_dir / f'{args.molecule}_holdout_full.png'),
+        )
+        summary['retrieval_validation'] = {
+            'n_nt': len(nt['T_true']), 'n_full': len(full['T_true']),
+            'T_rmse_K': float(np.sqrt(np.mean((nt['T_pred'] - nt['T_true']) ** 2))),
+            'logN_rmse': float(np.sqrt(np.mean((nt['logN_pred'] - nt['logN_true']) ** 2))),
+            'full_T_rmse_K': float(np.sqrt(np.mean((full['T_pred'] - full['T_true']) ** 2))),
+            'full_log10NA_rmse': float(np.sqrt(np.mean(
+                (full['log10NA_pred'] - full['log10NA_true']) ** 2))),
+        }
     summary_path = figure_dir / 'training_summary.json'
     summary_path.write_text(json.dumps(summary, indent=2) + '\n')
     print(f'Saved checkpoint: {model_path}')

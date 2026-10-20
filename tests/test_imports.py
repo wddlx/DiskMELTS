@@ -7,6 +7,7 @@ PUBLIC_SYMBOLS = [
     # bundled v2 workflows
     "consub",
     "MODEL_SPECS",
+    "SIGMA2_MODEL_SPECS",
     "load_fitting_models",
     "fit_stage",
     "fit_observation",

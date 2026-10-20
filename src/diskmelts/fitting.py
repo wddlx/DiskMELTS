@@ -226,6 +226,7 @@ def load_model_bank(
     return {
         'is_model_bank': True,
         'mol': manifest['mol'],
+        'grid_sigma': manifest.get('grid_sigma'),
         'manifest_path': manifest_path,
         'tiles': loaded_tiles,
         'wav_ranges': sorted(set(tile['wav_range'] for tile in loaded_tiles)),

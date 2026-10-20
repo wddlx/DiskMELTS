@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "mol": "H2O",
+  "pretrain_csv": "/Users/chengyanxie/Documents/Github_myself/DiskMELTS/Pretrain_grid/sigma2/pretrain_H2O_wavelength_bank_T100to1400_N13to19.csv",
   "n_pca": 30,
   "hidden": [
     64,
@@ -9,6 +10,7 @@
   ],
   "peak_normalization": "window",
   "shape_loss": "spectral",
+  "shape_edge_weight": 10.0,
   "temperature_transform": "log10",
   "wavelength_ranges": [
     [
@@ -125,5 +127,6 @@
       ],
       "n_pca": 30
     }
-  ]
+  ],
+  "grid_sigma": 2
 }

@@ -61,7 +61,7 @@ if V2_MODE == 'water_compare':
     keys = [tuple(key) for key in metadata['keys']]
     np.random.default_rng(42).shuffle(keys)
     paths = {}
-    for path in (ROOT / 'Model_grids' / 'H2O').glob('*.csv'):
+    for path in (ROOT / 'Model_grids' / 'sigma0' / 'H2O').glob('*.csv'):
         match = re.fullmatch(r'T(\d+)N([\d.]+)\.csv', path.name)
         if match:
             paths[(float(match[1]), float(match[2]))] = path
@@ -168,7 +168,7 @@ if V2_MODE == 'water_seam_trial':
     holdout_keys = [tuple(row) for row in json.loads(HOLDOUT.read_text(encoding='utf-8'))['keys']]
     np.random.default_rng(SEED).shuffle(holdout_keys)
     paths = {}
-    for path in (ROOT / 'Model_grids' / 'H2O').glob('*.csv'):
+    for path in (ROOT / 'Model_grids' / 'sigma0' / 'H2O').glob('*.csv'):
         match = re.fullmatch(r'T(\d+)N([\d.]+)\.csv', path.name)
         if match:
             paths[(float(match[1]), float(match[2]))] = path
@@ -316,6 +316,10 @@ if not MOLECULES:
 # ---------------------------------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GRID_SIGMA = int(os.environ.get('DISKMELTS_GRID_SIGMA', '0'))
+if GRID_SIGMA not in (0, 2):
+    raise ValueError('DISKMELTS_GRID_SIGMA must be 0 or 2')
+SIGMA_TAG = f'sigma{GRID_SIGMA}'
 HIDDEN = (64, 128, 64)
 N_EPOCHS = int(os.environ.get('DISKMELTS_N_EPOCHS', '5000'))
 BATCH = 128
@@ -366,17 +370,22 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         )
         T_range = tuple(config['T_range'])
         logN_range = tuple(config['logN_range'])
-        grid_dir = os.path.join(BASE_DIR, 'Model_grids', MOL)
+        grid_dir = os.path.join(BASE_DIR, 'Model_grids', SIGMA_TAG, MOL)
+        output_subdir = [] if GRID_SIGMA == 0 else [SIGMA_TAG]
         pretrain_csv = os.path.join(
-            BASE_DIR, 'Pretrain_grid', 'pretrain_H2O_wavelength_bank_T100to1400_N13to19.csv'
+            BASE_DIR, 'Pretrain_grid', *output_subdir,
+            'pretrain_H2O_wavelength_bank_T100to1400_N13to19.csv'
         )
         holdout_path = os.path.join(
-            BASE_DIR, 'Pretrain_grid', 'holdout_H2O_wavelength_bank_T100to1400_N13to19.json'
+            BASE_DIR, 'Pretrain_grid', *output_subdir,
+            'holdout_H2O_wavelength_bank_T100to1400_N13to19.json'
         )
-        model_dir = os.path.join(BASE_DIR, 'Trained_model', 'H2O_wavelength_bank_v2_fixed')
+        model_dir = os.path.join(BASE_DIR, 'Trained_model', *output_subdir,
+                                 'H2O_wavelength_bank_v2_fixed')
         manifest_path = os.path.join(model_dir, 'H2O_model_bank.json')
         figure_dir = os.path.join(
-            BASE_DIR, 'figures', 'validation', 'H2O_wavelength_bank_v2_fixed'
+            BASE_DIR, 'figures', 'validation', *output_subdir,
+            'H2O_wavelength_bank_v2_fixed'
         )
 
         print('\n' + '=' * 76)
@@ -414,6 +423,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         )
         holdout_metadata = {
             'mol': MOL,
+            'grid_sigma': GRID_SIGMA,
             'seed': SEED,
             'fraction': HOLDOUT_FRACTION,
             'wavelength_ranges': [list(item) for item in wavelength_ranges],
@@ -496,6 +506,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
             scheduler_patience=100,
             min_lr=1e-6,
             temperature_transform='log10',
+            grid_sigma=GRID_SIGMA,
         )
         if not RUN_VALIDATION:
             continue
@@ -643,6 +654,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
 
         summary = {
             'mol': MOL,
+            'grid_sigma': GRID_SIGMA,
             'manifest': manifest_path,
             'wavelength_ranges': [list(item) for item in wavelength_ranges],
             'T_range': list(T_range),
@@ -688,17 +700,22 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
     T_range = tuple(config['T_range'])
     logN_range = tuple(config['logN_range'])
 
-    grid_dir = os.path.join(BASE_DIR, 'Model_grids', MOL)
+    grid_dir = os.path.join(BASE_DIR, 'Model_grids', SIGMA_TAG, MOL)
+    output_subdir = [] if GRID_SIGMA == 0 else [SIGMA_TAG]
     data_tag = 'single_T100to1400_N13to19p5' if MOL != 'H2O' else 'single_T100to1400_N13to19'
     # Preserve the older checkpoint while training this newly supplied grid.
-    artifact_tag = f'{MOL}_single_v2_newgrid' if MOL == '13C12CH2' else f'{MOL}_single_v2'
-    if MOL == '13C12CH2':
+    artifact_tag = (f'{MOL}_single_v2_newgrid'
+                    if MOL == '13C12CH2' and GRID_SIGMA == 0
+                    else f'{MOL}_single_v2')
+    if MOL == '13C12CH2' and GRID_SIGMA == 0:
         data_tag += '_newgrid'
-    pretrain_csv = os.path.join(BASE_DIR, 'Pretrain_grid', f'pretrain_{MOL}_{data_tag}.csv')
-    holdout_path = os.path.join(BASE_DIR, 'Pretrain_grid', f'holdout_{MOL}_{data_tag}.json')
-    model_dir = os.path.join(BASE_DIR, 'Trained_model', artifact_tag)
+    pretrain_csv = os.path.join(BASE_DIR, 'Pretrain_grid', *output_subdir,
+                                f'pretrain_{MOL}_{data_tag}.csv')
+    holdout_path = os.path.join(BASE_DIR, 'Pretrain_grid', *output_subdir,
+                                f'holdout_{MOL}_{data_tag}.json')
+    model_dir = os.path.join(BASE_DIR, 'Trained_model', *output_subdir, artifact_tag)
     model_path = os.path.join(model_dir, f'net_{MOL}_forward.pt')
-    figure_dir = os.path.join(BASE_DIR, 'figures', 'validation', artifact_tag)
+    figure_dir = os.path.join(BASE_DIR, 'figures', 'validation', *output_subdir, artifact_tag)
 
     print('\n' + '=' * 76)
     print(
@@ -740,6 +757,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
     )
     holdout_metadata = {
         'mol': MOL,
+        'grid_sigma': GRID_SIGMA,
         'seed': SEED,
         'fraction': HOLDOUT_FRACTION,
         'wav_range': list(wav_range),
@@ -980,6 +998,7 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
 
     summary = {
         'mol': MOL,
+        'grid_sigma': GRID_SIGMA,
         'checkpoint': model_path,
         'n_pca': selected_n_pca,
         'pca_tuning': pca_tuning,

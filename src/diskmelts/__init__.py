@@ -39,6 +39,7 @@ from diskmelts.plotting import (
 )
 from diskmelts.v2_fitting import (
     MODEL_SPECS,
+    SIGMA2_MODEL_SPECS,
     load_fitting_models,
     fit_stage,
     fit_observation,
@@ -58,6 +59,7 @@ from diskmelts import consub
 __all__ = [
     "consub",
     "MODEL_SPECS",
+    "SIGMA2_MODEL_SPECS",
     "load_fitting_models",
     "fit_stage",
     "fit_observation",

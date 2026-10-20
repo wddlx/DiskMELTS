@@ -16,7 +16,7 @@ newer:
 python -m pip install diskmelts
 ```
 
-Then use the {doc}`quick start <quickstart>` to load a spectrum and fit a
+Then use {doc}`Your first spectrum <quickstart>` to load a spectrum and fit a
 molecule. The guide includes a downloadable sample CSV, so a checkout is not
 needed.
 
@@ -41,8 +41,8 @@ combined residual.
 
 ::::
 
-Start with {doc}`installation`, browse the {doc}`notebook gallery <notebooks/index>`,
-or read the detailed {doc}`continuum` and {doc}`quickstart` guides.
+Start with {doc}`installation`, follow {doc}`Your first spectrum <quickstart>`,
+or browse the {doc}`notebook tutorials <notebooks/index>` for detailed examples.
 
 ---
 
@@ -64,9 +64,9 @@ area scaling solved analytically during the fit.
 :caption: User Guide
 
 installation
-continuum
-notebooks/index
 quickstart
+notebooks/index
+continuum
 training
 ```
 

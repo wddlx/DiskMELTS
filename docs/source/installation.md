@@ -90,35 +90,37 @@ To update an existing installation later, run
 
 ## Your first spectrum
 
-The package includes 20 production checkpoints for 16 species and continuum
-reference data.
+Version 2.2.0 includes 44 production checkpoints: 21 trained with sigma=0 and
+23 trained with sigma=2, plus continuum reference data. Choose the new models
+with `load_fitting_models('C6H6', sigma=2)` or `fit_observation(..., sigma=2)`.
 You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
 CSV, subtract a continuum if needed, fit a molecule, and use a
 [downloadable example spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv).
 Ordinary fitting needs neither the repository nor the full slab grids.
 
 Full `Model_grids/` data are separate and needed only for direct-grid fitting
-or training. Set `grid_root` to their local directory when using the grid API.
+or training. For the current grids, set `grid_root='Model_grids/sigma0'`
+when using the grid API.
 See {doc}`quickstart` and {doc}`training` for those workflows.
 
 ## For contributors: install from a checkout
 
-Clone the repository only when you want to edit the code or run its example
-notebooks and tests:
+Clone the repository when you want to edit the code or run its example
+notebooks and tests. The supplied `environment.yaml` creates the core Conda
+environment and installs DiskMELTS in editable mode:
 
 ```bash
 git clone https://github.com/wddlx/DiskMELTS.git
 cd DiskMELTS
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev,io,notebooks]"
-pytest
+conda env create -f environment.yaml
+conda activate diskmelts
 ```
 
-On Windows, create the environment with `py -3 -m venv .venv` and activate it
-with `.\.venv\Scripts\Activate.ps1`. The repository also provides Conda YAML
-files for local development. These install DiskMELTS in editable mode from the
-checkout; they are not needed for a PyPI installation.
+Use `mamba env create -f environment.yaml` if you prefer Mamba. For notebooks
+and FITS support, use `environment-notebooks.yaml`; for tests and docs, use
+`environment-dev.yaml`. Each file defines its own environment and installs
+the checkout in editable mode. If you prefer a Python venv, activate one and
+run `python -m pip install -e ".[dev,io,notebooks]"`, then `pytest`.
 
 On Linux or Windows, pip selects the PyTorch wheel for the platform. If you
 need a particular CUDA or ROCm build, follow the

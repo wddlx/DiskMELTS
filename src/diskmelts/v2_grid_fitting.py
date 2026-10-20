@@ -1,6 +1,7 @@
 """Fit observations directly with the v2 slab CSV grids.
 
-This workflow reads ``Model_grids/<molecule>/T...N....csv`` and never loads a
+This workflow reads ``<grid_root>/<molecule>/T...N....csv`` (currently
+``Model_grids/sigma0/<molecule>/``) and never loads a
 trained surrogate. It interpolates flux linearly between adjacent T/logN grid
 points, fits positive component amplitudes, and estimates local likelihood
 errors. The reported T and logN errors include the *full local grid step* in

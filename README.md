@@ -11,7 +11,8 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 ## Installation
 
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/).
-The C6H6 and C3H4 checkpoints are included starting with version 2.1.2.
+Version 2.2.0 bundles 44 production checkpoints, including sigma=2 models for
+18 species and CH3 in both sigma versions.
 With Python 3.9 or newer, install it from any directory. These commands use
 `python` in an activated environment; the
 [installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
@@ -34,6 +35,18 @@ tables. Full slab grids for training and direct-grid fitting are separate
 downloads; pass their local path as `grid_root`.
 Example notebooks and spectra can be downloaded from the repository when
 needed; they are not installed by pip.
+
+To install from a checkout with Conda or Mamba, run:
+
+```bash
+git clone https://github.com/wddlx/DiskMELTS.git
+cd DiskMELTS
+conda env create -f environment.yaml
+conda activate diskmelts
+```
+
+Use `environment-notebooks.yaml` or `environment-dev.yaml` for the corresponding
+notebook or contributor dependencies.
 
 ## Runtime dependencies
 
@@ -139,8 +152,17 @@ python examples/dev_v2_realobs.py
 The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
 `plot_saved_observation`. The production checkpoints are packaged under
 `src/diskmelts/models/` and included in the wheel. Model fitting requires no
-`Model_grids/` or `Pretrain_grid/` directory. The model metadata, including
-PCA counts and network layers, are in `diskmelts.MODEL_SPECS` and checked when
+`Model_grids/` or `Pretrain_grid/` directory. `diskmelts.MODEL_SPECS` records
+PCA counts, network layers, and `grid_sigma=0` for the original checkpoints.
+In version 2.2.0, sigma=2 checkpoints are available for H2O,
+C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4, CH4,
+C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
+`load_fitting_models(['H2O', 'C2H2'], sigma=2)` or
+`fit_observation(..., sigma=2)`. The C2H2 bank covers 6–9 and 11.5–17 µm;
+choose fit windows within those bands. OH covers 15–26 µm. Both C6H6
+checkpoints cover 13–17 µm and 100–675 K; the sigma=2 checkpoint is selected
+with `load_fitting_models('C6H6', sigma=2)`.
+The checkpoint settings are checked when
 loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
 sets the source distance and makes the returned emitting area physical.
 The [fitting notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
@@ -151,10 +173,11 @@ joint stage to choose those constraints. See the
 [fitting guide](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for examples.
 
 For an optional fit directly from slab grids, use `fit_grid_stage` or
-`fit_observation_grids` and supply `grid_root='Model_grids'` explicitly. This
+`fit_observation_grids` and supply `grid_root='Model_grids/sigma0'` explicitly. This
 separate method does require the full local grids. See the
 [quick start](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for both workflows and saved-result
 plotting.
+For complete sigma=2 grids, pass `grid_root='Model_grids/sigma2'`.
 
 ## Training and validation data
 
@@ -164,7 +187,7 @@ checkpoint directories under the top-level `Trained_model/` are also optional; t
 only the production checkpoints needed for v2 fitting. To run
 `examples/dev_v2_pt_validation.py` or
 `notebooks/Example_Training_Validation.ipynb`, place the complete model grids
-under `Model_grids/<molecule>/`. The workflows create or reuse the corresponding
+under `Model_grids/sigma0/<molecule>/`. The workflows create or reuse the corresponding
 pretraining CSV under `Pretrain_grid/`.
 
 The maintained v2 workflow uses a hybrid design after restricting the expanded
@@ -184,9 +207,14 @@ DISKMELTS_MOLECULES=13C12CH2,C2HD,CO17O,CO18O python examples/dev_v2_pt_validati
 C6H6 and C3H4 also have bundled fitting checkpoints. The C6H6 checkpoint
 covers 13–17 µm and 100–675 K; C3H4 covers 15–18 µm and 100–1400 K. Load
 either by name with `load_fitting_models`. Direct grid fitting
-uses the same names with local `Model_grids/C6H6/` and `Model_grids/C3H4/`
+uses the same names with local `Model_grids/sigma0/C6H6/` and `Model_grids/sigma0/C3H4/`
 files. See the [training guide](https://diskmelts.readthedocs.io/en/latest/training.html)
 for peak audits and retraining commands.
+
+Version 2.2.0 also includes a CH3 checkpoint for 15–18 µm,
+`T=100–1400 K`, and `logN=13–19.5`. Its strongest grid feature in this window
+is near 16.4–16.6 µm. Use `load_fitting_models('CH3')` after installing this
+package; direct-grid fitting uses local `Model_grids/sigma0/CH3/` files.
 
 Five to ten percent of complete `(T, logN)` grid spectra are excluded before
 PCA or neural-network training. They are used to select the PCA dimension and
