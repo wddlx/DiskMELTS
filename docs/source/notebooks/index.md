@@ -6,10 +6,10 @@ Install `diskmelts` and run the fitting notebook from any folder, using your
 own CSV path or wavelength, flux, and error arrays. A repository checkout is
 needed only for the included example data or the optional training script and
 slab grids. The {doc}`../installation` page describes a notebook environment.
-The documentation build displays notebook code but
-does not run the fitting or training cells. The figures below were rendered
-from the included Upper Sco example and the notebook's current constrained
-fitting run.
+The documentation build does not run the notebooks; each page shows the
+outputs saved in the notebook, including its figures, so you can see what to
+expect before running anything. The continuum and fitting outputs come from
+the included Upper Sco J16120505 example.
 
 The fitting and training notebooks load checkpoints containing scikit-learn
 1.8 objects; `pip install diskmelts` installs a matching 1.8.x release, and

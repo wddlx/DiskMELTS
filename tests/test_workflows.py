@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -32,10 +33,21 @@ def test_notebook_code_cells_compile(path):
             compile("".join(cell["source"]), f"{path.name}:cell-{index}", "exec")
 
 
+@pytest.mark.parametrize("path,minimum", [(CONSUB_NOTEBOOK, 1),
+                                          (FITTING_NOTEBOOK, 4),
+                                          (SPECTRUM_NOTEBOOK, 2)])
+def test_notebooks_keep_saved_figures_for_docs(path, minimum):
+    # The docs never execute notebooks, so these saved figures are what readers see.
+    figures = sum("image/png" in output.get("data", {})
+                  for cell in _notebook(path)["cells"] if cell["cell_type"] == "code"
+                  for output in cell.get("outputs", []))
+    assert figures >= minimum
+    assert "/Users/" not in path.read_text()
+
+
 @pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK])
 def test_notebook_rejects_incompatible_sklearn(path, monkeypatch):
-    sklearn = pytest.importorskip("sklearn")
-    monkeypatch.setattr(sklearn, "__version__", "0.0")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.0")
     with pytest.raises(RuntimeError, match="require scikit-learn 1.8"):
         exec(_code_cell(_notebook(path), 1), {})
 
@@ -56,9 +68,8 @@ def test_consub_notebook_reads_public_usco_csv(monkeypatch, start_dir):
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
 def test_fitting_notebook_accepts_standalone_paths(monkeypatch, start_dir):
     pytest.importorskip("torch")
-    sklearn = pytest.importorskip("sklearn")
     # This test checks paths and stage settings; the version guard is tested above.
-    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.8.0")
     notebook = _notebook(FITTING_NOTEBOOK)
     namespace = {}
 
@@ -79,8 +90,7 @@ def test_fitting_notebook_accepts_standalone_paths(monkeypatch, start_dir):
 
 
 def test_fitting_notebook_config_runs_outside_checkout(monkeypatch, tmp_path):
-    sklearn = pytest.importorskip("sklearn")
-    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.8.0")
     monkeypatch.chdir(tmp_path)
     notebook = _notebook(FITTING_NOTEBOOK)
     namespace = {}
@@ -94,8 +104,7 @@ def test_fitting_notebook_config_runs_outside_checkout(monkeypatch, tmp_path):
 def test_fitting_notebook_selects_csv_or_arrays(monkeypatch, tmp_path, array_mode):
     import numpy as np
 
-    sklearn = pytest.importorskip('sklearn')
-    monkeypatch.setattr(sklearn, '__version__', '1.8.0')
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.8.0")
     monkeypatch.chdir(tmp_path)
     notebook = _notebook(FITTING_NOTEBOOK)
     namespace = {}
@@ -134,8 +143,7 @@ def test_fitting_notebook_selects_csv_or_arrays(monkeypatch, tmp_path, array_mod
 def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir,
                                                         grid_sigma):
     pytest.importorskip("torch")
-    sklearn = pytest.importorskip("sklearn")
-    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "1.8.0")
     notebook = _notebook(TRAINING_NOTEBOOK)
     namespace = {}
 
