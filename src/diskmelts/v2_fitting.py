@@ -15,6 +15,7 @@ import torch
 from diskmelts.fitting import (
     detect_stage_molecules,
     fit_molecules,
+    generate_spectrum,
     load_models,
     load_observed_spectrum,
     print_fit_params,
@@ -57,7 +58,25 @@ MODEL_SPECS = {
             'n_pca': 75 if mol in {'C3H4', 'CH3'} else 30,
             'hidden': (64, 128, 64),
         }
-        for mol, wav_range in CARBON_RANGES.items()
+        for mol, wav_range in CARBON_RANGES.items() if mol != 'C2H2'
+    },
+    'C2H2': {
+        'grid_sigma': 0,
+        'path': 'Trained_model/sigma0/C2H2_wavelength_bank_v2/C2H2_model_bank.json',
+        'wavelength_ranges': ((6.0, 9.0), (11.5, 17.0)),
+        'T_bounds': (100.0, 1400.0),
+        'logN_bounds': (13.0, 19.5),
+        'n_pca': 30,
+        'hidden': (64, 128, 64),
+    },
+    'OH': {
+        'grid_sigma': 0,
+        'path': 'Trained_model/sigma0/OH_single_v2/net_OH_forward.pt',
+        'wavelength_ranges': ((15.0, 26.0),),
+        'T_bounds': (100.0, 1400.0),
+        'logN_bounds': (13.0, 19.5),
+        'n_pca': 75,
+        'hidden': (64, 128, 64),
     },
 }
 SIGMA2_MODEL_SPECS = {
@@ -83,13 +102,9 @@ SIGMA2_MODEL_SPECS = {
         'wavelength_ranges': ((6.0, 9.0), (11.5, 17.0)),
     },
     'OH': {
+        **MODEL_SPECS['OH'],
         'grid_sigma': 2,
         'path': 'Trained_model/sigma2/OH_single_v2/net_OH_forward.pt',
-        'wavelength_ranges': ((15.0, 26.0),),
-        'T_bounds': (100.0, 1400.0),
-        'logN_bounds': (13.0, 19.5),
-        'n_pca': 75,
-        'hidden': (64, 128, 64),
     },
 }
 
@@ -189,6 +204,45 @@ def load_fitting_models(molecules, root=None, model_specs=None, *, sigma=0):
     return pretrained
 
 
+def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
+                        wavelength=None, distance_pc=140.0, root=None):
+    """Return wavelength (µm) and model flux (Jy) for one bundled molecule.
+
+    ``logN`` is log10 column density in cm⁻² and ``A`` is emitting area in
+    au². Checkpoints predict flux for A=1 au² at 140 pc; ``distance_pc``
+    rescales that flux. With no ``wavelength``, use the checkpoint's native
+    wavelength axis (the union of its tiles for a model bank).
+    """
+    specs = _model_specs_for_sigma(sigma)
+    if molecule not in specs:
+        raise ValueError(f'No v2 model checkpoint for {molecule!r} at sigma={sigma}')
+    spec = specs[molecule]
+    if not spec['T_bounds'][0] <= T <= spec['T_bounds'][1]:
+        raise ValueError(f'T is outside the trained range {spec["T_bounds"]}')
+    if not spec['logN_bounds'][0] <= logN <= spec['logN_bounds'][1]:
+        raise ValueError(f'logN is outside the trained range {spec["logN_bounds"]}')
+    if not np.isfinite(A) or A < 0:
+        raise ValueError('A must be finite and nonnegative')
+    if not np.isfinite(distance_pc) or distance_pc <= 0:
+        raise ValueError('distance_pc must be finite and positive')
+    model = load_fitting_models(molecule, root=root, sigma=sigma)[molecule]
+    if wavelength is None:
+        if model.get('is_model_bank', False):
+            wavelength = np.unique(np.concatenate([
+                tile['model']['wav'] for tile in model['tiles']
+            ]))
+        else:
+            wavelength = model['wav'].copy()
+    else:
+        wavelength = np.asarray(wavelength, dtype=float)
+        if (wavelength.ndim != 1 or wavelength.size == 0 or
+                not np.all(np.isfinite(wavelength)) or
+                np.any(np.diff(wavelength) <= 0)):
+            raise ValueError('wavelength must be a nonempty, increasing 1D array')
+    flux = generate_spectrum(T, logN, A, model, obs_wav=wavelength)
+    return wavelength, flux * (140.0 / float(distance_pc)) ** 2
+
+
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
               pretrained, *, model_specs=None, distance_pc=140.0,
               **options):
@@ -246,7 +300,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     return fit
 
 
-def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
+def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma=0,
                     output_dir=None, comparison_csv=None,
                     distance_pc=140.0,
                     line_free_windows=((11.45, 11.55), (13.10, 13.20),
@@ -254,7 +308,8 @@ def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
                     detection_screening=True, detection_sigma_factor=None,
                     n_samples=None, n_refine=None, n_top=None,
                     sample_method='sobol', seed=42, skiprows=1,
-                    delimiter=',', wav_col=0, flux_col=1):
+                    delimiter=',', wav_col=0, flux_col=1,
+                    obs_wav=None, obs_flux=None, obs_err=None):
     """Fit ordered stages, subtracting each model and saving CSV products.
 
     Each stage specifies ``name``, ``mol``, ``wavelength_range``, and
@@ -264,14 +319,46 @@ def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
     ``Tshare``, ``Ashare``, and bounds passed to
     ``fit_stage``.
     ``sigma`` selects the bundled grid broadening (0 or 2), whereas estimated
-    ``sigma_noise`` represents the observed flux uncertainty.
+    ``sigma_noise`` represents the observed flux uncertainty. Pass either
+    ``input_path`` or in-memory ``obs_wav`` and ``obs_flux`` arrays. Optional
+    ``obs_err`` supplies per-pixel measurement errors; their positive finite
+    median is used as the scalar noise level for screening and uncertainty
+    estimates. Spectral fitting itself remains unweighted by individual errors.
     """
     model_root = MODEL_ROOT if root is None else Path(root)
     model_specs = _model_specs_for_sigma(sigma)
-    input_path = Path(input_path)
-    if not input_path.is_file():
-        raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
-    stages = list(stages)
+    array_input = obs_wav is not None or obs_flux is not None or obs_err is not None
+    if input_path is not None and array_input:
+        raise ValueError('pass either input_path or obs_wav/obs_flux/obs_err, not both')
+    if input_path is None:
+        if obs_wav is None or obs_flux is None:
+            raise ValueError('obs_wav and obs_flux are required without input_path')
+        obs_wav = np.asarray(obs_wav, dtype=float)
+        obs_flux = np.asarray(obs_flux, dtype=float)
+        if (obs_wav.ndim != 1 or obs_flux.ndim != 1 or
+                obs_wav.shape != obs_flux.shape or obs_wav.size == 0):
+            raise ValueError('obs_wav and obs_flux must be nonempty, matching 1D arrays')
+        if obs_err is not None:
+            obs_err = np.asarray(obs_err, dtype=float)
+            if obs_err.shape != obs_wav.shape:
+                raise ValueError('obs_err must match obs_wav and obs_flux')
+        valid = np.isfinite(obs_wav) & np.isfinite(obs_flux)
+        obs_wav, obs_flux = obs_wav[valid], obs_flux[valid]
+        if obs_err is not None:
+            obs_err = obs_err[valid]
+        if obs_wav.size == 0 or np.any(np.diff(obs_wav) <= 0):
+            raise ValueError('usable obs_wav values must be increasing and unique')
+        source_name = name or 'spectrum'
+    else:
+        input_path = Path(input_path)
+        if not input_path.is_file():
+            raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
+        obs_wav, obs_flux = load_observed_spectrum(
+            input_path, skiprows=skiprows, delimiter=delimiter,
+            wav_col=wav_col, flux_col=flux_col,
+        )
+        source_name = name or input_path.stem
+    stages = list(stages) if stages is not None else []
     if not stages:
         raise ValueError('at least one fitting stage is required')
     names = [stage['name'] for stage in stages]
@@ -282,11 +369,6 @@ def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
         for mol in ([stage['mol']] if isinstance(stage['mol'], str) else stage['mol'])
     ))
     pretrained = load_fitting_models(molecules, root=model_root, sigma=sigma)
-    obs_wav, obs_flux = load_observed_spectrum(
-        input_path, skiprows=skiprows, delimiter=delimiter,
-        wav_col=wav_col, flux_col=flux_col,
-    )
-    source_name = name or input_path.stem
     default_output_dir = Path.cwd() / 'realobs_results'
     if sigma == 2:
         default_output_dir /= 'sigma2'
@@ -303,7 +385,13 @@ def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
     if detection_sigma_factor is None:
         detection_sigma_factor = float(os.environ.get('DISKMELTS_DETECTION_SIGMA_FACTOR', '3.0'))
     sigma_noise = None
-    if line_free_windows:
+    if obs_err is not None:
+        usable_err = obs_err[np.isfinite(obs_err) & (obs_err > 0)]
+        if usable_err.size == 0:
+            raise ValueError('obs_err must contain a positive finite value')
+        sigma_noise = float(np.median(usable_err))
+        print(f'Using median supplied error σ = {sigma_noise:.5f} Jy')
+    elif line_free_windows:
         chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
                   for lo, hi in line_free_windows
                   if np.any((obs_wav >= lo) & (obs_wav <= hi))]
@@ -364,6 +452,7 @@ def fit_observation(input_path, stages, *, name=None, root=None, sigma=0,
     print('\nDone.')
     return {
         'fits': all_fits, 'obs_wav': obs_wav, 'obs_flux': obs_flux,
+        'obs_err': obs_err,
         'residual': residual, 'cumulative_model': cumulative_model,
         'sigma_noise': sigma_noise, 'grid_sigma': sigma, 'products': products,
     }

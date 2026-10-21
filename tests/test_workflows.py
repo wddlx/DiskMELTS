@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FITTING_NOTEBOOK = ROOT / "notebooks" / "Example_Fitting.ipynb"
 TRAINING_NOTEBOOK = ROOT / "notebooks" / "Example_Training_Validation.ipynb"
 CONSUB_NOTEBOOK = ROOT / "notebooks" / "Example_Consub.ipynb"
+SPECTRUM_NOTEBOOK = ROOT / "notebooks" / "Example_Generate_Spectra.ipynb"
 
 def _notebook(path):
     return json.loads(path.read_text())
@@ -23,7 +24,8 @@ def _code_cell(notebook, index):
     return "".join(notebook["cells"][index]["source"])
 
 
-@pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK, CONSUB_NOTEBOOK])
+@pytest.mark.parametrize("path", [FITTING_NOTEBOOK, TRAINING_NOTEBOOK,
+                                  CONSUB_NOTEBOOK, SPECTRUM_NOTEBOOK])
 def test_notebook_code_cells_compile(path):
     for index, cell in enumerate(_notebook(path)["cells"]):
         if cell["cell_type"] == "code":
@@ -52,7 +54,7 @@ def test_consub_notebook_reads_public_usco_csv(monkeypatch, start_dir):
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
-def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
+def test_fitting_notebook_accepts_standalone_paths(monkeypatch, start_dir):
     pytest.importorskip("torch")
     sklearn = pytest.importorskip("sklearn")
     # This test checks paths and stage settings; the version guard is tested above.
@@ -64,13 +66,67 @@ def test_fitting_notebook_resolves_committed_assets(monkeypatch, start_dir):
     exec(_code_cell(notebook, 1), namespace)
     exec(_code_cell(notebook, 2), namespace)
 
-    assert namespace["BASE_DIR"] == ROOT
-    assert namespace["SOURCE"].is_file()
-    assert namespace["SOURCE"].name == "j16120505_v9.0_contsub_RVcorr.csv"
-    assert namespace["DISTANCE_PC"] == pytest.approx(122.5)
+    assert "BASE_DIR" not in namespace
+    assert namespace["SOURCE"] == Path('my_spectrum.csv')
+    assert namespace["OBS_WAV"] is None
+    assert namespace["OBS_FLUX"] is None
+    assert namespace["OBS_ERR"] is None
+    assert namespace["DISTANCE_PC"] == pytest.approx(140.0)
+    assert namespace["OUTPUT_DIR"] == Path('results/my_source')
     assert [stage['name'] for stage in namespace['STAGES']] == [
         'water', 'carbon', 'CO2']
     assert 'MODEL_PATHS' not in namespace
+
+
+def test_fitting_notebook_config_runs_outside_checkout(monkeypatch, tmp_path):
+    sklearn = pytest.importorskip("sklearn")
+    monkeypatch.setattr(sklearn, "__version__", "1.8.0")
+    monkeypatch.chdir(tmp_path)
+    notebook = _notebook(FITTING_NOTEBOOK)
+    namespace = {}
+    exec(_code_cell(notebook, 1), namespace)
+    exec(_code_cell(notebook, 2), namespace)
+    assert namespace['SOURCE'] == Path('my_spectrum.csv')
+    assert namespace['OUTPUT_DIR'] == Path('results/my_source')
+
+
+@pytest.mark.parametrize('array_mode', [False, True])
+def test_fitting_notebook_selects_csv_or_arrays(monkeypatch, tmp_path, array_mode):
+    import numpy as np
+
+    sklearn = pytest.importorskip('sklearn')
+    monkeypatch.setattr(sklearn, '__version__', '1.8.0')
+    monkeypatch.chdir(tmp_path)
+    notebook = _notebook(FITTING_NOTEBOOK)
+    namespace = {}
+    exec(_code_cell(notebook, 1), namespace)
+    exec(_code_cell(notebook, 2), namespace)
+    wave = np.array([13.8, 13.9])
+    flux = np.array([0.1, 0.2])
+    error = np.array([0.01, 0.01])
+    source = tmp_path / 'my_spectrum.csv'
+    source.write_text('wav,flux\n13.8,0.1\n13.9,0.2\n')
+    if array_mode:
+        namespace.update(SOURCE=None, OBS_WAV=wave, OBS_FLUX=flux,
+                         OBS_ERR=error)
+    called = {}
+
+    def fake_fit_observation(**kwargs):
+        called.update(kwargs)
+        return {'fits': {}, 'obs_wav': wave, 'obs_flux': flux}
+
+    namespace['fit_observation'] = fake_fit_observation
+    namespace['OUTPUT_DIR'].mkdir(parents=True)
+    fit_setup = _code_cell(notebook, 4).split("print('Fitted stages:")[0]
+    exec(fit_setup, namespace)
+    if array_mode:
+        np.testing.assert_array_equal(called['obs_wav'], wave)
+        np.testing.assert_array_equal(called['obs_flux'], flux)
+        np.testing.assert_array_equal(called['obs_err'], error)
+        assert namespace['PLOT_SOURCE'].is_file()
+    else:
+        assert called['input_path'] == Path('my_spectrum.csv')
+        assert namespace['PLOT_SOURCE'] == Path('my_spectrum.csv')
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
@@ -90,9 +146,9 @@ def test_training_notebook_resolves_local_data_locations(monkeypatch, start_dir,
         'GRID_SIGMA = 0  #', f'GRID_SIGMA = {grid_sigma}  #')
     exec(source, namespace)
 
-    assert namespace["BASE_DIR"] == ROOT
-    assert namespace["GRID_DIR"] == ROOT / "Model_grids" / f"sigma{grid_sigma}" / namespace["TRAIN_MOLECULE"]
-    output = ROOT / 'Trained_model'
+    assert namespace["BASE_DIR"] == start_dir
+    assert namespace["GRID_DIR"] == start_dir / "Model_grids" / f"sigma{grid_sigma}" / namespace["TRAIN_MOLECULE"]
+    output = start_dir / 'Trained_model'
     if grid_sigma == 2:
         output /= 'sigma2'
     assert namespace['LOCAL_MODEL'].parent == output / 'CO2_single_v2'
@@ -103,7 +159,7 @@ def test_production_checkpoint_files_are_bundled():
     from diskmelts import MODEL_SPECS, SIGMA2_MODEL_SPECS
     from diskmelts.v2_fitting import MODEL_ROOT
 
-    assert len(MODEL_SPECS) == 17
+    assert len(MODEL_SPECS) == 18
     for molecule, spec in MODEL_SPECS.items():
         assert spec['grid_sigma'] == 0
         path = MODEL_ROOT / spec['path']
@@ -116,7 +172,7 @@ def test_production_checkpoint_files_are_bundled():
     for molecule, spec in SIGMA2_MODEL_SPECS.items():
         assert spec['grid_sigma'] == 2
         assert (MODEL_ROOT / spec['path']).is_file(), molecule
-    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 44
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 46
 
 
 def test_new_grid_checkpoints_load_and_generate_finite_spectra():
@@ -144,7 +200,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
                     '/0-Consub/',
                     '/docs/_build/', '/realobs_results/', '/figures/*'):
         assert pattern in patterns
-    for path in ('src/diskmelts/models/Trained_model/sigma0/C2H2_single_v2/net_C2H2_forward.pt',
+    for path in ('src/diskmelts/models/Trained_model/sigma0/C2H2_wavelength_bank_v2/net_C2H2_w11p5to17.pt',
                  'src/diskmelts/consub/regions/ttauri.csv',
                  'src/diskmelts/consub/cont_ranges.csv',
                  'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',

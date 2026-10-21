@@ -12,6 +12,10 @@ curl -L -o j16120505_contsub.csv https://raw.githubusercontent.com/wddlx/DiskMEL
 
 The CSV reader uses the first two columns for wavelength (µm) and flux (Jy)
 and skips one header row. The sample's extra `err` and `cont` columns are fine.
+You can use a spectrum anywhere on your computer; no repository layout or
+`pyproject.toml` search is needed. For example,
+`Path('/path/to/my_spectrum.csv')` or `Path('my_spectrum.csv')` works when
+the file exists at that location.
 
 ## Step 1: prepare the spectrum
 
@@ -62,6 +66,12 @@ fit = fit_stage(
 print(fit['params']['C2H2'])
 ```
 
+The same `fit_stage` call accepts wavelength and flux arrays read from any
+source; a CSV is not required. If you have measurement errors, pass one
+representative scalar as `sigma`, for example
+`sigma=float(np.nanmedian(error))`. The current fitter does not weight each
+pixel by its individual error.
+
 `fit_stage` returns fitted parameters, component spectra, the total model,
 residuals, and uncertainty estimates. It accepts one molecule or a list for a
 joint fit. `fit_ranges` accepts one `(low, high)` pair, a list of pairs, or a
@@ -75,12 +85,12 @@ The default checkpoints use sigma=0 grids. Sigma=2 checkpoints cover H2O,
 C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4,
 CH4, C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
 `load_fitting_models(['H2O', 'C2H2'], sigma=2)`. For a saved staged fit, pass
-`sigma=2` to `fit_observation`. The sigma=2 C2H2 bank covers 6–9 and
+`sigma=2` to `fit_observation`. Both C2H2 banks cover 6–9 and
 11.5–17 µm. Fit either band with a window inside its range; wavelengths
 between 9 and 11.5 µm have no C2H2 checkpoint. OH covers 15–26 µm.
 C6H6 covers 13–17 µm and 100–675 K in both sigma versions.
 `fit_stage` selects the corresponding parameter bounds from the loaded
-checkpoints, including OH, which is available only at sigma=2.
+checkpoints, including OH at sigma=0 or sigma=2.
 
 For C6H6 and C3H4, load `['C6H6', 'C3H4']` and fit them in separate stages
 with `wavelength_range` `(13.0, 17.0)` and `(15.0, 18.0)`, respectively.
@@ -89,7 +99,7 @@ The cool C6H6 grids peak near 14.84 µm, so include that region in its
 trained for `T=100–675 K`; C3H4 covers `T=100–1400 K`. Both cover
 `logN=13–19.5`. Fit hotter C6H6 with the direct grid workflow below.
 
-Version 2.2.0 includes a CH3 checkpoint covering 15–18 µm,
+The package includes a CH3 checkpoint covering 15–18 µm,
 `T=100–1400 K`, and `logN=13–19.5`. Its strongest feature lies around
 16.4–16.6 µm, so a CH3 stage can use `wavelength_range=(15.0, 18.0)` and
 `fit_ranges=(16.3, 16.7)`.
@@ -158,12 +168,45 @@ the full requested T and logN rectangle.
 
 ## Ordered stages, saved results, and plots
 
+For a saved staged fit, `fit_observation` also accepts arrays directly. This
+works with data you have already read from FITS, separate files, or your own
+I/O code. If your variables are named `wav`, `flux`, and `err`, pass them
+directly; no CSV conversion is needed. This array option is currently in the
+source checkout and has not yet been published to PyPI. The published 2.2.0
+package accepts wavelength and flux arrays through `fit_stage` above:
+
+```python
+from diskmelts import fit_observation
+
+stages = [{'name': 'hcn', 'mol': 'HCN',
+           'wavelength_range': (11.5, 17.0),
+           'fit_ranges': (13.8, 14.2)}]
+result = fit_observation(
+    stages=stages, obs_wav=wav, obs_flux=flux, obs_err=err,
+    name='my_source', output_dir='results/my_source', distance_pc=140.0,
+)
+```
+
+`obs_err` is optional. Its positive finite median supplies one noise value for
+detection screening and top-solution uncertainty estimates; the spectral
+optimization remains unweighted by individual errors. If no error array is
+given, the workflow estimates one noise value from `line_free_windows` as in
+the file-based workflow. Arrays must have matching one-dimensional shapes;
+pixels with nonfinite wavelength or flux are dropped, and remaining wavelengths
+must be unique and increasing. Supply either arrays or `input_path`, and set
+`name` to choose the saved-file prefix for array input.
+The fitting notebook writes the filtered array input to a small CSV only when
+calling `plot_saved_observation`, whose saved-result plotting interface reads
+a source file.
+
 ```python
 from pathlib import Path
 from diskmelts import fit_observation, plot_saved_observation
 
-# This configuration follows notebooks/Example_Fitting.ipynb (J16120505).
-source = Path('Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv')
+# Set this to your own continuum-subtracted CSV, wherever you keep it.
+source = Path('my_spectrum.csv')
+# Repository example only, if you downloaded its files:
+# source = Path('Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv')
 stages = [
     {
         'name': 'water', 'mol': 'H2O',
@@ -188,21 +231,24 @@ stages = [
         'Tshare': ['equal'], 'Ashare': [True],
     },
 ]
-output = Path('realobs_results/notebook_v2_tied/J16120505')
+output = Path('results/my_source')
 result = fit_observation(
-    source, stages, name='J16120505', output_dir=output,
-    distance_pc=122.5, detection_screening=False,
+    source, stages, name='my_source', output_dir=output,
+    distance_pc=140.0, detection_screening=False,
     n_samples=4096, n_refine=12, n_top=10, seed=42,
 )
 figures = plot_saved_observation(
-    source, output, stages, name='J16120505',
+    source, output, stages, name='my_source',
     active_stages=result['fits'], sigma_noise=result['sigma_noise'],
     show=True, savefig=False,
 )
 ```
 
 The stages run in order. Each stage fits the previous stage's residual and
-writes parameter, spectrum, and running-residual CSVs. The plotter checks the
+writes parameter, spectrum, and running-residual CSVs. Adjust the stage
+wavelength windows and `distance_pc` for your observation. The shown stage
+settings follow the repository's J16120505 example; that source path is
+commented out above. The plotter checks the
 saved subtraction sequence and creates stage and combined figures. It can be
 called later without loading checkpoints or rerunning optimization. Set
 `output_dir` explicitly; otherwise fit CSVs go under the current working

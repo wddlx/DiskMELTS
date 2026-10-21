@@ -6,7 +6,56 @@ import pytest
 
 pytest.importorskip('torch')
 from diskmelts import (fit_stage, generate_spectrum, load_fitting_models,
-                       fit_grid_stage)
+                       fit_grid_stage, fit_observation, synthesize_spectrum)
+
+
+def test_synthesize_spectrum_area_distance_and_wavelength():
+    wave = np.linspace(13.8, 14.2, 80)
+    returned_wave, flux = synthesize_spectrum(
+        'HCN', 300, 18, A=2, sigma=2, wavelength=wave)
+    _, distant_flux = synthesize_spectrum(
+        'HCN', 300, 18, A=2, sigma=2, wavelength=wave, distance_pc=280)
+    model = load_fitting_models('HCN', sigma=2)['HCN']
+    expected = generate_spectrum(300, 18, 2, model, obs_wav=wave)
+    assert np.array_equal(returned_wave, wave)
+    np.testing.assert_allclose(flux, expected)
+    np.testing.assert_allclose(distant_flux, flux / 4)
+    assert np.isfinite(flux).all() and flux.max() > 0
+    with pytest.raises(ValueError, match='trained range'):
+        synthesize_spectrum('C6H6', 700, 18, sigma=2)
+
+
+def test_fit_observation_accepts_arrays_with_errors(tmp_path):
+    wave = np.linspace(13.8, 14.2, 81)
+    _, flux = synthesize_spectrum('HCN', 300, 18, wavelength=wave)
+    error = np.full(wave.shape, 0.01)
+    flux[0] = np.nan
+    error[-1] = np.nan
+    stages = [{'name': 'hcn', 'mol': 'HCN',
+               'wavelength_range': (11.5, 17.0),
+               'fit_ranges': (13.8, 14.2)}]
+    result = fit_observation(
+        stages=stages, obs_wav=wave, obs_flux=flux, obs_err=error,
+        name='array_source', output_dir=tmp_path,
+        detection_screening=False, n_samples=64, n_refine=2, n_top=2,
+    )
+    assert result['sigma_noise'] == pytest.approx(0.01)
+    assert result['obs_wav'].size == wave.size - 1
+    assert np.isnan(result['obs_err'][-1])
+    assert 'hcn' in result['fits']
+    assert np.isfinite(result['fits']['hcn']['model_flux']).all()
+    assert (tmp_path / 'array_source_hcn_running.csv').is_file()
+
+
+def test_fit_observation_rejects_mixed_and_misaligned_input(tmp_path):
+    stages = [{'name': 'hcn', 'mol': 'HCN',
+               'wavelength_range': (11.5, 17.0),
+               'fit_ranges': (13.8, 14.2)}]
+    with pytest.raises(ValueError, match='either input_path'):
+        fit_observation('spectrum.csv', stages, obs_wav=[13.8], obs_flux=[1])
+    with pytest.raises(ValueError, match='obs_err must match'):
+        fit_observation(stages=stages, obs_wav=[13.8, 13.9],
+                        obs_flux=[1, 1], obs_err=[0.01])
 
 
 def test_bundled_model_fit_without_grids(tmp_path, monkeypatch):
@@ -59,9 +108,10 @@ def test_sigma2_checkpoints_cover_trained_bands(tmp_path, monkeypatch):
         assert np.max(flux) > 0
 
 
-def test_sigma2_c2h2_bank_fits_both_bands(tmp_path, monkeypatch):
+@pytest.mark.parametrize('grid_sigma', [0, 2])
+def test_c2h2_bank_fits_both_bands(tmp_path, monkeypatch, grid_sigma):
     monkeypatch.chdir(tmp_path)
-    models = load_fitting_models('C2H2', sigma=2)
+    models = load_fitting_models('C2H2', sigma=grid_sigma)
     c2h2 = models['C2H2']
     assert c2h2['is_model_bank']
     assert c2h2['wav_ranges'] == [(6.0, 9.0), (11.5, 17.0)]
@@ -72,11 +122,9 @@ def test_sigma2_c2h2_bank_fits_both_bands(tmp_path, monkeypatch):
     combined_wave = np.concatenate((np.linspace(7.3, 7.8, 40),
                                     np.linspace(13.5, 14.0, 40)))
     combined_flux = generate_spectrum(500, 16, 1, c2h2, obs_wav=combined_wave)
-    from diskmelts import SIGMA2_MODEL_SPECS
     fit = fit_stage(
         combined_wave, combined_flux, 'C2H2', (6.0, 17.0),
         [(7.3, 7.8), (13.5, 14.0)], models,
-        model_specs=SIGMA2_MODEL_SPECS,
         n_samples=64, n_refine=2, n_top=2, seed=4,
     )
     assert np.linalg.norm(fit['residual']) < 0.05 * np.linalg.norm(combined_flux)
@@ -97,9 +145,10 @@ def test_sigma2_c6h6_fits_without_grids(tmp_path, monkeypatch):
     assert np.linalg.norm(fit['residual']) < 0.05 * np.linalg.norm(flux)
 
 
-def test_sigma2_only_species_fit_stage_infers_registry(tmp_path, monkeypatch):
+@pytest.mark.parametrize('grid_sigma', [0, 2])
+def test_oh_fit_stage_infers_registry(tmp_path, monkeypatch, grid_sigma):
     monkeypatch.chdir(tmp_path)
-    models = load_fitting_models('OH', sigma=2)
+    models = load_fitting_models('OH', sigma=grid_sigma)
     wave = np.linspace(16.0, 17.0, 80)
     flux = generate_spectrum(500, 16, 1, models['OH'], obs_wav=wave)
     fit = fit_stage(
