@@ -90,9 +90,11 @@ To update an existing installation later, run
 
 ## Your first spectrum
 
-Version 2.2.0 includes 44 production checkpoints: 21 trained with sigma=0 and
-23 trained with sigma=2, plus continuum reference data. Choose the new models
+Version 2.2.1 includes 46 production checkpoints: 23 trained with sigma=0 and
+23 trained with sigma=2, plus continuum reference data. Choose the broadened models
 with `load_fitting_models('C6H6', sigma=2)` or `fit_observation(..., sigma=2)`.
+Both sigma versions cover the same 18 molecules, including OH, and provide
+6–9 and 11.5–17 µm C2H2 checkpoints.
 You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
 CSV, subtract a continuum if needed, fit a molecule, and use a
 [downloadable example spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv).

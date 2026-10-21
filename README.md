@@ -11,8 +11,9 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 ## Installation
 
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/).
-Version 2.2.0 bundles 44 production checkpoints, including sigma=2 models for
-18 species and CH3 in both sigma versions.
+Version 2.2.1 bundles 46 production checkpoints: 23 each for sigma=0 and
+sigma=2, covering the same 18 species. Both C2H2 banks cover 6–9 and
+11.5–17 µm; OH is available in both sigma versions.
 With Python 3.9 or newer, install it from any directory. These commands use
 `python` in an activated environment; the
 [installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
@@ -154,19 +155,31 @@ The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
 `src/diskmelts/models/` and included in the wheel. Model fitting requires no
 `Model_grids/` or `Pretrain_grid/` directory. `diskmelts.MODEL_SPECS` records
 PCA counts, network layers, and `grid_sigma=0` for the original checkpoints.
-In version 2.2.0, sigma=2 checkpoints are available for H2O,
+Sigma=2 checkpoints are available in the published 2.2.0 package for H2O,
 C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4, CH4,
 C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
 `load_fitting_models(['H2O', 'C2H2'], sigma=2)` or
-`fit_observation(..., sigma=2)`. The C2H2 bank covers 6–9 and 11.5–17 µm;
+`fit_observation(..., sigma=2)`. Both C2H2 banks cover 6–9 and 11.5–17 µm;
 choose fit windows within those bands. OH covers 15–26 µm. Both C6H6
 checkpoints cover 13–17 µm and 100–675 K; the sigma=2 checkpoint is selected
 with `load_fitting_models('C6H6', sigma=2)`.
+For a synthetic spectrum, `wave, flux = diskmelts.synthesize_spectrum('HCN',
+T=300, logN=18, A=1)` returns the native wavelength axis and model flux.
+This convenience function is currently available in the source checkout and
+has not yet been published to PyPI.
+See the [generation guide](https://diskmelts.readthedocs.io/en/latest/generate_spectra.html)
+and its `notebooks/Example_Generate_Spectra.ipynb` tutorial.
+In the current source checkout, `fit_observation` also accepts in-memory
+`obs_wav`, `obs_flux`, and optional `obs_err` arrays, so input need not be a
+CSV file. Published 2.2.0 accepts arrays through `fit_stage`.
 The checkpoint settings are checked when
 loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
 sets the source distance and makes the returned emitting area physical.
 The [fitting notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
-be no hotter than C2H2 and gives them the same emitting area. It ties 13CO2
+be no hotter than C2H2 and gives them the same emitting area. Set its input
+to your own continuum-subtracted CSV path; no repository checkout is needed.
+The current source checkout also accepts wavelength, flux, and optional error
+arrays in memory. The repository path remains as a commented example. It ties 13CO2
 to CO2 in both temperature and area. Set
 `isotopologue_groups`, `Tshare` (`free`, `equal`, or `less`), and `Ashare` in a
 joint stage to choose those constraints. See the
@@ -211,7 +224,7 @@ uses the same names with local `Model_grids/sigma0/C6H6/` and `Model_grids/sigma
 files. See the [training guide](https://diskmelts.readthedocs.io/en/latest/training.html)
 for peak audits and retraining commands.
 
-Version 2.2.0 also includes a CH3 checkpoint for 15–18 µm,
+The package also includes a CH3 checkpoint for 15–18 µm,
 `T=100–1400 K`, and `logN=13–19.5`. Its strongest grid feature in this window
 is near 16.4–16.6 µm. Use `load_fitting_models('CH3')` after installing this
 package; direct-grid fitting uses local `Model_grids/sigma0/CH3/` files.

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "mol": "C2H2",
+  "grid_sigma": 0,
+  "n_pca": 30,
+  "hidden": [64, 128, 64],
+  "wavelength_ranges": [[6.0, 9.0], [11.5, 17.0]],
+  "T_ranges": [[100.0, 1400.0]],
+  "logN_ranges": [[13.0, 19.5]],
+  "tiles": [
+    {
+      "path": "net_C2H2_w6to9.pt",
+      "wav_range": [6.0, 9.0],
+      "T_range": [100.0, 1400.0],
+      "logN_range": [13.0, 19.5],
+      "n_pca": 30
+    },
+    {
+      "path": "net_C2H2_w11p5to17.pt",
+      "wav_range": [11.5, 17.0],
+      "T_range": [100.0, 1400.0],
+      "logN_range": [13.0, 19.5],
+      "n_pca": 30
+    }
+  ]
+}

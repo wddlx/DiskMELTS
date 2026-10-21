@@ -67,6 +67,7 @@ installation
 quickstart
 notebooks/index
 continuum
+generate_spectra
 training
 ```
 

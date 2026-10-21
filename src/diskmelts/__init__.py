@@ -41,6 +41,7 @@ from diskmelts.v2_fitting import (
     MODEL_SPECS,
     SIGMA2_MODEL_SPECS,
     load_fitting_models,
+    synthesize_spectrum,
     fit_stage,
     fit_observation,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "MODEL_SPECS",
     "SIGMA2_MODEL_SPECS",
     "load_fitting_models",
+    "synthesize_spectrum",
     "fit_stage",
     "fit_observation",
     "fit_grid_stage",

@@ -8,6 +8,10 @@ The production fitting checkpoints are bundled inside `diskmelts/models/`.
 Training scripts, generated checkpoints under the repository's top-level
 `Trained_model/`, `Model_grids/`, and `Pretrain_grid/` are optional material.
 They are not read by `load_fitting_models` or `fit_observation`.
+The training notebook loads a bundled checkpoint from any folder after
+`pip install diskmelts`. Its `BASE_DIR` defaults to the current directory;
+change it to the folder holding your downloaded training script and slab
+grids before enabling training. No repository marker search is required.
 
 ## Local-only data
 
@@ -31,8 +35,8 @@ Model_grids/sigma0/<molecule>/
 The original checkpoints use the `sigma0` grids. Put sigma=2
 grids under `Model_grids/sigma2/<molecule>/`. The grid fitter reads
 `<grid_root>/<molecule>/`, so pass `Model_grids/sigma0` for current grids or
-`Model_grids/sigma2` for complete new grids. Bundled sigma=2 checkpoints are
-available for all 17 sigma=0 species, plus OH.
+`Model_grids/sigma2` for complete new grids. Both bundled sigma versions now
+cover the same 18 species, including OH.
 
 Train or validate sigma=2 water without overwriting the sigma=0 artifacts:
 
@@ -56,8 +60,8 @@ python examples/train_band_checkpoint.py C2H2 6 9 --sigma 2
 
 The first command trains the 11.5–17 µm band for each molecule. The second
 trains the separate C2H2 6–9 µm band. Both use 10% unseen grid points for
-holdout checks. The packaged sigma=2 C2H2 manifest combines these two
-checkpoints and leaves the 9–11.5 µm gap uncovered.
+holdout checks. The packaged C2H2 manifest combines these two checkpoints
+for each sigma version and leaves the 9–11.5 µm gap uncovered.
 
 The additional single molecule sigma=2 checkpoints use the same 10% complete
 grid holdout and the maintained wavelength windows. Run the standard group with:
@@ -146,8 +150,8 @@ observed spectra.
 The two versions withheld the same `(T, logN)` grid keys in each matching
 domain. The table compares median peak-relative reconstruction RMSE against
 each version's **own** grids, over the same wavelength window. H2O and the
-standard single models use 100 held out spectra, C6H6 uses 127, and C3H4/CH3
-use 281. C2H2 refers to its shared 11.5–17 µm band. Broadened sigma=2
+standard single models use 100 held out spectra, C6H6 uses 127, and
+C3H4/CH3/OH and the short C2H2 band use 281. Broadened sigma=2
 spectra are different physical targets, so these ratios measure surrogate
 fidelity rather than whether one broadening is preferable for observations.
 
@@ -155,7 +159,8 @@ fidelity rather than whether one broadening is preferable for observations.
 | --- | ---: | ---: |
 | H2O | 0.058% | 0.037% |
 | HCN | 0.232% | 0.198% |
-| C2H2 | 0.161% | 0.220% |
+| C2H2 (11.5–17 µm) | 0.161% | 0.220% |
+| C2H2 (6–9 µm) | 0.108% | 0.089% |
 | CO2 | 0.168% | 0.203% |
 | 13C12CH2 | 0.157% | 0.187% |
 | 13CO2 | 0.165% | 0.215% |
@@ -170,10 +175,14 @@ fidelity rather than whether one broadening is preferable for observations.
 | C6H6 | 0.051% | 0.060% |
 | C3H4 | 0.292% | 0.275% |
 | CH3 | 0.166% | 0.152% |
+| OH | 0.068% | 0.054% |
 
-Sigma=2 is lower for eight of the 17 matching species and higher for nine.
-Every median remains below 0.3% of the grid peak. OH is sigma=2 only, so it
-has no sigma=0 comparator. These tests use noiseless grid spectra and do not
+Across the original 17 shared species, sigma=2 is lower for eight and higher
+for nine. The additional C2H2 short-band comparison also favors sigma=2.
+OH's sigma=0 checkpoint has 0.317% maximum error on 281 holdouts; the
+sigma=2 maximum is 0.571%. Thirty-spectrum sigma=0 OH T/logN retrieval RMSE
+is 4.10 K/0.049 dex, compared with 6.32 K/0.067 dex for sigma=2. Each version
+is compared with its own grid truth. These tests use noiseless grid spectra and do not
 measure observational fit bias or parameter uncertainty.
 
 Grid files must use names such as `T500N17.0.csv` and contain `wave` and `Line`
@@ -221,7 +230,7 @@ from local grids with:
 python examples/train_band_checkpoint.py CH3 15 18 --pca-candidates 10 15 20 25 30 50 75
 ```
 
-Version 2.2.0 bundles the CH3 checkpoint for model fitting.
+Version 2.2.1 bundles the CH3 checkpoint for model fitting.
 Direct grid fitting uses the local `Model_grids/sigma0/CH3/` files.
 
 ## C6H6 and C3H4 checkpoints
@@ -265,8 +274,8 @@ fitting those column densities.
 
 ## Separate C2H2 6–9 µm checkpoint
 
-Use the separate band trainer to make a 6–9 µm checkpoint without replacing
-the production C2H2 model:
+Use the separate band trainer to reproduce the 6–9 µm checkpoint bundled
+alongside the 11.5–17 µm C2H2 checkpoint:
 
 ```bash
 python examples/train_band_checkpoint.py C2H2 6 9
