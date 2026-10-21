@@ -1,0 +1,2 @@
+# Tests need the repository checkout (fixtures, Realobs_data); keep them out of the sdist.
+prune tests

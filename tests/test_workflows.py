@@ -36,7 +36,7 @@ def test_notebook_code_cells_compile(path):
 def test_notebook_rejects_incompatible_sklearn(path, monkeypatch):
     sklearn = pytest.importorskip("sklearn")
     monkeypatch.setattr(sklearn, "__version__", "0.0")
-    with pytest.raises(RuntimeError, match="require scikit-learn 1.8.0"):
+    with pytest.raises(RuntimeError, match="require scikit-learn 1.8"):
         exec(_code_cell(_notebook(path), 1), {})
 
 
@@ -196,7 +196,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
         if line.strip() and not line.lstrip().startswith("#")
     }
 
-    for pattern in ('/Model_grids/', '/Pretrain_grid/', '/Trained_model/',
+    for pattern in ('/.ai/', '/0-ai/', '/Model_grids/', '/Pretrain_grid/', '/Trained_model/',
                     '/0-Consub/',
                     '/docs/_build/', '/realobs_results/', '/figures/*'):
         assert pattern in patterns
@@ -206,6 +206,7 @@ def test_gitignore_separates_fitting_assets_from_training_data():
                  'Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv',
         'Realobs_data/Raw_data/j16120505_1d_v9.0.csv',
                  'notebooks/Example_Fitting.ipynb',
+                 'examples/synthetic_array_fit.py',
                  'figures/realobs_validations/H2O_parameter_comparison.pdf'):
         result = subprocess.run(['git', 'check-ignore', '--no-index', '-q', path],
                                 cwd=ROOT)
@@ -267,6 +268,22 @@ def test_realobs_example_uses_committed_spectrum():
     source = (ROOT / "examples" / "dev_v2_realobs.py").read_text()
     assert "j16120505_v9.0_contsub_RVcorr.csv" in source
     assert "j16142029_v9.0_contsub_RVcorr.csv" not in source
+
+
+def test_synthetic_array_example_runs_without_repo_data(tmp_path):
+    pytest.importorskip('torch')
+    env = os.environ.copy()
+    env['PYTHONPATH'] = str(ROOT / 'src')
+    env['MPLCONFIGDIR'] = str(tmp_path / 'matplotlib')
+    output_dir = tmp_path / 'fits'
+    result = subprocess.run(
+        [sys.executable, str(ROOT / 'examples' / 'synthetic_array_fit.py'),
+         '--output-dir', str(output_dir), '--n-samples', '64'],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'Fitted HCN:' in result.stdout
+    assert (output_dir / 'synthetic_hcn_hcn_running.csv').is_file()
 
 
 def test_realobs_example_starts_from_github_assets(tmp_path):

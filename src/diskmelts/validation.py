@@ -47,6 +47,20 @@ from diskmelts.fitting import fit_nested
 # Internal helper — gradient-based NT-only fitter
 # ---------------------------------------------------------------------------
 
+def _single_model_for_ranges(pretrained_mol, ranges):
+    """Return the checkpoint, or the model-bank tile covering every range."""
+    if not pretrained_mol.get('is_model_bank', False):
+        return pretrained_mol
+    for tile in pretrained_mol['tiles']:
+        lo, hi = tile['wav_range']
+        if all(lo <= r_lo and r_hi <= hi for r_lo, r_hi in ranges):
+            return tile['model']
+    raise ValueError(
+        f'no model-bank tile covers all fit_ranges {ranges}; validate one '
+        f'tile at a time within {[tile["wav_range"] for tile in pretrained_mol["tiles"]]}'
+    )
+
+
 def _fit_only_nt(
     obs_norm_flux,
     obs_log10_peak,
@@ -259,8 +273,9 @@ def validate_nt(
     n = max(1, n)
     df_sample = df.sample(n=n, random_state=seed).reset_index(drop=True)
 
-    wav_net = pretrained[mol]['wav']
-    ranges  = [fit_ranges] if isinstance(fit_ranges[0], (int, float)) else list(fit_ranges)
+    ranges  = [fit_ranges] if np.isscalar(fit_ranges[0]) else list(fit_ranges)
+    model   = _single_model_for_ranges(pretrained[mol], ranges)
+    wav_net = model['wav']
     fit_mask_net = np.zeros(len(wav_net), dtype=bool)
     for lo, hi in ranges:
         fit_mask_net |= (wav_net >= lo) & (wav_net <= hi)
@@ -284,7 +299,7 @@ def validate_nt(
         log10p += np.log10(local_peak)
 
         T_p, logN_p = _fit_only_nt(
-            obs_norm_fit, log10p, wav_fit, pretrained[mol],
+            obs_norm_fit, log10p, wav_fit, model,
             T_bounds=T_bounds, logN_bounds=logN_bounds,
             n_starts=n_starts, n_steps=n_steps, lr=lr,
             seed=seed + i,
@@ -349,8 +364,9 @@ def validate_nt_holdout(
             'logN_true' : np.ndarray — grid log10 column densities
             'logN_pred' : np.ndarray — recovered log10 column densities
     """
-    wav_net = pretrained[mol]['wav']
-    ranges  = [fit_ranges] if isinstance(fit_ranges[0], (int, float)) else list(fit_ranges)
+    ranges  = [fit_ranges] if np.isscalar(fit_ranges[0]) else list(fit_ranges)
+    model   = _single_model_for_ranges(pretrained[mol], ranges)
+    wav_net = model['wav']
     fit_mask = np.zeros(len(wav_net), dtype=bool)
     for lo, hi in ranges:
         fit_mask |= (wav_net >= lo) & (wav_net <= hi)
@@ -375,7 +391,7 @@ def validate_nt_holdout(
         obs_norm_fit = norm_flux[fit_mask]
 
         T_p, logN_p = _fit_only_nt(
-            obs_norm_fit, log10_peak, wav_fit, pretrained[mol],
+            obs_norm_fit, log10_peak, wav_fit, model,
             T_bounds=T_bounds, logN_bounds=logN_bounds,
             n_starts=n_starts, n_steps=n_steps, lr=lr,
             seed=seed + i,

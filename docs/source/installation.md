@@ -2,8 +2,7 @@
 
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/). You do
 not need to clone the repository to fit spectra or subtract a continuum. The
-package requires Python 3.9 or newer. Python 3.11 or 3.12 is a practical
-choice for a new installation.
+package requires Python 3.11 or newer.
 
 ## Install in a new Python environment
 
@@ -81,20 +80,18 @@ On Windows PowerShell, the same quoted commands work. The `notebooks` extra
 installs JupyterLab; the example notebook files are in the
 [GitHub repository](https://github.com/wddlx/DiskMELTS/tree/main/notebooks)
 and are not installed by pip.
-For the fitting and training notebooks, use Python 3.11 or newer and also
-install `scikit-learn==1.8.0` in the notebook environment, then restart its kernel;
-the bundled PCA and scaler objects were saved with that version.
+The bundled PCA and scaler objects were saved with scikit-learn 1.8, so
+DiskMELTS requires scikit-learn 1.8.x; pip installs it automatically.
 
 To update an existing installation later, run
 `python -m pip install --upgrade diskmelts` in its active environment.
 
 ## Your first spectrum
 
-Version 2.2.1 includes 46 production checkpoints: 23 trained with sigma=0 and
-23 trained with sigma=2, plus continuum reference data. Choose the broadened models
-with `load_fitting_models('C6H6', sigma=2)` or `fit_observation(..., sigma=2)`.
-Both sigma versions cover the same 18 molecules, including OH, and provide
-6–9 and 11.5–17 µm C2H2 checkpoints.
+The package includes 46 production checkpoints, 23 trained on the sigma=0
+grids and 23 on the sigma=2 grids, covering the same 18 molecules, plus
+continuum reference data. Choose the sigma=2 models with
+`load_fitting_models('C6H6', sigma=2)` or `fit_observation(..., sigma=2)`.
 You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
 CSV, subtract a continuum if needed, fit a molecule, and use a
 [downloadable example spectrum](https://github.com/wddlx/DiskMELTS/blob/main/Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv).

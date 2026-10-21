@@ -10,11 +10,11 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 
 ## Installation
 
-DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/).
-Version 2.2.1 bundles 46 production checkpoints: 23 each for sigma=0 and
-sigma=2, covering the same 18 species. Both C2H2 banks cover 6–9 and
-11.5–17 µm; OH is available in both sigma versions.
-With Python 3.9 or newer, install it from any directory. These commands use
+DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/) and
+requires Python 3.11 or newer. It bundles 46 production checkpoints, 23 each
+for the sigma=0 and sigma=2 grids, covering the same 18 species (see
+[Available molecules](#available-molecules)).
+Install it from any directory. These commands use
 `python` in an activated environment; the
 [installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)
 shows how to create one on macOS, Linux, Windows, or Conda:
@@ -48,6 +48,36 @@ conda activate diskmelts
 
 Use `environment-notebooks.yaml` or `environment-dev.yaml` for the corresponding
 notebook or contributor dependencies.
+
+## Minimal workflow
+
+Subtract the continuum, fit one molecule, and print the result:
+
+```python
+from diskmelts import consub, fit_stage, load_fitting_models
+
+# 1. Raw spectrum: CSV with wave (µm), flux (Jy), and optional err columns.
+raw_wave, raw_flux, raw_err = consub.read_spectrum("my_raw_spectrum.csv")
+wave, flux, err, cont, cont_unshifted = consub.calculate(
+    raw_wave, raw_flux, raw_err, preset="ttauri",
+)
+
+# 2. Fit C2H2 near 13.7 µm with the bundled surrogate model.
+models = load_fitting_models("C2H2")
+fit = fit_stage(
+    wave, flux, molecule="C2H2", pretrained=models,
+    wavelength_range=(13.0, 15.0), fit_ranges=(13.5, 14.1),
+    distance_pc=140.0, n_samples=1024, n_refine=4, n_top=4,
+)
+
+# 3. Best-fit T (K), logN (cm^-2), A (au^2), and the spread of top solutions.
+print(fit["params"]["C2H2"])
+print(fit["uncertainty"]["C2H2"])
+```
+
+The sections below explain each step, and the
+[first-spectrum guide](https://diskmelts.readthedocs.io/en/latest/quickstart.html)
+covers multi-stage fits, saved outputs, and plots.
 
 ## Runtime dependencies
 
@@ -91,12 +121,6 @@ Use `preset=None, linefreefile="windows.csv"` for custom `xmin,xmax` windows.
 With `preset=None, linefreefile=None` (or `""`), fitting uses all nonexcluded
 pixels and skips the line-free correction, so `cont` equals `contOrig`.
 Reference tables are bundled; normal continuum subtraction needs no model grids.
-
-The private `0-Consub/` experiment directory is excluded from Git and is not
-required by the installed package. Its runtime code and reference tables are
-maintained under `src/diskmelts/consub/`.
-The distributed tests in `tests/` exercise the installed continuum API and
-bundled references without that private directory.
 
 Returned `err` represents measurement/noise error, not correlated continuum
 uncertainty. Broad excluded intervals require inspection. See the
@@ -144,43 +168,35 @@ You can also read spectra with your own code. DiskMELTS only requires
 one-dimensional `obs_wav` and `obs_flux` arrays. Replace the sample CSV with
 your own file to fit your source; update `distance_pc` and fit intervals.
 
-For a complete staged fit-and-subtract workflow from a checkout, edit and run:
+For a complete staged fit-and-subtract workflow from a clone of the
+repository, run:
 
 ```bash
 python examples/dev_v2_realobs.py
+python examples/dev_v2_realobs.py --input /path/to/my_spectrum.csv --name my_source --distance-pc 140 --sigma 2
 ```
 
+Adjust that script's stage windows for your spectrum.
+`python examples/synthetic_array_fit.py` generates an HCN spectrum and fits it
+from in-memory arrays, without an observation file.
+
 The v2 fitting API is `load_fitting_models`, `fit_stage`, `fit_observation`, and
-`plot_saved_observation`. The production checkpoints are packaged under
-`src/diskmelts/models/` and included in the wheel. Model fitting requires no
-`Model_grids/` or `Pretrain_grid/` directory. `diskmelts.MODEL_SPECS` records
-PCA counts, network layers, and `grid_sigma=0` for the original checkpoints.
-Sigma=2 checkpoints are available in the published 2.2.0 package for H2O,
-C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4, CH4,
-C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
-`load_fitting_models(['H2O', 'C2H2'], sigma=2)` or
-`fit_observation(..., sigma=2)`. Both C2H2 banks cover 6–9 and 11.5–17 µm;
-choose fit windows within those bands. OH covers 15–26 µm. Both C6H6
-checkpoints cover 13–17 µm and 100–675 K; the sigma=2 checkpoint is selected
-with `load_fitting_models('C6H6', sigma=2)`.
+`plot_saved_observation`. The production checkpoints are included in the
+wheel, so model fitting needs no local model grids. The checkpoint flux
+convention is 1 au² at 140 pc; `distance_pc` sets the source distance and
+makes the returned emitting area physical. `fit_observation` accepts either a
+CSV path or in-memory `obs_wav`, `obs_flux`, and optional `obs_err` arrays
+(new in 2.2.1).
+
 For a synthetic spectrum, `wave, flux = diskmelts.synthesize_spectrum('HCN',
-T=300, logN=18, A=1)` returns the native wavelength axis and model flux.
-This convenience function is currently available in the source checkout and
-has not yet been published to PyPI.
-See the [generation guide](https://diskmelts.readthedocs.io/en/latest/generate_spectra.html)
-and its `notebooks/Example_Generate_Spectra.ipynb` tutorial.
-In the current source checkout, `fit_observation` also accepts in-memory
-`obs_wav`, `obs_flux`, and optional `obs_err` arrays, so input need not be a
-CSV file. Published 2.2.0 accepts arrays through `fit_stage`.
-The checkpoint settings are checked when
-loading. The checkpoint flux convention is 1 au² at 140 pc; `distance_pc`
-sets the source distance and makes the returned emitting area physical.
-The [fitting notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Fitting.ipynb) requires 13C12CH2 to
-be no hotter than C2H2 and gives them the same emitting area. Set its input
-to your own continuum-subtracted CSV path; no repository checkout is needed.
-The current source checkout also accepts wavelength, flux, and optional error
-arrays in memory. The repository path remains as a commented example. It ties 13CO2
-to CO2 in both temperature and area. Set
+T=300, logN=18, A=1)` returns the native wavelength axis and model flux (new
+in 2.2.1). See the
+[generation guide](https://diskmelts.readthedocs.io/en/latest/generate_spectra.html).
+
+The [fitting notebook](https://github.com/wddlx/DiskMELTS/blob/main/notebooks/Example_Fitting.ipynb)
+requires 13C12CH2 to be no hotter than C2H2 and gives them the same emitting
+area; it ties 13CO2 to CO2 in both temperature and area. Point its input at
+your own continuum-subtracted CSV, or pass arrays. Set
 `isotopologue_groups`, `Tshare` (`free`, `equal`, or `less`), and `Ashare` in a
 joint stage to choose those constraints. See the
 [fitting guide](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for examples.
@@ -191,6 +207,32 @@ separate method does require the full local grids. See the
 [quick start](https://diskmelts.readthedocs.io/en/latest/quickstart.html) for both workflows and saved-result
 plotting.
 For complete sigma=2 grids, pass `grid_root='Model_grids/sigma2'`.
+
+## Available molecules
+
+Each molecule is available for two slab-model grids: sigma=0 (default) assumes
+no turbulent broadening, so lines are only thermally broadened, and sigma=2
+assumes 2 km/s turbulent broadening. Select sigma=2 with `load_fitting_models(..., sigma=2)` or
+`fit_observation(..., sigma=2)`. Fit windows must lie inside a model's band.
+
+| Molecule | Band (µm) | T (K) | logN (cm⁻²) |
+|---|---|---|---|
+| H2O | 4.9–25.0 (five overlapping tiles) | 100–1400 | 13–19 |
+| C2H2 | 6–9 and 11.5–17 | 100–1400 | 13–19.5 |
+| HCN, CO2, 13C12CH2, 13CO2 | 11.5–17 | 100–1400 | 13–19.5 |
+| HC3N, CO17O, CO18O | 13–18 | 100–1400 | 13–19.5 |
+| C4H2 | 14–18 | 100–1400 | 13–19.5 |
+| C3H4, CH3 | 15–18 | 100–1400 | 13–19.5 |
+| C6H6 | 13–17 | 100–675 | 13–19.5 |
+| C2H6 | 9–15 | 100–1400 | 13–19.5 |
+| C2H4 | 8–14 | 100–1400 | 13–19.5 |
+| CH4 | 5–9 | 100–1400 | 13–19.5 |
+| C2HD | 11.5–20.5 | 100–1400 | 13–19.5 |
+| OH | 15–26 | 100–1400 | 13–19.5 |
+
+`diskmelts.MODEL_SPECS` records the exact domains, PCA sizes, and network
+layers. Version 2.2.0 lacks the sigma=0 OH and 6–9 µm C2H2 checkpoints;
+upgrade with `python -m pip install -U diskmelts`.
 
 ## Training and validation data
 

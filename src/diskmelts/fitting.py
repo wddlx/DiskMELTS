@@ -52,7 +52,7 @@ _DEFAULT_LOGA_BOUNDS = None
 
 def _wav_mask(wav, ranges):
     """Boolean mask for wavelengths within any of the given (lo, hi) ranges."""
-    if isinstance(ranges[0], (int, float)):
+    if np.isscalar(ranges[0]):
         ranges = [ranges]
     mask = np.zeros(len(wav), dtype=bool)
     for lo, hi in ranges:
@@ -173,7 +173,7 @@ def load_model_bank(
 
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if wav_ranges is not None and isinstance(wav_ranges[0], (int, float)):
+    if wav_ranges is not None and np.isscalar(wav_ranges[0]):
         wav_ranges = [wav_ranges]
 
     manifest_dir = os.path.dirname(manifest_path)
@@ -327,6 +327,14 @@ def _model_bank_bounds(pretrained_mol, key, fallback):
 
 def _check_bank_wavelength_coverage(pretrained_mol, wavelengths):
     if not pretrained_mol.get('is_model_bank', False):
+        # A single checkpoint is zero outside its axis, which would pin A to
+        # its lower bound with an arbitrary T and logN.
+        wav = pretrained_mol.get('wav')
+        if wav is not None and not np.any((wavelengths >= wav[0]) & (wavelengths <= wav[-1])):
+            raise ValueError(
+                f'model covers {wav[0]:.6g}-{wav[-1]:.6g} um, outside all '
+                f'selected fit pixels ({wavelengths.min():.6g}-{wavelengths.max():.6g} um)'
+            )
         return
     covered = np.zeros(len(wavelengths), dtype=bool)
     for lo, hi in pretrained_mol['wav_ranges']:
@@ -421,7 +429,7 @@ def fit_nested(
 
     rng = np.random.default_rng(seed)
 
-    fit_mask = _wav_mask(obs_wav, fit_ranges)
+    fit_mask = _wav_mask(obs_wav, fit_ranges) & np.isfinite(obs_flux)
     wav_fit  = obs_wav[fit_mask]
     obs_fit  = obs_flux[fit_mask]
     if len(wav_fit) == 0:
@@ -479,7 +487,7 @@ def _as_list(x):
 
 def _range_list(ranges):
     """Normalize a single (lo, hi) range or a list of ranges."""
-    if isinstance(ranges[0], (int, float)):
+    if np.isscalar(ranges[0]):
         return [tuple(ranges)]
     return [tuple(r) for r in ranges]
 
@@ -584,6 +592,8 @@ def _distinct_solutions(solutions, n_keep, components, min_distance=0.03):
         return []
     kept = []
     for sol in solutions:
+        if len(kept) >= n_keep:
+            break
         if not kept:
             kept.append(sol)
             continue
@@ -591,8 +601,6 @@ def _distinct_solutions(solutions, n_keep, components, min_distance=0.03):
         distances = [np.linalg.norm(p - k['x_scaled']) / np.sqrt(len(p)) for k in kept]
         if min(distances) >= min_distance:
             kept.append(sol)
-        if len(kept) >= n_keep:
-            break
     return kept
 
 
@@ -825,7 +833,7 @@ def fit_molecules(
                            if group_id == anchor] for anchor in area_group_ids]
 
     joint_ranges = _fit_ranges_for_components(fit_ranges, components)
-    fit_mask = _wav_mask(obs_wav, joint_ranges)
+    fit_mask = _wav_mask(obs_wav, joint_ranges) & np.isfinite(obs_flux)
     wav_fit = obs_wav[fit_mask]
     obs_fit = obs_flux[fit_mask]
     if len(wav_fit) == 0:

@@ -21,7 +21,12 @@ the file exists at that location.
 
 Start with the {doc}`continuum subtraction guide <continuum>` or
 {doc}`Example_Consub <notebooks/Example_Consub>` when your spectrum still
-contains its continuum. For your own input CSV with `wave,flux,err` columns:
+contains its continuum. `consub.read_spectrum` reads a CSV whose header
+names the columns `wave`, `flux`, and optionally `err` (wavelength in µm),
+or a JWST FITS spectrum with `wavelength`, `fluxdensity`, and
+`fluxdensity_stddev` columns (install the `io` extra). Correct the spectrum to
+the source rest frame first: the continuum windows and molecular models use
+rest wavelengths (the sample `_RVcorr` file is already corrected).
 
 ```python
 from diskmelts import consub
@@ -36,8 +41,10 @@ The resulting `wave` and continuum-subtracted `flux` can be passed directly
 to `fit_stage`. The returned `error` is a measurement/noise estimate; it does
 not include correlated continuum uncertainty.
 
-If your spectrum is already continuum-subtracted, load it instead. This line
-uses the downloaded sample; change the path for your own CSV:
+If your spectrum is already continuum-subtracted, load it instead.
+`load_observed_spectrum` ignores column names: it skips one header row and
+reads the first two columns as wavelength (µm) and flux (Jy). This line uses
+the downloaded sample; change the path for your own CSV:
 
 ```python
 from diskmelts import load_observed_spectrum
@@ -47,8 +54,9 @@ wave, flux = load_observed_spectrum('j16120505_contsub.csv')
 ## Step 2: fit one molecule
 
 The installed package includes the production v2 checkpoints. Fitting needs
-no local model grids or training tables. Run this after either Step 1 path;
-supply your source distance in parsecs when using your own spectrum:
+no local model grids or training tables. Run this after either Step 1 path.
+`distance_pc` defaults to 140; the sample source J16120505 is at 122.5 pc,
+so give your own source's distance in parsecs:
 
 ```python
 from diskmelts import load_fitting_models, fit_stage
@@ -66,8 +74,17 @@ fit = fit_stage(
 print(fit['params']['C2H2'])
 ```
 
+`fit['params']['C2H2']` holds `T` (K), `logN` (log10 column density in
+cm⁻²), `A` (emitting area in au²), and `log10A`. The fit samples `(T, logN)`
+broadly (a Sobol sequence), solves the linear area exactly for every sample,
+then refines the best candidates. `n_samples`, `n_refine`, and `n_top` set
+those three phases; the example values are fast, while the defaults
+(20000, 32, 10) are slower and more thorough. The area is limited by
+`loga_bounds`, default `(-2, 2)`, meaning 0.01–100 au²; widen it if a fitted
+area sits on a bound.
+
 The same `fit_stage` call accepts wavelength and flux arrays read from any
-source; a CSV is not required. If you have measurement errors, pass one
+source; a CSV is not required. Pixels with nonfinite flux are skipped. If you have measurement errors, pass one
 representative scalar as `sigma`, for example
 `sigma=float(np.nanmedian(error))`. The current fitter does not weight each
 pixel by its individual error.
@@ -81,16 +98,27 @@ molecule-to-ranges mapping. Every fit interval must lie within
 PCA, and network settings; the loader verifies them. Only requested models are
 loaded.
 
-The default checkpoints use sigma=0 grids. Sigma=2 checkpoints cover H2O,
-C2H2, HCN, CO2, 13C12CH2, 13CO2, C4H2, HC3N, C2H6, C2H4,
-CH4, C2HD, CO17O, CO18O, C3H4, CH3, C6H6, and OH. Select them with
-`load_fitting_models(['H2O', 'C2H2'], sigma=2)`. For a saved staged fit, pass
-`sigma=2` to `fit_observation`. Both C2H2 banks cover 6–9 and
-11.5–17 µm. Fit either band with a window inside its range; wavelengths
-between 9 and 11.5 µm have no C2H2 checkpoint. OH covers 15–26 µm.
-C6H6 covers 13–17 µm and 100–675 K in both sigma versions.
-`fit_stage` selects the corresponding parameter bounds from the loaded
-checkpoints, including OH at sigma=0 or sigma=2.
+### Choosing sigma=0 or sigma=2
+
+Every molecule has two sets of checkpoints, trained on slab-model grids that
+assume a turbulent line broadening of 0 km/s (sigma=0, the default) or
+2 km/s (sigma=2). With sigma=0 the lines are broadened only thermally, which
+assumes the turbulent velocity is much smaller than the thermal velocity.
+Choose sigma=2 when you expect non-negligible turbulence. Select the sigma=2
+set with
+`load_fitting_models(['H2O', 'C2H2'], sigma=2)`, or pass `sigma=2` to
+`fit_observation`. All 18 molecules cover the same bands at both sigmas; see
+the table in the README. Both C2H2 banks cover 6–9 and 11.5–17 µm (there is
+no C2H2 checkpoint between 9 and 11.5 µm), OH covers 15–26 µm, and C6H6 covers
+13–17 µm and 100–675 K. `fit_stage` takes the matching parameter bounds from
+the loaded checkpoints.
+
+```{note}
+The keyword `sigma` means two different things. In `load_fitting_models`,
+`synthesize_spectrum`, and `fit_observation`, `sigma` (0 or 2) selects the
+model grid. In `fit_stage` and `fit_molecules`, `sigma` is the flux noise in
+Jy used for uncertainty weighting; choose the grid when you load the models.
+```
 
 For C6H6 and C3H4, load `['C6H6', 'C3H4']` and fit them in separate stages
 with `wavelength_range` `(13.0, 17.0)` and `(15.0, 18.0)`, respectively.
@@ -140,8 +168,8 @@ and at least one distinct rare component; groups cannot overlap. Incompatible
 temperature bounds raise an error. `T_bounds`, `logN_bounds`, and
 `loga_bounds` may differ by component label or molecule; a tuple applies to
 every component. For a shared-area group, the allowed areas must overlap. If
-detection screening removes a group member, use `detection_screening=False`
-or omit that group. The older `shared_area_groups` option still ties areas
+detection screening removes a group member, the remaining members are fitted
+and any group left with one member is dropped. The older `shared_area_groups` option still ties areas
 without specifying a temperature relationship. No constraint spans separate
 stages, because each stage fits the preceding residual.
 
@@ -168,12 +196,9 @@ the full requested T and logN rectangle.
 
 ## Ordered stages, saved results, and plots
 
-For a saved staged fit, `fit_observation` also accepts arrays directly. This
-works with data you have already read from FITS, separate files, or your own
-I/O code. If your variables are named `wav`, `flux`, and `err`, pass them
-directly; no CSV conversion is needed. This array option is currently in the
-source checkout and has not yet been published to PyPI. The published 2.2.0
-package accepts wavelength and flux arrays through `fit_stage` above:
+`fit_observation` runs several stages in order and saves every result. It
+accepts a CSV path or, since 2.2.1, arrays you have already read from FITS,
+separate files, or your own I/O code. With the Step 1 variables:
 
 ```python
 from diskmelts import fit_observation
@@ -182,7 +207,7 @@ stages = [{'name': 'hcn', 'mol': 'HCN',
            'wavelength_range': (11.5, 17.0),
            'fit_ranges': (13.8, 14.2)}]
 result = fit_observation(
-    stages=stages, obs_wav=wav, obs_flux=flux, obs_err=err,
+    stages=stages, obs_wav=wave, obs_flux=flux, obs_err=error,
     name='my_source', output_dir='results/my_source', distance_pc=140.0,
 )
 ```
@@ -245,7 +270,42 @@ figures = plot_saved_observation(
 ```
 
 The stages run in order. Each stage fits the previous stage's residual and
-writes parameter, spectrum, and running-residual CSVs. Adjust the stage
+writes parameter, spectrum, and running-residual CSVs.
+
+Stage dictionary keys:
+
+| Key | Required | Meaning |
+|---|---|---|
+| `name` | yes | Unique stage name; used in output file names |
+| `mol` | yes | One molecule name or a list for a joint fit |
+| `wavelength_range` | yes | Allowed and plotted range in µm |
+| `fit_ranges` | yes | `(lo, hi)`, a list of pairs, or a dict by molecule; must lie inside `wavelength_range` and the model band |
+| `h2o_components` | no | 1 (default) or 2 water components |
+| `component_names` | no | Unique labels, one per fitted component |
+| `T_bounds`, `logN_bounds`, `loga_bounds` | no | A tuple for all components, or a dict by label or molecule |
+| `isotopologue_groups`, `Tshare`, `Ashare` | no | Isotopologue temperature and area ties (above) |
+| `shared_area_groups` | no | Area ties without a temperature relation |
+| `detect_peaks` | no | Windows checked by detection screening (below) |
+
+With `detection_screening=True` (the default), a stage that has
+`detect_peaks` is checked first: a molecule whose peak in its window is below
+3σ is dropped, and a stage with nothing detected is skipped with a printed
+message. Stages without `detect_peaks` are always fitted. σ is the median of
+`obs_err` when given; otherwise it is the scatter in `line_free_windows`.
+
+Each stage writes these files to `output_dir` (prefix `{name}_{stage}`):
+
+| File | Contents |
+|---|---|
+| `{prefix}_fit_params.csv` | One row per component: T, logN, A (au²), log10A, with `_minus`/`_plus` spreads |
+| `{prefix}_fit_spectrum.csv` | Wavelength, input flux, total model, residual, and per-component models |
+| `{prefix}_fit_top.csv` | The ranked top solutions |
+| `{prefix}_running.csv` | Residual and cumulative model after this stage |
+| `{name}_final_running.csv` | The same after the last stage |
+| `Fitted_Parameters.csv` | One row per source for H2O, C2H2, HCN, and CO2 only, with logN and log10A; use the per-stage params files for every component |
+
+The returned dict has `fits` (one `fit_stage` result per stage), `residual`,
+`cumulative_model`, `sigma_noise`, `grid_sigma`, and `products` (saved paths). Adjust the stage
 wavelength windows and `distance_pc` for your observation. The shown stage
 settings follow the repository's J16120505 example; that source path is
 commented out above. The plotter checks the
@@ -271,7 +331,12 @@ that 13C12CH2 is no hotter than C2H2 and shares its area; their
 column densities differ. The lower panel shows the residual for that stage.
 
 For the repository's J16120505 example, run
-`python examples/dev_v2_realobs.py`. The example uses the packaged API.
+`python examples/dev_v2_realobs.py`. Use
+`python examples/dev_v2_realobs.py --input /path/to/my_spectrum.csv --name my_source --distance-pc 140 --sigma 2`
+for another CSV, after adjusting the script's stage windows. The script uses
+the packaged checkpoints. The repository also includes
+`python examples/synthetic_array_fit.py`, which generates HCN and fits its
+wavelength, flux, and error arrays without an input file.
 
 ## Distance and area
 
@@ -280,8 +345,20 @@ distance using `distance_pc` (default 140). The fitted physical area scales as
 `A * (140 / distance_pc)**2` in the observed flux. Distance and area cannot both
 be measured from one spectrum because only `A / distance_pc**2` is constrained.
 When `sigma` is supplied, the model fitter scales it with the flux to the
-140 pc reference. Fitted uncertainties are optimization summaries; bound hits
-and degeneracies require caution.
+140 pc reference.
+
+## What the uncertainties mean
+
+`fit['uncertainty'][label]` gives `q16`, `q50`, `q84`, `minus`, and `plus`
+for `T`, `logN`, and `log10A`. They are quantiles over the `n_top` best
+distinct solutions found by the optimizer, weighted by `exp(-Δχ²/2)` when a
+noise `sigma` is available and unweighted otherwise. `minus` and `plus` are
+measured from the median `q50`, not from the best fit. They show how well the
+optimum is pinned down, but they are not posterior credible intervals: they
+can be zero when all top solutions agree, may not contain the best-fit value
+when `n_top` is small, and ignore continuum and model systematics. Treat
+parameters at a bound, and strongly correlated T–logN–A solutions, with
+caution.
 
 ## Optional direct-grid fit
 

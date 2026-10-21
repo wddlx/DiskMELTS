@@ -7,12 +7,15 @@ and writes their numerical results for later reading and plotting.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 
 from diskmelts.fitting import (
+    _build_components,
+    _check_bank_wavelength_coverage,
     detect_stage_molecules,
     fit_molecules,
     generate_spectrum,
@@ -239,8 +242,49 @@ def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
                 not np.all(np.isfinite(wavelength)) or
                 np.any(np.diff(wavelength) <= 0)):
             raise ValueError('wavelength must be a nonempty, increasing 1D array')
+        _check_bank_wavelength_coverage(model, wavelength)
+        if not model.get('is_model_bank', False):
+            outside = (wavelength < model['wav'][0]) | (wavelength > model['wav'][-1])
+            if np.any(outside):
+                warnings.warn(
+                    f'{int(outside.sum())} wavelength pixels lie outside the '
+                    f'{molecule} model range {model["wav"][0]:.6g}-'
+                    f'{model["wav"][-1]:.6g} um; their flux is set to zero',
+                    stacklevel=2,
+                )
     flux = generate_spectrum(T, logN, A, model, obs_wav=wavelength)
     return wavelength, flux * (140.0 / float(distance_pc)) ** 2
+
+
+def _screened_group_options(stage, detected):
+    """Drop undetected molecules from a stage's component labels and groups."""
+    components = _build_components(
+        stage['mol'], stage.get('h2o_components', 1), stage.get('component_names'),
+    )
+    kept_labels = {comp['label'] for comp in components if comp['model_mol'] in detected}
+    options = {}
+    if stage.get('component_names') is not None:
+        options['component_names'] = [comp['label'] for comp in components
+                                      if comp['label'] in kept_labels]
+    shared = [tuple(label for label in group if label in kept_labels)
+              for group in stage.get('shared_area_groups') or ()]
+    options['shared_area_groups'] = [group for group in shared if len(group) >= 2] or None
+    groups = stage.get('isotopologue_groups')
+    if groups is None:
+        options.update(isotopologue_groups=None, Tshare=stage.get('Tshare'),
+                       Ashare=stage.get('Ashare'))
+        return options
+    modes = stage.get('Tshare') or [None] * len(groups)
+    shares = stage.get('Ashare') or [None] * len(groups)
+    kept = [(tuple(label for label in group if label in kept_labels), mode, share)
+            for group, mode, share in zip(groups, modes, shares)]
+    kept = [item for item in kept if len(item[0]) >= 2]
+    options['isotopologue_groups'] = [group for group, _, _ in kept] or None
+    options['Tshare'] = ([mode for _, mode, _ in kept]
+                         if stage.get('Tshare') is not None and kept else None)
+    options['Ashare'] = ([share for _, _, share in kept]
+                         if stage.get('Ashare') is not None and kept else None)
+    return options
 
 
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
@@ -291,7 +335,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     fit['residual'] /= to_reference
     for label in fit['component_fluxes']:
         fit['component_fluxes'][label] /= to_reference
-    for solution in fit['top_list']:
+    for solution in fit['top_list'] + fit.get('global_top', []):
         solution['mse_loss'] /= to_reference ** 2
     fit['obs_wav'] = np.asarray(obs_wav)
     fit['obs_flux'] = np.asarray(obs_flux).copy()
@@ -419,13 +463,10 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
             obs_wav, residual, selected, stage['wavelength_range'],
             stage['fit_ranges'], pretrained, model_specs=model_specs,
             h2o_components=stage.get('h2o_components', 1),
-            component_names=stage.get('component_names'),
+            **_screened_group_options(stage, detected),
             T_bounds=stage.get('T_bounds', {mol: model_specs[mol]['T_bounds'] for mol in detected}),
             logN_bounds=stage.get('logN_bounds', {mol: model_specs[mol]['logN_bounds'] for mol in detected}),
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
-            shared_area_groups=stage.get('shared_area_groups'),
-            isotopologue_groups=stage.get('isotopologue_groups'),
-            Tshare=stage.get('Tshare'), Ashare=stage.get('Ashare'),
             n_samples=n_samples, sample_method=sample_method,
             n_refine=n_refine, n_top=n_top, sigma=sigma_noise, seed=seed,
             distance_pc=distance_pc,
