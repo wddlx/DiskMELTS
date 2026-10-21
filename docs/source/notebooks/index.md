@@ -12,11 +12,8 @@ from the included Upper Sco example and the notebook's current constrained
 fitting run.
 
 The fitting and training notebooks load checkpoints containing scikit-learn
-1.8.0 objects. The repository's notebook Conda environment pins that version.
-If you use another Python 3.11+ environment, run
-`python -m pip install scikit-learn==1.8.0` in it and restart its notebook
-kernel before loading the checkpoints. This avoids an unsupported
-cross-version unpickle.
+1.8 objects; `pip install diskmelts` installs a matching 1.8.x release, and
+the first notebook cell checks it.
 
 ## 1. Subtract the continuum
 
@@ -35,16 +32,15 @@ its input cell, set `SOURCE = Path('/path/to/my_spectrum.csv')` for your own
 continuum-subtracted CSV. For arrays already in memory, set `SOURCE = None`
 and `OBS_WAV, OBS_FLUX, OBS_ERR = wav, flux, err`. The repository J16120505
 path is commented out and labeled as an optional example. Change the stages,
-distance, and output location for your source. The array option uses the
-current source checkout until a later PyPI release; the published 2.2.0
-package accepts arrays through `fit_stage`, as shown in {doc}`../quickstart`.
+distance, and output location for your source. The array option requires
+DiskMELTS 2.2.1 or newer.
 In the carbon stage, 13C12CH2 has at most the fitted temperature of C2H2 and
 shares its emitting area. In the CO₂ stage, 13CO2 shares both values with CO₂. HCN, HC3N, and
 the column densities remain independent. The plots below were generated
 using the optional repository J16120505 spectrum and the notebook's stages.
 
 The notebook uses the original sigma=0 checkpoints. To try the sigma=2
-sigma=2 models in your own fit, load them with
+models in your own fit, load them with
 `load_fitting_models(['H2O', 'C2H2'], sigma=2)`, or pass `sigma=2` to
 `fit_observation`. The latter selects the corresponding checkpoints for all
 stages. The {doc}`../quickstart` lists the available molecules and wavelength
@@ -66,8 +62,7 @@ parameters need further review before scientific interpretation.
 plots all bundled molecules except water at 300 K, logN=18, and A=1 au².
 It produces the two figures in {doc}`../generate_spectra`: the main molecules
 over 5–26 µm and main plus rarer isotopologues over 13–18 µm. The default
-uses sigma=2. The notebook's two-line helper requires the current source
-checkout until the next package release.
+uses sigma=2. `synthesize_spectrum` requires DiskMELTS 2.2.1 or newer.
 
 ## 4. Train and validate a model
 

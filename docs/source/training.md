@@ -230,7 +230,7 @@ from local grids with:
 python examples/train_band_checkpoint.py CH3 15 18 --pca-candidates 10 15 20 25 30 50 75
 ```
 
-Version 2.2.1 bundles the CH3 checkpoint for model fitting.
+The package bundles the CH3 checkpoint for model fitting.
 Direct grid fitting uses the local `Model_grids/sigma0/CH3/` files.
 
 ## C6H6 and C3H4 checkpoints

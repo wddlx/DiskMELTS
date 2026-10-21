@@ -7,12 +7,16 @@ and writes their numerical results for later reading and plotting.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 
 from diskmelts.fitting import (
+    _build_components,
+    _check_bank_wavelength_coverage,
+    _screened_group_options,
     detect_stage_molecules,
     fit_molecules,
     generate_spectrum,
@@ -239,8 +243,45 @@ def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
                 not np.all(np.isfinite(wavelength)) or
                 np.any(np.diff(wavelength) <= 0)):
             raise ValueError('wavelength must be a nonempty, increasing 1D array')
+        _check_bank_wavelength_coverage(model, wavelength)
+        if not model.get('is_model_bank', False):
+            outside = (wavelength < model['wav'][0]) | (wavelength > model['wav'][-1])
+            if np.any(outside):
+                warnings.warn(
+                    f'{int(outside.sum())} wavelength pixels lie outside the '
+                    f'{molecule} model range {model["wav"][0]:.6g}-'
+                    f'{model["wav"][-1]:.6g} um; their flux is set to zero',
+                    stacklevel=2,
+                )
     flux = generate_spectrum(T, logN, A, model, obs_wav=wavelength)
     return wavelength, flux * (140.0 / float(distance_pc)) ** 2
+
+
+def _check_trained_bounds(molecules, options, model_specs):
+    """Reject T/logN bounds outside a checkpoint's trained domain.
+
+    A network evaluated outside its training grid extrapolates without any
+    warning, so such bounds would return unphysical fits.
+    """
+    components = _build_components(molecules, options.get('h2o_components', 1),
+                                   options.get('component_names'))
+    for key in ('T_bounds', 'logN_bounds'):
+        spec = options.get(key)
+        for comp in components:
+            label, mol = comp['label'], comp['model_mol']
+            if isinstance(spec, dict):
+                bounds = spec.get(label, spec.get(mol))
+            else:
+                bounds = spec
+            if bounds is None:
+                continue
+            lo, hi = model_specs[mol][key]
+            if bounds[0] < lo - 1e-9 or bounds[1] > hi + 1e-9:
+                raise ValueError(
+                    f'{key} {tuple(bounds)} for {label!r} exceed the {mol} model\'s '
+                    f'trained range ({lo}, {hi}); narrow them, or use '
+                    f'fit_observation_grids with local slab grids'
+                )
 
 
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
@@ -275,6 +316,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     options.setdefault('T_bounds', T_bounds)
     options.setdefault('logN_bounds', logN_bounds)
     options.setdefault('loga_bounds', (-2.0, 2.0))
+    _check_trained_bounds(molecules, options, model_specs)
     if not np.isfinite(distance_pc) or distance_pc <= 0:
         raise ValueError('distance_pc must be finite and positive')
     # Checkpoints predict flux at 140 pc for A=1 au². Fitting the observed
@@ -291,7 +333,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     fit['residual'] /= to_reference
     for label in fit['component_fluxes']:
         fit['component_fluxes'][label] /= to_reference
-    for solution in fit['top_list']:
+    for solution in fit['top_list'] + fit.get('global_top', []):
         solution['mse_loss'] /= to_reference ** 2
     fit['obs_wav'] = np.asarray(obs_wav)
     fit['obs_flux'] = np.asarray(obs_flux).copy()
@@ -419,13 +461,10 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
             obs_wav, residual, selected, stage['wavelength_range'],
             stage['fit_ranges'], pretrained, model_specs=model_specs,
             h2o_components=stage.get('h2o_components', 1),
-            component_names=stage.get('component_names'),
+            **_screened_group_options(stage, detected),
             T_bounds=stage.get('T_bounds', {mol: model_specs[mol]['T_bounds'] for mol in detected}),
             logN_bounds=stage.get('logN_bounds', {mol: model_specs[mol]['logN_bounds'] for mol in detected}),
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
-            shared_area_groups=stage.get('shared_area_groups'),
-            isotopologue_groups=stage.get('isotopologue_groups'),
-            Tshare=stage.get('Tshare'), Ashare=stage.get('Ashare'),
             n_samples=n_samples, sample_method=sample_method,
             n_refine=n_refine, n_top=n_top, sigma=sigma_noise, seed=seed,
             distance_pc=distance_pc,

@@ -5,8 +5,9 @@ __pycache__/
 
 .obsidian/
 
-#AI memories
-.ai/
+# Local AI notes (the old 0-ai path was a mistaken duplicate).
+/.ai/
+/0-ai/
 
 
 # Distribution / packaging

@@ -16,8 +16,8 @@ $N=10^{18}\,\mathrm{cm}^{-2}$, `A=1` means 1 au², and the default distance is
 `wavelength=your_wave`. The function returns that axis and the corresponding
 flux. Keep $T$ and $\log_{10}N$ within the selected checkpoint's trained bounds.
 
-The two-line helper is currently in the source checkout. With the published
-2.2.0 package, the same HCN spectrum takes four lines:
+`synthesize_spectrum` was added in 2.2.1. With 2.2.0, the same HCN spectrum
+takes four lines:
 
 ```python
 from diskmelts import load_fitting_models, generate_spectrum
@@ -28,9 +28,9 @@ flux = generate_spectrum(300, 18, 1, model)
 
 The runnable {doc}`spectrum generation notebook <notebooks/Example_Generate_Spectra>`
 loads models once and plots every bundled molecule except water. Its default
-uses `sigma=2`. The two-line `synthesize_spectrum` helper and this notebook
-are in the current source checkout; they have not yet been published to PyPI.
-Change `GRID_SIGMA` to 0 to use the matching sigma=0 models.
+uses `sigma=2`. Change `GRID_SIGMA` to 0 to use the matching sigma=0 models.
+The repository also has `examples/synthetic_array_fit.py`, which generates
+HCN and passes its wavelength, flux, and error arrays to `fit_observation`.
 The spectra below use $T=300$ K, $\log_{10}N=18$, $A=1$ au², and 140 pc.
 Each curve is an independent model with the **same illustrative** column
 density and area; these plots do not represent a physical mixture or observed

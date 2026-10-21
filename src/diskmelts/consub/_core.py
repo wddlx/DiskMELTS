@@ -41,6 +41,8 @@ def _regions(regions):
     a = np.asarray(regions, dtype=float)
     if a.size == 0:
         return np.empty((0, 2))
+    if a.shape == (2,):
+        a = a[np.newaxis]
     if a.ndim != 2 or a.shape[1] != 2 or not np.all(np.isfinite(a)) or np.any(a[:, 1] <= a[:, 0]):
         raise ValueError("Regions must be finite (xmin, xmax) pairs with xmin < xmax")
     return a
@@ -128,11 +130,21 @@ def _mad(a):
     return 1.4826 * np.median(np.abs(a - np.median(a)))
 
 
-def _interp(x, xp, yp):
+def _interp(x, xp, yp, linear_ends=False):
     if len(xp) == 1:
         return np.full(len(x), yp[0])
     # Constant end corrections avoid unstable polynomial extrapolation.
-    return PchipInterpolator(xp, yp)(np.clip(x, xp[0], xp[-1]))
+    out = PchipInterpolator(xp, yp)(np.clip(x, xp[0], xp[-1]))
+    if linear_ends:
+        # A sloped continuum beyond the last knot needs a slope, not a constant;
+        # fit it over about 1 um of knots so one noisy knot cannot set it.
+        xp, yp = np.asarray(xp), np.asarray(yp)
+        for outside, end, near in ((x < xp[0], 0, xp <= xp[0] + 1.0),
+                                   (x > xp[-1], -1, xp >= xp[-1] - 1.0)):
+            if outside.any() and near.sum() >= 2:
+                slope = np.polyfit(xp[near], yp[near], 1)[0]
+                out[outside] = yp[end] + slope * (x[outside] - xp[end])
+    return out
 
 
 def _widths(x, good, boxsizes):
@@ -143,7 +155,7 @@ def _widths(x, good, boxsizes):
         n = np.convolve(good.astype(float), np.ones(min(101, len(x))), "same")
         fraction = np.maximum(n / min(101, len(x)), 0.05)
         return np.clip(31 * dx / fraction, 0.25, 1.0)
-    if np.isscalar(boxsizes):
+    if np.ndim(boxsizes) == 0:
         if not np.isfinite(boxsizes) or boxsizes < 5:
             raise ValueError("boxsizes must be at least 5 pixels")
         return dx * float(boxsizes)
@@ -188,7 +200,7 @@ def _local_baseline(x, y, noise, good, widths):
     if len(positions) < 3:
         raise ValueError("Too few continuum windows; widen boxsizes or revise masks")
     knots = pd.DataFrame({"x": positions, "y": values}).groupby("x", sort=True).median()
-    return _interp(x, knots.index.to_numpy(), knots.y.to_numpy())
+    return _interp(x, knots.index.to_numpy(), knots.y.to_numpy(), linear_ends=True)
 
 
 def _arpls(x, y, noise, good, widths):
@@ -203,10 +215,12 @@ def _arpls(x, y, noise, good, widths):
     weights = base.copy()
     converged = False
     for _ in range(40):
-        z = spsolve(diags(weights) + penalty, weights*y)
+        z = spsolve((diags(weights) + penalty).tocsc(), weights*y)
         residual = y-z
         negative = residual[good & (residual < 0)]
         if len(negative) < 3:
+            # Nothing left below the baseline to down-weight: a fixed point.
+            converged = True
             break
         scale = max(np.std(negative), np.median(noise[good])*0.1)
         new = base * expit(-2*(residual - (2*scale-np.mean(negative)))/scale)
@@ -354,8 +368,11 @@ def subtract_continuum(wav, flux, *, error=None, exclude=None, boxsizes=None,
     unsupported |= (x < x[reference][0]) | (x > x[reference][-1])
     cont_error[unsupported] = np.nan
     if unsupported.any():
-        warnings.warn("Continuum crosses regions with weak support; inspect the plot or "
-                      "subtract_continuum() diagnostics before using those regions", stacklevel=2)
+        edges = np.flatnonzero(np.diff(np.r_[0, unsupported.astype(int), 0]))
+        spans = ", ".join(f"{x[a]:.2f}-{x[b-1]:.2f}" for a, b in zip(edges[::2], edges[1::2]))
+        warnings.warn(f"Continuum is interpolated or extrapolated without nearby reference "
+                      f"pixels at {spans} um (weak_support column); inspect the plot before "
+                      "using those regions", stacklevel=2)
     result = pd.DataFrame({"wave": x, "flux": original-continuum,
                            "err": measurement, "cont": continuum,
                            "cont_unshifted": baseline, "raw_flux": original,

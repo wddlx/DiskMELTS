@@ -102,7 +102,7 @@ def _norm_ranges(fit_ranges):
     """Normalise a single (lo, hi) or list of (lo, hi) to a list of tuples."""
     if fit_ranges is None:
         return None
-    if isinstance(fit_ranges[0], (int, float)):
+    if np.isscalar(fit_ranges[0]):
         return [tuple(fit_ranges)]
     return [tuple(r) for r in fit_ranges]
 

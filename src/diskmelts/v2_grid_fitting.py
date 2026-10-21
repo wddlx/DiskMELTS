@@ -22,6 +22,8 @@ import pandas as pd
 from scipy.optimize import differential_evolution, least_squares, lsq_linear
 
 from diskmelts.fitting import (
+    _screened_group_options,
+    _tie_layout,
     detect_stage_molecules,
     load_observed_spectrum,
     print_fit_params,
@@ -205,8 +207,8 @@ def combine_grid_uncertainty(fit_sigma, grid_step):
     return float(np.hypot(fit_sigma, grid_step))
 
 
-def _fit_covariance(result, scales, sigma_known, fixed=None):
-    """Local Gaussian covariance from the weighted residual Jacobian."""
+def _fit_covariance(result, scales, sigma_known, fixed=None, return_cov=False):
+    """Local Gaussian errors (and optionally covariance) from the Jacobian."""
     if fixed is None:
         fixed = np.zeros(len(scales), dtype=bool)
     active = ~np.asarray(fixed, dtype=bool)
@@ -230,6 +232,10 @@ def _fit_covariance(result, scales, sigma_known, fixed=None):
         active_errors = errors[active]
         active_errors[null_weight > 1e-4] = np.nan
         errors[active] = active_errors
+    if return_cov:
+        full = np.zeros((len(scales), len(scales)))
+        full[np.ix_(active, active)] = cov
+        return errors, full
     return errors
 
 
@@ -237,7 +243,8 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                    grid_root=GRID_ROOT, h2o_components=1, component_names=None,
                    T_bounds=(100.0, 1400.0), logN_bounds=None,
                    loga_bounds=(-2.0, 2.0), sigma=None, distance_pc=140.0,
-                   seed=42,
+                   isotopologue_groups=None, Tshare=None, Ashare=None,
+                   shared_area_groups=None, seed=42,
                    maxiter=100, popsize=8, n_refine=3):
     """Fit one or more slab-grid molecules with positive amplitudes.
 
@@ -247,6 +254,10 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     covariance; the T/logN errors then include their grid steps in quadrature.
     ``distance_pc`` converts the 140-pc grid flux normalization to the source
     distance and makes fitted amplitudes physical emitting areas in au².
+    ``isotopologue_groups``, ``Tshare``, ``Ashare``, and ``shared_area_groups``
+    tie temperatures and areas exactly as in ``fit_molecules``. Tied
+    components share free coordinates, and their errors are propagated from
+    the covariance of those coordinates.
     """
     if grid_root is None:
         raise ValueError('grid_root is required for direct-grid fitting')
@@ -298,14 +309,28 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     bounds = [(bound_for(T_bounds, part, (100.0, 1400.0)),
                bound_for(logN_bounds, part, default_logN(part)))
               for part in parts]
+    if any(len(pair) != 2 or not np.all(np.isfinite(pair)) or pair[0] >= pair[1]
+           for bound in bounds for pair in bound):
+        raise ValueError('T and logN bounds must be finite and increasing')
+    layout = _tie_layout(parts, bounds, isotopologue_groups, Tshare, Ashare,
+                         shared_area_groups)
+    decode = layout['decode']
+    nonlinear_bounds = layout['nonlinear_bounds']
+    groups = layout['area_group_members']
     area_bounds = [bound_for(loga_bounds, part, (-2.0, 2.0))
                    for part in parts]
     if any(len(pair) != 2 or not np.all(np.isfinite(pair)) or
            pair[0] >= pair[1] or not 0 < 10.0 ** pair[0] < 10.0 ** pair[1]
            for pair in area_bounds):
         raise ValueError('loga_bounds must be increasing and finite')
-    area_lower = np.array([10.0 ** pair[0] for pair in area_bounds])
-    area_upper = np.array([10.0 ** pair[1] for pair in area_bounds])
+    # A shared area must satisfy every member's bounds.
+    group_area_bounds = [(max(area_bounds[k][0] for k in members),
+                          min(area_bounds[k][1] for k in members))
+                         for members in groups]
+    if any(lo >= hi for lo, hi in group_area_bounds):
+        raise ValueError('shared area group has no overlap in loga_bounds')
+    area_lower = np.array([10.0 ** lo for lo, _ in group_area_bounds])
+    area_upper = np.array([10.0 ** hi for _, hi in group_area_bounds])
     molecules = list(dict.fromkeys(part['model_mol'] for part in parts))
     libraries = {}
     for mol in molecules:
@@ -320,37 +345,49 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
             T_bounds=T_envelope, logN_bounds=N_envelope,
         )
 
-    nonlinear_bounds = [entry for pair in bounds for entry in pair]
     n_parts = len(parts)
+    n_free = len(nonlinear_bounds)
     water_indices = [k for k, part in enumerate(parts)
                      if part['model_mol'] == 'H2O']
     ordered_water = h2o_components == 2 and len(water_indices) == 2
 
-    def templates(nonlin):
+    def water_misordered(physical):
+        return (ordered_water and
+                physical[2 * water_indices[0]] > physical[2 * water_indices[1]])
+
+    def templates(physical):
         return np.column_stack([
-            libraries[part['model_mol']].evaluate(nonlin[2 * k], nonlin[2 * k + 1])
+            libraries[part['model_mol']].evaluate(physical[2 * k], physical[2 * k + 1])
             for k, part in enumerate(parts)
         ])
 
-    def profile_amplitudes(nonlin):
-        if (ordered_water and
-                nonlin[2 * water_indices[0]] > nonlin[2 * water_indices[1]]):
+    def expand_areas(group_values):
+        areas = np.empty(n_parts)
+        for members, value in zip(groups, group_values):
+            areas[members] = value
+        return areas
+
+    def profile_amplitudes(free):
+        physical = decode(free)
+        if water_misordered(physical):
             return np.inf, area_lower.copy()
-        matrix = templates(nonlin)
+        matrix = templates(physical)
+        grouped = np.column_stack([matrix[:, members].sum(axis=1)
+                                   for members in groups])
         scale = max(float(np.max(np.abs(target))),
-                    float(np.max(np.abs(matrix))), np.finfo(float).tiny)
-        if n_parts == 1:
-            column = matrix[:, 0] / scale
+                    float(np.max(np.abs(grouped))), np.finfo(float).tiny)
+        if grouped.shape[1] == 1:
+            column = grouped[:, 0] / scale
             denom = float(np.dot(column, column))
             amplitude = (float(np.clip(np.dot(column, target / scale) / denom,
                                        area_lower[0], area_upper[0]))
                          if denom > 0 else area_lower[0])
             amplitudes = np.array([amplitude])
         else:
-            solution = lsq_linear(matrix / scale, target / scale,
+            solution = lsq_linear(grouped / scale, target / scale,
                                   bounds=(area_lower, area_upper))
             amplitudes = solution.x
-        residual = matrix @ amplitudes - target
+        residual = grouped @ amplitudes - target
         return float(np.dot(residual, residual)), amplitudes
 
     search = differential_evolution(
@@ -363,30 +400,42 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                         key=lambda x: profile_amplitudes(x)[0])
     if not candidates:
         raise RuntimeError('grid search found no feasible component ordering')
-    solution_bounds = [entry for k, pair in enumerate(bounds)
-                       for entry in (pair[0], pair[1], area_bounds[k])]
+    # Refinement coordinates: the free nonlinear ones, then one log10 area
+    # per area group.
+    solution_bounds = list(nonlinear_bounds) + group_area_bounds
     lower = np.array([item[0] for item in solution_bounds], dtype=float)
     upper = np.array([item[1] for item in solution_bounds], dtype=float)
-    scales = np.array([
-        step for part in parts for step in (
-            _local_step(libraries[part['model_mol']].temperatures,
-                        np.mean(bound_for(T_bounds, part, (100.0, 1400.0)))),
-            _local_step(libraries[part['model_mol']].log_columns,
-                        np.mean(bound_for(logN_bounds, part, default_logN(part)))),
-            0.5,
-        )
-    ])
+    mid_physical = decode(np.mean([lower[:n_free], upper[:n_free]], axis=0))
+    scales = np.full(len(solution_bounds), 0.5)
+    for k, part in enumerate(parts):
+        library = libraries[part['model_mol']]
+        T_step = _local_step(library.temperatures, mid_physical[2 * k])
+        N_step = _local_step(library.log_columns, mid_physical[2 * k + 1])
+        scales[layout['column_indices'][k]] = N_step
+        j = layout['temperature_indices'].get(k)
+        if j is None:
+            continue
+        relation = layout['group_for'].get(k)
+        if relation is None or relation[0] == k:
+            scales[j] = T_step
+        else:
+            # A 'less' coordinate is a fraction of the allowed T interval.
+            scales[j] = min(0.5, T_step / (bounds[k][0][1] - bounds[k][0][0]))
 
-    def residual_vector(x):
-        if (ordered_water and
-                x[3 * water_indices[0]] > x[3 * water_indices[1]]):
+    def physical_vector(z):
+        """Per-component (T, logN, log10A) from refinement coordinates."""
+        physical = decode(z[:n_free])
+        log_area = expand_areas(z[n_free:])
+        return np.array([value for k in range(n_parts)
+                         for value in (physical[2 * k], physical[2 * k + 1],
+                                       log_area[k])])
+
+    def residual_vector(z):
+        physical = decode(z[:n_free])
+        if water_misordered(physical):
             # Keep warm/hot labels ordered during local refinement.
             return np.full_like(target, 1e6)
-        model = np.zeros_like(target)
-        for k, part in enumerate(parts):
-            model += 10.0 ** x[3 * k + 2] * libraries[part['model_mol']].evaluate(
-                x[3 * k], x[3 * k + 1],
-            )
+        model = templates(physical) @ (10.0 ** expand_areas(z[n_free:]))
         return (model - target) / noise_scale
 
     best = None
@@ -398,11 +447,9 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
             continue
         seen.add(key)
         _, amplitudes = profile_amplitudes(candidate)
-        x0 = np.array([value for k in range(n_parts)
-                       for value in (candidate[2 * k], candidate[2 * k + 1],
-                                     np.log10(amplitudes[k]))])
-        x0 = np.clip(x0, lower + 1e-10, upper - 1e-10)
-        opt = least_squares(residual_vector, x0, bounds=(lower, upper),
+        z0 = np.concatenate([candidate, np.log10(amplitudes)])
+        z0 = np.clip(z0, lower + 1e-10, upper - 1e-10)
+        opt = least_squares(residual_vector, z0, bounds=(lower, upper),
                             x_scale=scales, max_nfev=600)
         loss = float(np.dot(opt.fun, opt.fun))
         if loss < best_loss:
@@ -413,16 +460,36 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
         raise RuntimeError('grid optimization returned no solution')
 
     fixed = upper - lower < 1e-4
-    covariance_error = _fit_covariance(best, scales,
-                                       sigma_known=sigma is not None,
-                                       fixed=fixed)
+    free_error, free_cov = _fit_covariance(best, scales,
+                                           sigma_known=sigma is not None,
+                                           fixed=fixed, return_cov=True)
+    # Propagate free-coordinate covariance to each component's T, logN,
+    # log10A. Without ties this Jacobian is the identity.
+    best_physical = physical_vector(best.x)
+    jacobian = np.zeros((len(best_physical), len(best.x)))
+    for j in range(len(best.x)):
+        step = 1e-6 * max(scales[j], 1e-12)
+        shifted = best.x.copy()
+        if shifted[j] + step <= upper[j]:
+            shifted[j] += step
+        else:
+            shifted[j] -= step
+            step = -step
+        jacobian[:, j] = (physical_vector(shifted) - best_physical) / step
+    jacobian[np.abs(jacobian) < 1e-9] = 0.0
+    covariance_error = np.sqrt(np.maximum(
+        np.einsum('ij,jk,ik->i', jacobian, free_cov, jacobian), 0.0,
+    ))
+    undefined = np.isnan(free_error)
+    if undefined.any():
+        covariance_error[np.any(jacobian[:, undefined] != 0, axis=1)] = np.nan
     params, uncertainty, details, component_fluxes = {}, {}, {}, {}
     model_flux = np.zeros_like(flux)
     plot_mask = np.logical_or.reduce([(wav >= lo) & (wav <= hi)
                                       for lo, hi in plot_ranges])
     for k, part in enumerate(parts):
         label, mol = part['label'], part['model_mol']
-        T, logN, logA = map(float, best.x[3 * k:3 * k + 3])
+        T, logN, logA = map(float, best_physical[3 * k:3 * k + 3])
         A = 10.0 ** logA
         component = A / to_reference * libraries[mol].evaluate(T, logN, obs_wav=wav)
         component[~plot_mask] = 0.0
@@ -464,6 +531,9 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                       'params': params}],
         'grid_root': str(grid_root), 'sigma_noise': sigma,
         'distance_pc': float(distance_pc),
+        'isotopologue_groups': layout['iso_groups'], 'Tshare': layout['modes'],
+        'Ashare': layout['area_flags'],
+        'shared_area_groups': layout['all_area_groups'],
     }
 
 
@@ -483,15 +553,6 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
     stages = list(stages)
     if not stages or len({stage['name'] for stage in stages}) != len(stages):
         raise ValueError('stages must be nonempty and have unique names')
-    unsupported = ('isotopologue_groups', 'Tshare', 'Ashare',
-                   'shared_area_groups')
-    for stage in stages:
-        requested = [key for key in unsupported if stage.get(key) is not None]
-        if requested:
-            raise ValueError(
-                f"Grid stage {stage['name']!r} does not support "
-                f"{', '.join(requested)}; use fit_observation for constrained fits"
-            )
     obs_wav, obs_flux = load_observed_spectrum(
         input_path, skiprows=skiprows, delimiter=delimiter,
         wav_col=wav_col, flux_col=flux_col,
@@ -527,7 +588,7 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
             obs_wav, residual, selected, stage['wavelength_range'],
             stage['fit_ranges'], grid_root=grid_root,
             h2o_components=stage.get('h2o_components', 1),
-            component_names=stage.get('component_names'),
+            **_screened_group_options(stage, detected, _components),
             T_bounds=stage.get('T_bounds', (100.0, 1400.0)),
             logN_bounds=stage.get('logN_bounds',
                                   {mol: ((13.0, 19.0) if mol == 'H2O'

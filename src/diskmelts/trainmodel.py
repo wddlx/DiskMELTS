@@ -353,6 +353,12 @@ class MLP(nn.Module):
 # Forward-model pretraining
 # ===========================================================================
 
+def _weight_keys(state):
+    """Linear-layer weight keys in network order ('net.10' follows 'net.2')."""
+    return sorted((k for k in state if k.endswith('.weight')),
+                  key=lambda k: int(k.split('.')[1]))
+
+
 def pretrain_forward_model(
     mol,
     pretrain_csv=None,
@@ -482,7 +488,7 @@ def pretrain_forward_model(
             )
 
         state_shape = ckpt['model_state_shape']
-        wkeys = sorted(k for k in state_shape if k.endswith('.weight'))
+        wkeys = _weight_keys(state_shape)
         hidden_ckpt = tuple(state_shape[k].shape[0] for k in wkeys[:-1])
         net_shape = MLP(
             n_in=2, n_out=state_shape[wkeys[-1]].shape[0], hidden=hidden_ckpt
@@ -491,7 +497,7 @@ def pretrain_forward_model(
         net_shape.eval()
 
         state_peak = ckpt['model_state_peak']
-        wkeys_p = sorted(k for k in state_peak if k.endswith('.weight'))
+        wkeys_p = _weight_keys(state_peak)
         hidden_p = tuple(state_peak[k].shape[0] for k in wkeys_p[:-1])
         net_peak = MLP(n_in=2, n_out=1, hidden=hidden_p).to(device)
         net_peak.load_state_dict(state_peak)
@@ -606,8 +612,14 @@ def pretrain_forward_model(
 
     n_shape     = Z_tr.shape[1]
     yp_sc_shape = StandardScaler().fit(Z_tr)
-    peak_tr_valid = np.any(Y_tr != 0, axis=1) if peak_normalization == 'window' else np.ones(len(Y_tr), dtype=bool)
-    peak_v_valid = np.any(Y_v != 0, axis=1) if peak_normalization == 'window' else np.ones(len(Y_v), dtype=bool)
+    # Dark models carry the -30 log10-peak sentinel and must not train the peak head.
+    peak_tr_valid = p_tr > -29.0
+    peak_v_valid = p_v > -29.0
+    if peak_normalization == 'window':
+        peak_tr_valid &= np.any(Y_tr != 0, axis=1)
+        peak_v_valid &= np.any(Y_v != 0, axis=1)
+    peak_loss_excludes_dark = (peak_normalization == 'window'
+                               or not (peak_tr_valid.all() and peak_v_valid.all()))
     if not peak_tr_valid.any() or not peak_v_valid.any():
         raise ValueError('training and validation splits must each contain a nonzero spectrum')
     if not peak_tr_valid.all() or not peak_v_valid.all():
@@ -632,7 +644,7 @@ def pretrain_forward_model(
             'peak_normalization': peak_normalization,
             'shape_loss': shape_loss,
             'temperature_transform': temperature_transform,
-            'peak_loss_excludes_dark': peak_normalization == 'window',
+            'peak_loss_excludes_dark': peak_loss_excludes_dark,
             'shape_edge_ranges': [] if shape_edge_ranges is None else
                 [tuple(map(float, r)) for r in shape_edge_ranges],
             'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
@@ -689,7 +701,7 @@ def pretrain_forward_model(
         ).to(device)
 
         state_shape  = ckpt['model_state_shape']
-        wkeys        = sorted(k for k in state_shape if k.endswith('.weight'))
+        wkeys        = _weight_keys(state_shape)
         hidden_ckpt  = tuple(state_shape[k].shape[0] for k in wkeys[:-1])
         n_out_shape  = state_shape[wkeys[-1]].shape[0]
         net_shape    = MLP(n_in=2, n_out=n_out_shape, hidden=hidden_ckpt).to(device)
@@ -697,7 +709,7 @@ def pretrain_forward_model(
         net_shape.eval()
 
         state_peak   = ckpt['model_state_peak']
-        wkeys_p      = sorted(k for k in state_peak if k.endswith('.weight'))
+        wkeys_p      = _weight_keys(state_peak)
         hidden_p     = tuple(state_peak[k].shape[0] for k in wkeys_p[:-1])
         net_peak     = MLP(n_in=2, n_out=1, hidden=hidden_p).to(device)
         net_peak.load_state_dict(state_peak)
@@ -880,7 +892,7 @@ def pretrain_forward_model(
                 'min_lr':             min_lr,
                 'seed':               seed,
                 'temperature_transform': temperature_transform,
-                'peak_loss_excludes_dark': peak_normalization == 'window',
+                'peak_loss_excludes_dark': peak_loss_excludes_dark,
                 'shape_edge_ranges': [] if shape_edge_ranges is None else
                     [tuple(map(float, r)) for r in shape_edge_ranges],
                 'shape_edge_weight': float(shape_edge_weight) if shape_loss == 'spectral_edge' else 1.0,
@@ -907,7 +919,7 @@ def pretrain_forward_model(
         peak_normalization=peak_normalization,
         shape_loss=shape_loss,
         temperature_transform=temperature_transform,
-        peak_loss_excludes_dark=peak_normalization == 'window',
+        peak_loss_excludes_dark=peak_loss_excludes_dark,
         n_dark_training=int((~peak_tr_valid).sum()),
         n_dark_validation=int((~peak_v_valid).sum()),
         shape_edge_ranges=[] if shape_edge_ranges is None else [tuple(map(float, r)) for r in shape_edge_ranges],

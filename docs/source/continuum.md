@@ -199,10 +199,7 @@ separation of smooth and narrow components in the
 No Gaussian-process implementation is included here.
 
 The distributed `tests/test_consub_package.py` checks the public five-array
-interface, bundled presets, custom windows, and plotting in a directory with
-no `0-Consub/` inputs. Additional local tests and USco/PPan examples live in
-the Git-ignored `0-Consub/consub_test.py`; that directory is not distributed or
-required by the package.
+interface, bundled presets, custom windows, and plotting.
 Local synthetic benchmarks compare both methods against known
 continua and different-temperature molecular spectra. The methods perform
 differently across masked gaps; these tests do not establish absolute accuracy
