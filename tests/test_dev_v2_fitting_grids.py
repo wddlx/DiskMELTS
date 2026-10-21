@@ -119,22 +119,83 @@ def test_fixed_area_is_excluded_from_covariance(tmp_path):
     assert details['logN_total_sigma'] >= 0.125
 
 
-def test_grid_stage_rejects_unapplied_isotope_constraints(tmp_path):
-    wav, spectrum = _small_grid(tmp_path)
+def _isotope_grids(tmp_path):
+    """Two molecules with distinct line positions on the same small grid."""
+    wav = np.linspace(11.0, 13.0, 120)
+    centers = {'C2H2': (11.2, 11.5, 11.8), '13C12CH2': (12.2, 12.5, 12.8)}
+
+    def spectrum(mol, T, logN):
+        # A fixed-strength line pins the area; the others set T and logN.
+        fixed, warm, thick = (np.exp(-((wav - c) / 0.05) ** 2) for c in centers[mol])
+        return 0.01 * (fixed + (1 + (T - 100) / 25) * warm
+                       + (1 + (logN - 13) / 0.125) * thick)
+
+    for mol in centers:
+        grid_dir = tmp_path / 'grids' / mol
+        grid_dir.mkdir(parents=True)
+        for T in (100, 125, 150):
+            for logN in (13.0, 13.125, 13.25):
+                pd.DataFrame({'wave': wav, 'Line': spectrum(mol, T, logN)}).to_csv(
+                    grid_dir / f'T{T}N{logN}.csv', index=False,
+                )
+    return wav, spectrum
+
+
+@pytest.mark.parametrize('mode', ['equal', 'less'])
+def test_grid_stage_applies_isotopologue_constraints(tmp_path, mode):
+    wav, spectrum = _isotope_grids(tmp_path)
+    rare_T = 130.0 if mode == 'equal' else 115.0
+    observed = (1.2 * spectrum('C2H2', 130.0, 13.10)
+                + 1.2 * spectrum('13C12CH2', rare_T, 13.05))
     input_path = tmp_path / 'observation.csv'
-    pd.DataFrame({'wave': wav, 'flux': spectrum(113, 13.07)}).to_csv(
-        input_path, index=False,
-    )
+    pd.DataFrame({'wave': wav, 'flux': observed}).to_csv(input_path, index=False)
     stages = [{'name': 'carbon', 'mol': ['C2H2', '13C12CH2'],
                'wavelength_range': (11, 13), 'fit_ranges': (11, 13),
+               'T_bounds': (100, 150), 'logN_bounds': (13, 13.25),
+               'isotopologue_groups': [('C2H2', '13C12CH2')],
+               'Tshare': [mode], 'Ashare': [True]}]
+    result = fit_observation_grids(
+        input_path, stages, grid_root=tmp_path / 'grids',
+        output_dir=tmp_path / 'results', sigma_noise=1e-4,
+        detection_screening=False, maxiter=30, popsize=8, n_refine=3,
+    )
+    fit = result['fits']['carbon']
+    main, rare = fit['params']['C2H2'], fit['params']['13C12CH2']
+    assert main['A'] == pytest.approx(rare['A'])
+    assert main['A'] == pytest.approx(1.2, rel=0.02)
+    assert main['T'] == pytest.approx(130, abs=1)
+    if mode == 'equal':
+        assert rare['T'] == pytest.approx(main['T'])
+    else:
+        assert rare['T'] <= main['T']
+        assert rare['T'] == pytest.approx(115, abs=1)
+    details = fit['uncertainty_details']
+    # Tied quantities share one free coordinate, so their errors match.
+    assert details['13C12CH2']['log10A_fit_sigma'] == pytest.approx(
+        details['C2H2']['log10A_fit_sigma'])
+    assert np.isfinite(details['13C12CH2']['T_fit_sigma'])
+    if mode == 'equal':
+        assert details['13C12CH2']['T_fit_sigma'] == pytest.approx(
+            details['C2H2']['T_fit_sigma'])
+
+
+def test_grid_screening_drops_undetected_isotopologue(tmp_path):
+    wav, spectrum = _isotope_grids(tmp_path)
+    observed = 1.2 * spectrum('C2H2', 130.0, 13.10)
+    input_path = tmp_path / 'observation.csv'
+    pd.DataFrame({'wave': wav, 'flux': observed}).to_csv(input_path, index=False)
+    stages = [{'name': 'carbon', 'mol': ['C2H2', '13C12CH2'],
+               'wavelength_range': (11, 13), 'fit_ranges': (11, 13),
+               'T_bounds': (100, 150), 'logN_bounds': (13, 13.25),
+               'detect_peaks': {'C2H2': (11.1, 11.3), '13C12CH2': (12.1, 12.3)},
                'isotopologue_groups': [('C2H2', '13C12CH2')],
                'Tshare': ['less'], 'Ashare': [True]}]
-    with pytest.raises(ValueError, match='does not support.*Tshare'):
-        fit_observation_grids(
-            input_path, stages, grid_root=tmp_path / 'grids',
-            output_dir=tmp_path / 'results', detection_screening=False,
-        )
-    assert not (tmp_path / 'results').exists()
+    result = fit_observation_grids(
+        input_path, stages, grid_root=tmp_path / 'grids',
+        output_dir=tmp_path / 'results', sigma_noise=1e-4,
+        maxiter=20, popsize=5, n_refine=2,
+    )
+    assert set(result['fits']['carbon']['params']) == {'C2H2'}
 
 
 def test_repeated_molecule_has_independent_component_bounds(tmp_path):

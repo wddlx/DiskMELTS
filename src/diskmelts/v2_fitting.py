@@ -16,6 +16,7 @@ import torch
 from diskmelts.fitting import (
     _build_components,
     _check_bank_wavelength_coverage,
+    _screened_group_options,
     detect_stage_molecules,
     fit_molecules,
     generate_spectrum,
@@ -256,35 +257,31 @@ def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
     return wavelength, flux * (140.0 / float(distance_pc)) ** 2
 
 
-def _screened_group_options(stage, detected):
-    """Drop undetected molecules from a stage's component labels and groups."""
-    components = _build_components(
-        stage['mol'], stage.get('h2o_components', 1), stage.get('component_names'),
-    )
-    kept_labels = {comp['label'] for comp in components if comp['model_mol'] in detected}
-    options = {}
-    if stage.get('component_names') is not None:
-        options['component_names'] = [comp['label'] for comp in components
-                                      if comp['label'] in kept_labels]
-    shared = [tuple(label for label in group if label in kept_labels)
-              for group in stage.get('shared_area_groups') or ()]
-    options['shared_area_groups'] = [group for group in shared if len(group) >= 2] or None
-    groups = stage.get('isotopologue_groups')
-    if groups is None:
-        options.update(isotopologue_groups=None, Tshare=stage.get('Tshare'),
-                       Ashare=stage.get('Ashare'))
-        return options
-    modes = stage.get('Tshare') or [None] * len(groups)
-    shares = stage.get('Ashare') or [None] * len(groups)
-    kept = [(tuple(label for label in group if label in kept_labels), mode, share)
-            for group, mode, share in zip(groups, modes, shares)]
-    kept = [item for item in kept if len(item[0]) >= 2]
-    options['isotopologue_groups'] = [group for group, _, _ in kept] or None
-    options['Tshare'] = ([mode for _, mode, _ in kept]
-                         if stage.get('Tshare') is not None and kept else None)
-    options['Ashare'] = ([share for _, _, share in kept]
-                         if stage.get('Ashare') is not None and kept else None)
-    return options
+def _check_trained_bounds(molecules, options, model_specs):
+    """Reject T/logN bounds outside a checkpoint's trained domain.
+
+    A network evaluated outside its training grid extrapolates without any
+    warning, so such bounds would return unphysical fits.
+    """
+    components = _build_components(molecules, options.get('h2o_components', 1),
+                                   options.get('component_names'))
+    for key in ('T_bounds', 'logN_bounds'):
+        spec = options.get(key)
+        for comp in components:
+            label, mol = comp['label'], comp['model_mol']
+            if isinstance(spec, dict):
+                bounds = spec.get(label, spec.get(mol))
+            else:
+                bounds = spec
+            if bounds is None:
+                continue
+            lo, hi = model_specs[mol][key]
+            if bounds[0] < lo - 1e-9 or bounds[1] > hi + 1e-9:
+                raise ValueError(
+                    f'{key} {tuple(bounds)} for {label!r} exceed the {mol} model\'s '
+                    f'trained range ({lo}, {hi}); narrow them, or use '
+                    f'fit_observation_grids with local slab grids'
+                )
 
 
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
@@ -319,6 +316,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     options.setdefault('T_bounds', T_bounds)
     options.setdefault('logN_bounds', logN_bounds)
     options.setdefault('loga_bounds', (-2.0, 2.0))
+    _check_trained_bounds(molecules, options, model_specs)
     if not np.isfinite(distance_pc) or distance_pc <= 0:
         raise ValueError('distance_pc must be finite and positive')
     # Checkpoints predict flux at 140 pc for A=1 au². Fitting the observed

@@ -391,6 +391,13 @@ grid_fits = fit_observation_grids(
 )
 ```
 
+Grid stages accept the same isotopologue and area ties as model stages, so
+the `stages` list above can be reused. Local grids may also extend beyond the
+surrogate models' trained domain (logN 13–19.5 for most molecules), which
+makes them the choice for optically thick components such as
+`'logN_bounds': {'C2H2_thick': (19.0, 24.0)}`. For an unconstrained
+comparison, drop the tie keys:
+
 ```python
 from diskmelts import fit_observation_grids, plot_saved_observation
 

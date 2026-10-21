@@ -658,6 +658,132 @@ def _top_list_uncertainty(top_list, sigma=None):
     return uncertainty
 
 
+def _tie_layout(components, component_bounds, isotopologue_groups=None,
+                Tshare=None, Ashare=None, shared_area_groups=None):
+    """Validate isotopologue/area ties and build the free-coordinate layout.
+
+    ``component_bounds`` holds one ((T_lo, T_hi), (logN_lo, logN_hi)) pair per
+    component. Returns a dict with the free nonlinear bounds, a ``decode``
+    function mapping free coordinates to per-component (T, logN) values, and
+    the area-sharing groups as lists of component indices.
+    """
+    labels = [comp['label'] for comp in components]
+    if isotopologue_groups is None:
+        if Tshare is not None or Ashare is not None:
+            raise ValueError('Tshare and Ashare require isotopologue_groups')
+        iso_groups = []
+    else:
+        iso_groups = [tuple(group) for group in isotopologue_groups]
+        if any(len(group) < 2 or len(set(group)) != len(group) for group in iso_groups):
+            raise ValueError('each isotopologue group needs a main and distinct rare labels')
+        unknown = set().union(*map(set, iso_groups)) - set(labels) if iso_groups else set()
+        if unknown:
+            raise ValueError(f'isotopologue_groups contains unknown component labels: {sorted(unknown)}')
+        members = [label for group in iso_groups for label in group]
+        if len(set(members)) != len(members):
+            raise ValueError('isotopologue_groups cannot overlap')
+    modes = ['free'] * len(iso_groups) if Tshare is None else list(Tshare)
+    area_flags = [False] * len(iso_groups) if Ashare is None else list(Ashare)
+    if len(modes) != len(iso_groups) or any(mode not in ('free', 'equal', 'less') for mode in modes):
+        raise ValueError('Tshare needs one free, equal, or less mode per isotopologue group')
+    if len(area_flags) != len(iso_groups) or any(not isinstance(flag, (bool, np.bool_))
+                                                  for flag in area_flags):
+        raise ValueError('Ashare needs one Boolean per isotopologue group')
+
+    all_area_groups = [tuple(group) for group in shared_area_groups or ()]
+    all_area_groups.extend(group for group, share in zip(iso_groups, area_flags) if share)
+    area_group_for = list(range(len(components)))
+    used_labels = set()
+    for group in all_area_groups:
+        group = tuple(group)
+        if len(group) < 2 or len(set(group)) != len(group):
+            raise ValueError('each shared_area_groups entry needs at least two distinct labels')
+        unknown = set(group) - set(labels)
+        if unknown:
+            raise ValueError(f'shared_area_groups contains unknown component labels: {sorted(unknown)}')
+        overlap = used_labels.intersection(group)
+        if overlap:
+            raise ValueError(f'area-sharing groups overlap at component labels: {sorted(overlap)}')
+        used_labels.update(group)
+        anchor = labels.index(group[0])
+        for label in group:
+            area_group_for[labels.index(label)] = anchor
+    area_group_ids = list(dict.fromkeys(area_group_for))
+    area_group_members = [[i for i, group_id in enumerate(area_group_for)
+                           if group_id == anchor] for anchor in area_group_ids]
+
+    # Optimize only independent temperatures. An equal group has one T
+    # coordinate. A less group has its main T plus one [0, 1] coordinate per
+    # rare species, mapped into [rare_min, min(rare_max, main_T)]. Thus neither
+    # global screening nor local refinement can violate the requested relation.
+    group_for = {}
+    for group, mode in zip(iso_groups, modes):
+        if mode != 'free':
+            for label in group:
+                group_for[labels.index(label)] = (labels.index(group[0]), mode)
+    main_T_bounds = {}
+    for group, mode in zip(iso_groups, modes):
+        if mode == 'free':
+            continue
+        indices = [labels.index(label) for label in group]
+        if mode == 'equal':
+            lo = max(component_bounds[i][0][0] for i in indices)
+            hi = min(component_bounds[i][0][1] for i in indices)
+        else:
+            main = indices[0]
+            lo = max(component_bounds[main][0][0],
+                     *(component_bounds[i][0][0] for i in indices[1:]))
+            hi = component_bounds[main][0][1]
+        if not lo < hi:
+            raise ValueError(f'Tshare={mode!r} has no feasible temperature range for {group}')
+        main_T_bounds[indices[0]] = (lo, hi)
+
+    nonlinear_bounds = []
+    temperature_indices = {}
+    column_indices = {}
+    for i, comp in enumerate(components):
+        relation = group_for.get(i)
+        if relation is None or relation[0] == i:
+            temperature_indices[i] = len(nonlinear_bounds)
+            nonlinear_bounds.append(main_T_bounds.get(i, component_bounds[i][0]))
+        elif relation[1] == 'less':
+            temperature_indices[i] = len(nonlinear_bounds)
+            nonlinear_bounds.append((0.0, 1.0))
+        column_indices[i] = len(nonlinear_bounds)
+        nonlinear_bounds.append(component_bounds[i][1])
+
+    def _physical_params(x):
+        """Expand optimization coordinates to per-component (T, logN)."""
+        physical = np.empty(2 * len(components), dtype=np.float64)
+        for i in range(len(components)):
+            physical[2 * i + 1] = x[column_indices[i]]
+            relation = group_for.get(i)
+            if relation is None or relation[0] == i:
+                physical[2 * i] = x[temperature_indices[i]]
+        for i, (main, mode) in group_for.items():
+            if i == main:
+                continue
+            if mode == 'equal':
+                physical[2 * i] = physical[2 * main]
+            else:
+                lo, hi = component_bounds[i][0]
+                available_hi = min(hi, physical[2 * main])
+                physical[2 * i] = min(
+                    physical[2 * main],
+                    lo + x[temperature_indices[i]] * (available_hi - lo),
+                )
+        return physical
+
+    return {
+        'labels': labels, 'iso_groups': iso_groups, 'modes': modes,
+        'area_flags': area_flags, 'all_area_groups': all_area_groups,
+        'area_group_members': area_group_members,
+        'nonlinear_bounds': nonlinear_bounds, 'decode': _physical_params,
+        'temperature_indices': temperature_indices,
+        'column_indices': column_indices, 'group_for': group_for,
+    }
+
+
 def fit_molecules(
     obs_wav,
     obs_flux,
@@ -787,61 +913,6 @@ def fit_molecules(
         if comp['model_mol'] not in pretrained:
             raise KeyError(f"pretrained has no model for {comp['model_mol']!r}")
 
-    labels = [comp['label'] for comp in components]
-    if isotopologue_groups is None:
-        if Tshare is not None or Ashare is not None:
-            raise ValueError('Tshare and Ashare require isotopologue_groups')
-        iso_groups = []
-    else:
-        iso_groups = [tuple(group) for group in isotopologue_groups]
-        if any(len(group) < 2 or len(set(group)) != len(group) for group in iso_groups):
-            raise ValueError('each isotopologue group needs a main and distinct rare labels')
-        unknown = set().union(*map(set, iso_groups)) - set(labels) if iso_groups else set()
-        if unknown:
-            raise ValueError(f'isotopologue_groups contains unknown component labels: {sorted(unknown)}')
-        members = [label for group in iso_groups for label in group]
-        if len(set(members)) != len(members):
-            raise ValueError('isotopologue_groups cannot overlap')
-    modes = ['free'] * len(iso_groups) if Tshare is None else list(Tshare)
-    area_flags = [False] * len(iso_groups) if Ashare is None else list(Ashare)
-    if len(modes) != len(iso_groups) or any(mode not in ('free', 'equal', 'less') for mode in modes):
-        raise ValueError('Tshare needs one free, equal, or less mode per isotopologue group')
-    if len(area_flags) != len(iso_groups) or any(not isinstance(flag, (bool, np.bool_))
-                                                  for flag in area_flags):
-        raise ValueError('Ashare needs one Boolean per isotopologue group')
-
-    all_area_groups = [tuple(group) for group in shared_area_groups or ()]
-    all_area_groups.extend(group for group, share in zip(iso_groups, area_flags) if share)
-    area_group_for = list(range(len(components)))
-    used_labels = set()
-    for group in all_area_groups:
-        group = tuple(group)
-        if len(group) < 2 or len(set(group)) != len(group):
-            raise ValueError('each shared_area_groups entry needs at least two distinct labels')
-        unknown = set(group) - set(labels)
-        if unknown:
-            raise ValueError(f'shared_area_groups contains unknown component labels: {sorted(unknown)}')
-        overlap = used_labels.intersection(group)
-        if overlap:
-            raise ValueError(f'area-sharing groups overlap at component labels: {sorted(overlap)}')
-        used_labels.update(group)
-        anchor = labels.index(group[0])
-        for label in group:
-            area_group_for[labels.index(label)] = anchor
-    area_group_ids = list(dict.fromkeys(area_group_for))
-    area_group_members = [[i for i, group_id in enumerate(area_group_for)
-                           if group_id == anchor] for anchor in area_group_ids]
-
-    joint_ranges = _fit_ranges_for_components(fit_ranges, components)
-    fit_mask = _wav_mask(obs_wav, joint_ranges) & np.isfinite(obs_flux)
-    wav_fit = obs_wav[fit_mask]
-    obs_fit = obs_flux[fit_mask]
-    if len(wav_fit) == 0:
-        raise ValueError('fit_ranges select zero observed wavelength pixels')
-
-    for comp in components:
-        _check_bank_wavelength_coverage(pretrained[comp['model_mol']], wav_fit)
-
     def _bounds_for(comp, bound_spec, default):
         if bound_spec is None:
             return default
@@ -865,67 +936,24 @@ def fit_molecules(
             raise ValueError(f'{comp["label"]} needs finite increasing T and logN bounds')
         component_bounds.append(bounds)
 
-    # Optimize only independent temperatures. An equal group has one T
-    # coordinate. A less group has its main T plus one [0, 1] coordinate per
-    # rare species, mapped into [rare_min, min(rare_max, main_T)]. Thus neither
-    # global screening nor local refinement can violate the requested relation.
-    group_for = {}
-    for group, mode in zip(iso_groups, modes):
-        if mode != 'free':
-            for label in group:
-                group_for[labels.index(label)] = (labels.index(group[0]), mode)
-    main_T_bounds = {}
-    for group, mode in zip(iso_groups, modes):
-        if mode == 'free':
-            continue
-        indices = [labels.index(label) for label in group]
-        if mode == 'equal':
-            lo = max(component_bounds[i][0][0] for i in indices)
-            hi = min(component_bounds[i][0][1] for i in indices)
-        else:
-            main = indices[0]
-            lo = max(component_bounds[main][0][0],
-                     *(component_bounds[i][0][0] for i in indices[1:]))
-            hi = component_bounds[main][0][1]
-        if not lo < hi:
-            raise ValueError(f'Tshare={mode!r} has no feasible temperature range for {group}')
-        main_T_bounds[indices[0]] = (lo, hi)
+    layout = _tie_layout(components, component_bounds, isotopologue_groups,
+                         Tshare, Ashare, shared_area_groups)
+    labels = layout['labels']
+    iso_groups, modes = layout['iso_groups'], layout['modes']
+    area_flags, all_area_groups = layout['area_flags'], layout['all_area_groups']
+    area_group_members = layout['area_group_members']
+    nonlinear_bounds = layout['nonlinear_bounds']
+    _physical_params = layout['decode']
 
-    nonlinear_bounds = []
-    temperature_indices = {}
-    column_indices = {}
-    for i, comp in enumerate(components):
-        relation = group_for.get(i)
-        if relation is None or relation[0] == i:
-            temperature_indices[i] = len(nonlinear_bounds)
-            nonlinear_bounds.append(main_T_bounds.get(i, component_bounds[i][0]))
-        elif relation[1] == 'less':
-            temperature_indices[i] = len(nonlinear_bounds)
-            nonlinear_bounds.append((0.0, 1.0))
-        column_indices[i] = len(nonlinear_bounds)
-        nonlinear_bounds.append(component_bounds[i][1])
+    joint_ranges = _fit_ranges_for_components(fit_ranges, components)
+    fit_mask = _wav_mask(obs_wav, joint_ranges) & np.isfinite(obs_flux)
+    wav_fit = obs_wav[fit_mask]
+    obs_fit = obs_flux[fit_mask]
+    if len(wav_fit) == 0:
+        raise ValueError('fit_ranges select zero observed wavelength pixels')
 
-    def _physical_params(x):
-        """Expand optimization coordinates to per-component (T, logN)."""
-        physical = np.empty(2 * len(components), dtype=np.float64)
-        for i in range(len(components)):
-            physical[2 * i + 1] = x[column_indices[i]]
-            relation = group_for.get(i)
-            if relation is None or relation[0] == i:
-                physical[2 * i] = x[temperature_indices[i]]
-        for i, (main, mode) in group_for.items():
-            if i == main:
-                continue
-            if mode == 'equal':
-                physical[2 * i] = physical[2 * main]
-            else:
-                lo, hi = component_bounds[i][0]
-                available_hi = min(hi, physical[2 * main])
-                physical[2 * i] = min(
-                    physical[2 * main],
-                    lo + x[temperature_indices[i]] * (available_hi - lo),
-                )
-        return physical
+    for comp in components:
+        _check_bank_wavelength_coverage(pretrained[comp['model_mol']], wav_fit)
 
     component_area_bounds = []
     for comp in components:
@@ -1285,6 +1313,38 @@ def detect_stage_molecules(obs_wav, obs_flux, stage, sigma_noise,
         mol_str = ', '.join(mols)
         print(f'  [{mol_str}] not detected (all peaks < {sigma_factor:.1f}σ) — stage skipped')
         return []
+
+
+def _screened_group_options(stage, detected, build_components=None):
+    """Drop undetected molecules from a stage's component labels and groups."""
+    build_components = build_components or _build_components
+    components = build_components(
+        stage['mol'], stage.get('h2o_components', 1), stage.get('component_names'),
+    )
+    kept_labels = {comp['label'] for comp in components if comp['model_mol'] in detected}
+    options = {}
+    if stage.get('component_names') is not None:
+        options['component_names'] = [comp['label'] for comp in components
+                                      if comp['label'] in kept_labels]
+    shared = [tuple(label for label in group if label in kept_labels)
+              for group in stage.get('shared_area_groups') or ()]
+    options['shared_area_groups'] = [group for group in shared if len(group) >= 2] or None
+    groups = stage.get('isotopologue_groups')
+    if groups is None:
+        options.update(isotopologue_groups=None, Tshare=stage.get('Tshare'),
+                       Ashare=stage.get('Ashare'))
+        return options
+    modes = stage.get('Tshare') or [None] * len(groups)
+    shares = stage.get('Ashare') or [None] * len(groups)
+    kept = [(tuple(label for label in group if label in kept_labels), mode, share)
+            for group, mode, share in zip(groups, modes, shares)]
+    kept = [item for item in kept if len(item[0]) >= 2]
+    options['isotopologue_groups'] = [group for group, _, _ in kept] or None
+    options['Tshare'] = ([mode for _, mode, _ in kept]
+                         if stage.get('Tshare') is not None and kept else None)
+    options['Ashare'] = ([share for _, _, share in kept]
+                         if stage.get('Ashare') is not None and kept else None)
+    return options
 
 
 def save_running_spectrum(obs_wav, residual, cumulative_model, output_dir, prefix):
