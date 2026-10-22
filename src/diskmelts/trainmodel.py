@@ -10,6 +10,7 @@ Provides public functions:
     train_model_bank         : train overlapping wavelength/T/logN checkpoint tiles
     select_grid_holdout      : reproducibly withhold complete slab-grid models
     tune_pca_components      : choose PCA size from unseen-spectrum reconstruction
+    convert_legacy_checkpoint: rewrite a checkpoint's scikit-learn objects as arrays
 
 Run as a script to generate pretrain CSVs, train all four molecules, and save
 loss-curve diagnostics:
@@ -23,6 +24,7 @@ import copy
 import hashlib
 import json
 import os
+import pickle
 import re
 import numpy as np
 import pandas as pd
@@ -30,8 +32,120 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+
+
+# ===========================================================================
+# Array-only preprocessing (checkpoint format)
+# ===========================================================================
+
+class ArrayScaler:
+    """Standardization stored as plain arrays (the StandardScaler subset used)."""
+
+    def __init__(self, mean, scale):
+        self.mean_ = np.asarray(mean)
+        self.scale_ = np.asarray(scale)
+        self.n_features_in_ = self.mean_.shape[0]
+
+    def transform(self, X):
+        return (np.asarray(X) - self.mean_) / self.scale_
+
+    def inverse_transform(self, Z):
+        return np.asarray(Z) * self.scale_ + self.mean_
+
+
+class ArrayPCA:
+    """Non-whitened PCA projection stored as plain arrays."""
+
+    def __init__(self, components, mean, explained_variance_ratio=None):
+        self.components_ = np.asarray(components)
+        self.mean_ = np.asarray(mean)
+        self.n_components_ = self.components_.shape[0]
+        self.explained_variance_ratio_ = (None if explained_variance_ratio is None
+                                          else np.asarray(explained_variance_ratio))
+
+    def transform(self, X):
+        return (np.asarray(X) - self.mean_) @ self.components_.T
+
+    def inverse_transform(self, Z):
+        return np.asarray(Z) @ self.components_ + self.mean_
+
+
+def _to_tensor(values):
+    return torch.from_numpy(np.array(values, copy=True))
+
+
+def _scaler_state(scaler):
+    return {'mean': _to_tensor(scaler.mean_), 'scale': _to_tensor(scaler.scale_)}
+
+
+def _pca_state(pca):
+    if pca is None:
+        return None
+    if getattr(pca, 'whiten', False):
+        raise ValueError('whitened PCA cannot be stored as a plain projection')
+    state = {'components': _to_tensor(pca.components_), 'mean': _to_tensor(pca.mean_)}
+    if getattr(pca, 'explained_variance_ratio_', None) is not None:
+        state['explained_variance_ratio'] = _to_tensor(pca.explained_variance_ratio_)
+    return state
+
+
+def _restore_scaler(value):
+    if isinstance(value, dict):
+        return ArrayScaler(value['mean'].numpy(), value['scale'].numpy())
+    return value  # legacy scikit-learn object
+
+
+def _restore_pca(value):
+    if isinstance(value, dict):
+        ratio = value.get('explained_variance_ratio')
+        return ArrayPCA(value['components'].numpy(), value['mean'].numpy(),
+                        None if ratio is None else ratio.numpy())
+    return value  # None or a legacy scikit-learn object
+
+
+def _load_checkpoint(path, device='cpu'):
+    """Load a checkpoint, restoring array preprocessing.
+
+    Array-format checkpoints load with ``weights_only=True`` and need no
+    scikit-learn. Older checkpoints pickle scikit-learn objects and fall back
+    to a full unpickle, which requires a compatible scikit-learn.
+    """
+    try:
+        ckpt = torch.load(path, map_location=device, weights_only=True)
+    except pickle.UnpicklingError:
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+    for key in ('xp_sc', 'yp_sc_shape', 'yp_sc_peak'):
+        if key in ckpt:
+            ckpt[key] = _restore_scaler(ckpt[key])
+    ckpt['pca'] = _restore_pca(ckpt.get('pca'))
+    if 'wav' in ckpt and isinstance(ckpt['wav'], torch.Tensor):
+        ckpt['wav'] = ckpt['wav'].numpy()
+    return ckpt
+
+
+def _array_checkpoint(ckpt):
+    """Return a copy of a checkpoint dict with array-only preprocessing."""
+    out = dict(ckpt)
+    for key in ('xp_sc', 'yp_sc_shape', 'yp_sc_peak'):
+        if key in out and not isinstance(out[key], dict):
+            out[key] = _scaler_state(out[key])
+    if out.get('pca') is not None and not isinstance(out['pca'], dict):
+        out['pca'] = _pca_state(out['pca'])
+    if 'wav' in out and not isinstance(out['wav'], torch.Tensor):
+        out['wav'] = _to_tensor(out['wav'])
+    return out
+
+
+def convert_legacy_checkpoint(path, output_path=None):
+    """Rewrite a checkpoint's scikit-learn scalers/PCA as plain arrays.
+
+    Converted checkpoints load without scikit-learn and give identical
+    spectra. Loading the legacy file once still needs a compatible
+    scikit-learn. Writes to ``output_path`` (default: overwrite ``path``).
+    """
+    ckpt = torch.load(path, map_location='cpu', weights_only=False)
+    torch.save(_array_checkpoint(ckpt), output_path or path)
+    return output_path or path
 
 
 # ===========================================================================
@@ -460,8 +574,6 @@ def pretrain_forward_model(
             X_pre_v_t          (torch.Tensor)   : standardised val inputs on device
             log10p_v           (np.ndarray)     : true log10(peak) for val samples
     """
-    from sklearn.decomposition import PCA as _PCA
-
     if peak_normalization not in ('csv', 'window'):
         raise ValueError("peak_normalization must be 'csv' or 'window'")
     if shape_loss not in ('standardized', 'spectral', 'spectral_edge'):
@@ -479,7 +591,7 @@ def pretrain_forward_model(
                 'pretrain_csv is required when training or when model_path '
                 'does not point to an existing checkpoint'
             )
-        ckpt = torch.load(model_path, map_location=device, weights_only=False)
+        ckpt = _load_checkpoint(model_path, device)
         missing = [key for key in ('xp_sc', 'wav') if key not in ckpt]
         if missing:
             raise ValueError(
@@ -533,6 +645,11 @@ def pretrain_forward_model(
             shape_edge_ranges=ckpt.get('shape_edge_ranges', []),
             shape_edge_weight=ckpt.get('shape_edge_weight', 1.0),
         )
+
+    # scikit-learn is needed only to fit new preprocessing, not to load.
+    from sklearn.decomposition import PCA as _PCA
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
 
     # --- Load pretrain CSV and select wavelength channels ---
     df_pre        = pd.read_csv(pretrain_csv)
@@ -634,7 +751,7 @@ def pretrain_forward_model(
 
     # --- Load from checkpoint if it exists ---
     if model_path and os.path.exists(model_path):
-        ckpt        = torch.load(model_path, map_location=device, weights_only=False)
+        ckpt        = _load_checkpoint(model_path, device)
         expected_metadata = {
             'wav_range': tuple(map(float, wav_range)),
             'T_range': None if T_range is None else tuple(map(float, T_range)),
@@ -868,7 +985,7 @@ def pretrain_forward_model(
         # Save checkpoint
         if model_path:
             os.makedirs(os.path.dirname(os.path.abspath(model_path)), exist_ok=True)
-            torch.save({
+            torch.save(_array_checkpoint({
                 'model_state_shape':  net_shape.state_dict(),
                 'model_state_peak':   net_peak.state_dict(),
                 'train_losses_shape': train_losses_shape,
@@ -899,7 +1016,7 @@ def pretrain_forward_model(
                 'training_data_sha256': training_data_sha256,
                 'n_dark_training': int((~peak_tr_valid).sum()),
                 'n_dark_validation': int((~peak_v_valid).sum()),
-            }, model_path)
+            }), model_path)
             print(f'  [{mol}] saved → {model_path}')
 
     return dict(

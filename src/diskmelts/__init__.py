@@ -12,6 +12,7 @@ from diskmelts.trainmodel import (
     train_model_bank,
     select_grid_holdout,
     tune_pca_components,
+    convert_legacy_checkpoint,
 )
 from diskmelts.fitting import (
     load_models,
@@ -78,6 +79,7 @@ __all__ = [
     "train_model_bank",
     "select_grid_holdout",
     "tune_pca_components",
+    "convert_legacy_checkpoint",
     # fitting
     "load_models",
     "load_model_bank",

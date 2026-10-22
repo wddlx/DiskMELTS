@@ -11,7 +11,7 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 ## Installation
 
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/) and
-requires Python 3.11 or newer. It bundles 46 production checkpoints, 23 each
+requires Python 3.9 or newer. It bundles 46 production checkpoints, 23 each
 for the sigma=0 and sigma=2 grids, covering the same 18 species (see
 [Available molecules](#available-molecules)).
 Install it from any directory. These commands use
@@ -87,7 +87,7 @@ covers multi-stage fits, saved outputs, and plots.
 | `numpy` | Array operations |
 | `pandas` | CSV I/O |
 | `scipy` | L-BFGS-B optimizer, NNLS, Sobol sampling |
-| `scikit-learn` | Model scaling and PCA metadata |
+| `scikit-learn` | PCA and scaling when training new models |
 | `matplotlib` | Plotting |
 
 ## Continuum subtraction
