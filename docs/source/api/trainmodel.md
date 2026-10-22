@@ -65,4 +65,5 @@ the `.pt` files directly. See {doc}`../quickstart` for fitting and
 
 ```{eval-rst}
 .. autofunction:: diskmelts.trainmodel.tune_pca_components
+.. autofunction:: diskmelts.trainmodel.convert_legacy_checkpoint
 ```

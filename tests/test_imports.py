@@ -36,6 +36,7 @@ PUBLIC_SYMBOLS = [
     "train_model_bank",
     "select_grid_holdout",
     "tune_pca_components",
+    "convert_legacy_checkpoint",
     # validation
     "validate_nt",
     "validate_nt_holdout",

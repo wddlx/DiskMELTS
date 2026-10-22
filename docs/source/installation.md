@@ -2,7 +2,7 @@
 
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/). You do
 not need to clone the repository to fit spectra or subtract a continuum. The
-package requires Python 3.11 or newer.
+package requires Python 3.9 or newer.
 
 ## Install in a new Python environment
 
@@ -80,8 +80,9 @@ On Windows PowerShell, the same quoted commands work. The `notebooks` extra
 installs JupyterLab; the example notebook files are in the
 [GitHub repository](https://github.com/wddlx/DiskMELTS/tree/main/notebooks)
 and are not installed by pip.
-The bundled PCA and scaler objects were saved with scikit-learn 1.8, so
-DiskMELTS requires scikit-learn 1.8.x; pip installs it automatically.
+The bundled checkpoints store their PCA and scaling as plain arrays, so they
+load with any supported scikit-learn version (scikit-learn is used only when
+training new models).
 
 To update an existing installation later, run
 `python -m pip install --upgrade diskmelts` in its active environment.

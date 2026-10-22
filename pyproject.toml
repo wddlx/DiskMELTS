@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diskmelts"
-version = "2.2.1"
+version = "2.2.2"
 description = "Machine-learning Enabled Line fitting Tool for Spectra of protoplanetary disks"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -21,16 +21,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
-    # Checkpoints load with torch.load(weights_only=False), added in 1.13.
+    # Checkpoints load with torch.load(weights_only=True), added in 1.13.
     "torch>=1.13",
     # Intel macOS wheels stop at PyTorch 2.2, whose NumPy bridge needs NumPy 1.x.
     "numpy>=1.26,<2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "numpy; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "pandas",
     "scipy",
-    # Bundled checkpoints pickle scikit-learn 1.8 PCA/scaler objects; keep the
-    # same minor version so they unpickle without a cross-version warning.
-    "scikit-learn>=1.8,<1.9",
+    # Used only to fit PCA/scalers when training; checkpoints store plain arrays.
+    "scikit-learn>=1.0",
     "matplotlib",
 ]
 

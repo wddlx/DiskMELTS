@@ -11,10 +11,6 @@ outputs saved in the notebook, including its figures, so you can see what to
 expect before running anything. The continuum and fitting outputs come from
 the included Upper Sco J16120505 example.
 
-The fitting and training notebooks load checkpoints containing scikit-learn
-1.8 objects; `pip install diskmelts` installs a matching 1.8.x release, and
-the first notebook cell checks it.
-
 ## 1. Subtract the continuum
 
 {doc}`Example_Consub` reads the raw J16120505 CSV, estimates the continuum,

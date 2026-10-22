@@ -9,7 +9,7 @@ emitting area ($A$) — from JWST mid-infrared spectra of protoplanetary disks.
 Most users can start with the pretrained models bundled in the installed
 package. The checkpoints require no local training grids.
 
-Install from [PyPI](https://pypi.org/project/diskmelts/) with Python 3.11 or
+Install from [PyPI](https://pypi.org/project/diskmelts/) with Python 3.9 or
 newer:
 
 ```bash
