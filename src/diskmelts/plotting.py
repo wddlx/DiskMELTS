@@ -148,12 +148,13 @@ def plot_fit(
         name (str): source name used in the figure title
         save_path (str or None): file path to save figure (PNG/PDF); if None the
                                  figure is returned without saving
-        params (dict or None): label -> {'T', 'logN', 'log10A', ...} from
-                               fit_molecules result['params'].  When provided, a
-                               parameter text box with best-fit values is drawn.
-        uncertainty (dict or None): label -> {'T': {'minus', 'plus'}, ...} from
-                                      fit_molecules result['uncertainty'].  Combined
-                                      with params to show ± errorbars in the text box.
+        params (dict or None): label -> {'T', 'logN', 'log10A', ...} best fits
+                               from fit_molecules result['params'].  When
+                               provided, a parameter text box is drawn.
+        uncertainty (dict or None): label -> {'T': {'q50', 'minus', 'plus',
+                                      'at_bound'}, ...} from result['uncertainty'].
+                                      When present, the box shows posterior medians
+                                      with 16-84% error bars; otherwise best fits.
         show (bool): display the figure interactively; set False for batch fits.
 
     Returns:
@@ -244,17 +245,26 @@ def plot_fit(
                 u_T     = u.get('T',      {})
                 u_logN  = u.get('logN',   {})
                 u_log10A = u.get('log10A', {})
-                T_str = f"T={p['T']:.0f}"
-                if u_T:
-                    T_str += f"(+{u_T['plus']:.0f}/-{u_T['minus']:.0f})"
-                logN_str = f"logN={p['logN']:.2f}"
-                if u_logN:
-                    logN_str += f"(+{u_logN['plus']:.2f}/-{u_logN['minus']:.2f})"
+                def _val(u, best, digits):
+                    # Posterior median and 16-84% range when sampled.
+                    median = u.get('q50', np.nan) if u else np.nan
+                    value = median if np.isfinite(median) else best
+                    text = f"{value:.{digits}f}"
+                    if np.isfinite(median) and np.isfinite(u.get('plus', np.nan)):
+                        text += f"(+{u['plus']:.{digits}f}/-{u['minus']:.{digits}f})"
+                        text += '*' if u.get('at_bound') else ''
+                    return text
                 la_val = p.get('log10A', np.log10(max(p.get('A', 1.0), 1e-300)))
-                la_str = f"log10A={la_val:.2f}"
-                if u_log10A:
-                    la_str += f"(+{u_log10A['plus']:.2f}/-{u_log10A['minus']:.2f})"
+                T_str = "T=" + _val(u_T, p['T'], 0)
+                logN_str = "logN=" + _val(u_logN, p['logN'], 2)
+                la_str = "log10A=" + _val(u_log10A, la_val, 2)
                 lines.append(f"{label}: {T_str} K  {logN_str}  {la_str}")
+            if any(np.isfinite(v.get('q50', np.nan)) for u in unc.values()
+                   for v in u.values() if isinstance(v, dict)):
+                lines.append('values: posterior median (16-84%); curves: best fit'
+                             + ('; * at a fit bound' if any(
+                                 v.get('at_bound') for u in unc.values()
+                                 for v in u.values() if isinstance(v, dict)) else ''))
             ax_top.text(
                 0.99, 0.98, '\n'.join(lines),
                 transform=ax_top.transAxes, va='top', ha='right',

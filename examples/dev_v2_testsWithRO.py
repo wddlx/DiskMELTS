@@ -6,6 +6,7 @@ Run from the repository root in the data_reduction environment::
 
 Use --sources FZTau J16120505 or --methods models grids to run a subset.
 Completed source/method outputs are reused unless --overwrite is supplied.
+MCMC error bars take about a minute per stage; --no-errorbars skips them.
 The paper values are comparison targets, never optimizer starting values.
 """
 
@@ -118,7 +119,8 @@ def stages_for(source):
 
 
 def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4096,
-               n_refine=12, grid_maxiter=30, grid_popsize=5):
+               n_refine=12, grid_maxiter=30, grid_popsize=5, errorbars=True,
+               n_mcmc=None):
     path = DATA / SOURCES[source]
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -135,7 +137,8 @@ def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4
     expected = [result_dir / f'{source}_{stage["name"]}_fit_params.csv'
                 for stage in stages]
     if (final.is_file() and all(item.is_file() for item in expected) and
-            saved_config.get('distance_pc') == distance_pc and not overwrite):
+            saved_config.get('distance_pc') == distance_pc and
+            saved_config.get('errorbars', False) == errorbars and not overwrite):
         print(f'Reusing {method} fit for {source}', flush=True)
         active = [stage['name'] for stage in stages]
         sigma = None
@@ -148,6 +151,7 @@ def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4
                 distance_pc=distance_pc,
                 detection_screening=False, n_samples=n_samples,
                 n_refine=n_refine, n_top=min(10, n_refine), seed=42,
+                errorbars=errorbars, n_mcmc=n_mcmc,
             )
         elif method == 'grids':
             result = fit_observation_grids(
@@ -155,7 +159,7 @@ def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4
                 output_dir=result_dir, detection_screening=False,
                 distance_pc=distance_pc,
                 maxiter=grid_maxiter, popsize=grid_popsize,
-                n_refine=3, seed=42,
+                n_refine=3, seed=42, errorbars=errorbars, n_mcmc=n_mcmc,
             )
         else:
             raise ValueError(method)
@@ -169,6 +173,7 @@ def run_source(source, method, *, distance_pc=None, overwrite=False, n_samples=4
             'n_refine': n_refine if method == 'models' else 3,
             'grid_maxiter': grid_maxiter if method == 'grids' else None,
             'grid_popsize': grid_popsize if method == 'grids' else None,
+            'errorbars': errorbars,
         }, indent=2) + '\n')
     return plot_saved_observation(
         path, result_dir, stages, name=source,
@@ -252,6 +257,10 @@ def collect_comparison():
                         'logA': fitted.log10A,
                         'logA_sigma_minus': fitted.log10A_minus,
                         'logA_sigma_plus': fitted.log10A_plus,
+                        # Sampled log10(N*A) keeps the N-A correlation (newer outputs).
+                        'logNA': getattr(fitted, 'logNA', np.nan),
+                        'logNA_sigma_minus': getattr(fitted, 'logNA_minus', np.nan),
+                        'logNA_sigma_plus': getattr(fitted, 'logNA_plus', np.nan),
                         'paper_T_K': np.nan if ref is None else ref.T_K,
                         'paper_T_sigma_minus_K': np.nan if ref is None else ref.T_minus_K,
                         'paper_T_sigma_plus_K': np.nan if ref is None else ref.T_plus_K,
@@ -461,6 +470,10 @@ def main():
     parser.add_argument('--n-refine', type=int, default=12)
     parser.add_argument('--grid-maxiter', type=int, default=30)
     parser.add_argument('--grid-popsize', type=int, default=5)
+    parser.add_argument('--no-errorbars', action='store_true',
+                        help='Skip MCMC error bars and save best fits only')
+    parser.add_argument('--n-mcmc', type=int,
+                        help='Starting MCMC likelihood evaluations per stage')
     args = parser.parse_args()
     if args.distance_pc is not None and len(args.sources) != 1:
         parser.error('--distance-pc requires exactly one --sources value')
@@ -471,7 +484,8 @@ def main():
                            distance_pc=args.distance_pc,
                            n_samples=args.n_samples, n_refine=args.n_refine,
                            grid_maxiter=args.grid_maxiter,
-                           grid_popsize=args.grid_popsize)
+                           grid_popsize=args.grid_popsize,
+                           errorbars=not args.no_errorbars, n_mcmc=args.n_mcmc)
                 print(f'Updated {write_report()}', flush=True)
     else:
         print(f'Updated {write_report()}', flush=True)

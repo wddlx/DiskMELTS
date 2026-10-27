@@ -90,7 +90,10 @@ representative scalar as `sigma`, for example
 pixel by its individual error.
 
 `fit_stage` returns fitted parameters, component spectra, the total model,
-residuals, and uncertainty estimates. It accepts one molecule or a list for a
+residuals, and posterior error bars (see {ref}`uncertainties`). Sampling the
+posterior takes about a minute per stage; pass `n_mcmc=20000` for a quick
+look, use the default for results you report, or pass `errorbars=False` to
+skip the error bars and get the best fit only. It accepts one molecule or a list for a
 joint fit. `fit_ranges` accepts one `(low, high)` pair, a list of pairs, or a
 molecule-to-ranges mapping. Every fit interval must lie within
 `wavelength_range` and inside each selected checkpoint's trained domain.
@@ -213,8 +216,8 @@ result = fit_observation(
 ```
 
 `obs_err` is optional. Its positive finite median supplies one noise value for
-detection screening and top-solution uncertainty estimates; the spectral
-optimization remains unweighted by individual errors. If no error array is
+detection screening and the noise level of the error-bar likelihood; the
+spectral optimization remains unweighted by individual errors. If no error array is
 given, the workflow estimates one noise value from `line_free_windows` as in
 the file-based workflow. Arrays must have matching one-dimensional shapes;
 pixels with nonfinite wavelength or flux are dropped, and remaining wavelengths
@@ -297,12 +300,12 @@ Each stage writes these files to `output_dir` (prefix `{name}_{stage}`):
 
 | File | Contents |
 |---|---|
-| `{prefix}_fit_params.csv` | One row per component: T, logN, A (au²), log10A, with `_minus`/`_plus` spreads |
-| `{prefix}_fit_spectrum.csv` | Wavelength, input flux, total model, residual, and per-component models |
+| `{prefix}_fit_params.csv` | One row per component. `T`, `logN`, `log10A`, `A`, `logNA` (log10 N·A, sampled directly so the N–A correlation is kept): posterior medians, with `_minus`/`_plus` error bars, `_q16`/`_q50`/`_q84` percentiles, `_at_bound` flags, and `_best` best-fit values; plus `uncertainty_method`, `noise_correlation_length`, `sigma_likelihood`, and `mcmc_r_hat` |
+| `{prefix}_fit_spectrum.csv` | Wavelength, input flux, total best-fit model, residual, and per-component models |
 | `{prefix}_fit_top.csv` | The ranked top solutions |
 | `{prefix}_running.csv` | Residual and cumulative model after this stage |
 | `{name}_final_running.csv` | The same after the last stage |
-| `Fitted_Parameters.csv` | One row per source for H2O, C2H2, HCN, and CO2 only, with logN and log10A; use the per-stage params files for every component |
+| `Fitted_Parameters.csv` | One row per source for H2O, C2H2, HCN, and CO2 only: posterior medians of logN and log10A, and T, with error bars; use the per-stage params files for every component |
 
 The returned dict has `fits` (one `fit_stage` result per stage), `residual`,
 `cumulative_model`, `sigma_noise`, `grid_sigma`, and `products` (saved paths). Adjust the stage
@@ -347,18 +350,70 @@ be measured from one spectrum because only `A / distance_pc**2` is constrained.
 When `sigma` is supplied, the model fitter scales it with the flux to the
 140 pc reference.
 
+(uncertainties)=
 ## What the uncertainties mean
 
-`fit['uncertainty'][label]` gives `q16`, `q50`, `q84`, `minus`, and `plus`
-for `T`, `logN`, and `log10A`. They are quantiles over the `n_top` best
-distinct solutions found by the optimizer, weighted by `exp(-Δχ²/2)` when a
-noise `sigma` is available and unweighted otherwise. `minus` and `plus` are
-measured from the median `q50`, not from the best fit. They show how well the
-optimum is pinned down, but they are not posterior credible intervals: they
-can be zero when all top solutions agree, may not contain the best-fit value
-when `n_top` is small, and ignore continuum and model systematics. Treat
-parameters at a bound, and strongly correlated T–logN–A solutions, with
-caution.
+After the optimizer finds the best fit, each stage samples its posterior
+with the [emcee](https://emcee.readthedocs.io/) ensemble sampler, using the
+surrogate models. The reported value of every parameter is the **posterior
+median**, and its error bars run to the **16th and 84th percentiles**. These
+are what the printout, the plots, and the saved CSV files show.
+`fit['uncertainty'][label][key]` holds `q16`, `q50`, `q84`, `minus`
+(`q50 - q16`), `plus` (`q84 - q50`), `best`, and `at_bound` for `T`, `logN`,
+and `log10A`.
+
+The likelihood compares the fitted pixels with one noise level, adjusted for
+two effects a plain χ² ignores:
+
+- **Correlated noise.** MIRI spectra are oversampled and resampled, so
+  neighbouring pixels are not independent. The noise is scaled by the square
+  root of the residual's autocorrelation length (summed over at most 10
+  pixels; typically 5–10 for MIRI).
+- **Model mismatch.** If the best fit's reduced χ² exceeds 1, the noise is
+  scaled up to match; it is never scaled down below the supplied value.
+
+Without a noise level, the best-fit residual RMS is used. Priors are flat
+inside the fit bounds.
+
+How to read the results:
+
+- **Best fit vs median.** The best fit (`best`, and the `*_best` CSV
+  columns) is the single best-fitting model, and the plotted model spectra
+  use it. Where temperature, column density, and area are degenerate, most
+  of the probability can lie away from that point, so the median and the
+  best fit can differ markedly. Report the median and its error bars.
+- **`at_bound` (printed as `*`).** The 16–84% range or the best fit reaches
+  a fit bound, so the bound, not the data, limits it. Widen the bound, or
+  quote the value as a limit.
+- **Convergence.** Each stage starts with `n_mcmc` likelihood evaluations
+  (default 300 000, or set `DISKMELTS_N_MCMC`) and checks R-hat, which
+  compares the walkers. Below 1.1 it stops; otherwise it doubles the run, up
+  to three times, so stages with many components get longer chains
+  automatically. It warns if R-hat is still above 1.1; then increase
+  `n_mcmc`.
+- **Not included.** Continuum-subtraction errors, slab-model assumptions,
+  and the uncertainty of earlier stages, whose models are subtracted as if
+  exact. Fit strongly blended species in the same stage when their
+  covariance matters.
+
+`fit['solution_spread']` keeps the spread of the optimizer's top distinct
+solutions. Use it only to spot separate good solutions, not as an error bar.
+
+### Best fits only
+
+Error bars are on by default. Pass `errorbars=False` to `fit_stage`,
+`fit_observation`, `fit_grid_stage`, or `fit_observation_grids` to skip the
+MCMC step, for example while exploring stage settings:
+
+```python
+result = fit_observation(source, stages, name='my_source',
+                         output_dir='results/quick', errorbars=False)
+```
+
+`fit['uncertainty']` is then empty, the printout and plots show best fits
+without error bars, and the saved `T`, `logN`, `log10A`, and `A` columns hold
+the best fits (with `uncertainty_method` set to `none` and empty
+`_minus`/`_plus` columns).
 
 ## Optional direct-grid fit
 
@@ -420,8 +475,11 @@ plot_saved_observation(
 
 `Model_grids/sigma0/<molecule>/T{temperature}N{log_column}.csv` must contain `wave`
 and `Line` columns and cover the fitted domain. The grid fitter interpolates
-between T/logN points, refines the best solutions, and adds the full local grid
-step in quadrature to the formal T/logN errors. For example, a 25 K step gives
-`T_total_sigma = sqrt(T_fit_sigma**2 + 25**2)` K. Its covariance describes
-one local mode, not a full posterior. See {doc}`training` for obtaining and
+between T/logN points, refines the best solutions, samples the posterior on
+the interpolated grid exactly as for model fits, and adds the full local grid
+step in quadrature to each side of the T/logN error bars. For example, a 25 K
+step gives `T_total_sigma = sqrt(T_fit_sigma**2 + 25**2)` K in the
+`*_grid_uncertainty.csv` file. Its `_q16`/`_q84` columns are the pure
+posterior percentiles, while `_minus`/`_plus` include the grid step. With
+`errorbars=False` no grid step is reported. See {doc}`training` for obtaining and
 using optional grids.

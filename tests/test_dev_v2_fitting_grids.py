@@ -104,7 +104,7 @@ def test_grid_must_be_complete(tmp_path):
                        T_bounds=(100, 150), logN_bounds=(13, 13.25))
 
 
-def test_fixed_area_is_excluded_from_covariance(tmp_path):
+def test_fixed_area_has_zero_sampled_error(tmp_path):
     wav, spectrum = _small_grid(tmp_path)
     fit = fit_grid_stage(
         wav, spectrum(113, 13.07), 'C2H2', (11, 13), (11, 13),
@@ -235,3 +235,73 @@ def test_repeated_grid_molecule_requires_unique_labels(tmp_path):
             wav, spectrum(125, 13.125), ['C2H2', 'C2H2'],
             (11, 13), (11, 13), grid_root=tmp_path / 'grids',
         )
+
+
+def test_batched_grid_evaluation_matches_single_points(tmp_path):
+    wav, _ = _small_grid(tmp_path)
+    cube = load_grid_cube('C2H2', wav, grid_root=tmp_path / 'grids',
+                          T_bounds=(100, 150), logN_bounds=(13, 13.25))
+    rng = np.random.default_rng(0)
+    T, N = rng.uniform(100, 150, 20), rng.uniform(13, 13.25, 20)
+    np.testing.assert_allclose(cube.evaluate_batch(T, N),
+                               [cube.evaluate(t, n) for t, n in zip(T, N)], rtol=1e-12)
+
+
+def test_grid_outputs_report_posterior_medians(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    observed = spectrum(113.0, 13.07) + np.random.default_rng(1).normal(0, 2e-4, wav.size)
+    input_path = tmp_path / 'observation.csv'
+    pd.DataFrame({'wave': wav, 'flux': observed}).to_csv(input_path, index=False)
+    stages = [{'name': 'C2H2', 'mol': 'C2H2', 'wavelength_range': (11, 13),
+               'fit_ranges': (11, 13), 'T_bounds': (100, 150),
+               'logN_bounds': (13, 13.25)}]
+    result = fit_observation_grids(
+        input_path, stages, name='demo', grid_root=tmp_path / 'grids',
+        output_dir=tmp_path / 'results', sigma_noise=2e-4,
+        detection_screening=False, maxiter=20, popsize=5, n_refine=2,
+        n_mcmc=20000,
+    )
+    fit = result['fits']['C2H2']
+    u, best = fit['uncertainty']['C2H2'], fit['params']['C2H2']
+    assert fit['uncertainty_info']['method'] == 'mcmc'
+    params = pd.read_csv(result['products']['C2H2']['params']).iloc[0]
+    summary = pd.read_csv(result['products']['C2H2']['grid_uncertainty']).iloc[0]
+    for row in (params, summary):
+        assert row['T'] == pytest.approx(u['T']['q50'])
+        assert row['T_best'] == pytest.approx(best['T'])
+        # Each side includes the 25 K grid step in quadrature.
+        assert row['T_minus'] >= 25 and row['T_plus'] >= 25
+
+
+def test_grid_errorbars_false_reports_best_fit(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    fit = fit_grid_stage(
+        wav, spectrum(113.0, 13.07), 'C2H2', (11, 13), (11, 13),
+        grid_root=tmp_path / 'grids', T_bounds=(100, 150),
+        logN_bounds=(13, 13.25), sigma=1e-4, maxiter=20, popsize=5,
+        n_refine=2, errorbars=False,
+    )
+    u = fit['uncertainty']['C2H2']['T']
+    assert fit['uncertainty_info']['method'] == 'none'
+    assert 'q50' not in u and np.isnan(u['minus'])
+    assert fit['params']['C2H2']['T'] == pytest.approx(113, abs=1)
+
+
+def test_grid_observation_without_errorbars_saves_best_fits(tmp_path):
+    wav, spectrum = _small_grid(tmp_path)
+    input_path = tmp_path / 'observation.csv'
+    pd.DataFrame({'wave': wav, 'flux': spectrum(113.0, 13.07)}).to_csv(input_path, index=False)
+    stages = [{'name': 'C2H2', 'mol': 'C2H2', 'wavelength_range': (11, 13),
+               'fit_ranges': (11, 13), 'T_bounds': (100, 150),
+               'logN_bounds': (13, 13.25)}]
+    result = fit_observation_grids(
+        input_path, stages, name='demo', grid_root=tmp_path / 'grids',
+        output_dir=tmp_path / 'results', sigma_noise=1e-4,
+        detection_screening=False, maxiter=20, popsize=5, n_refine=2,
+        errorbars=False,
+    )
+    best = result['fits']['C2H2']['params']['C2H2']
+    for kind in ('params', 'grid_uncertainty'):
+        row = pd.read_csv(result['products']['C2H2'][kind]).iloc[0]
+        assert row['T'] == pytest.approx(best['T'])
+        assert np.isnan(row['T_minus'])

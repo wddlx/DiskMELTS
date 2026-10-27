@@ -68,9 +68,11 @@ fit = fit_stage(
     wave, flux, molecule="C2H2", pretrained=models,
     wavelength_range=(13.0, 15.0), fit_ranges=(13.5, 14.1),
     distance_pc=140.0, n_samples=1024, n_refine=4, n_top=4,
+    n_mcmc=20000,  # quick look; omit for the converged default (~1 min)
+    # errorbars=False,  # skip the MCMC error bars and return the best fit only
 )
 
-# 3. Best-fit T (K), logN (cm^-2), A (au^2), and the spread of top solutions.
+# 3. Best fit, then posterior medians and 16-84% error bars (from MCMC).
 print(fit["params"]["C2H2"])
 print(fit["uncertainty"]["C2H2"])
 ```
@@ -89,6 +91,7 @@ covers multi-stage fits, saved outputs, and plots.
 | `scipy` | L-BFGS-B optimizer, NNLS, Sobol sampling |
 | `scikit-learn` | PCA and scaling when training new models |
 | `matplotlib` | Plotting |
+| `emcee` | MCMC sampling of parameter error bars |
 
 ## Continuum subtraction
 
@@ -187,6 +190,14 @@ convention is 1 au² at 140 pc; `distance_pc` sets the source distance and
 makes the returned emitting area physical. `fit_observation` accepts either a
 CSV path or in-memory `obs_wav`, `obs_flux`, and optional `obs_err` arrays
 (new in 2.2.1).
+
+Every fit returns its best fit and, by default, error bars from MCMC sampling
+of the posterior with [emcee](https://emcee.readthedocs.io/). Reported values
+are posterior medians with 16–84% error bars; the noise level accounts for
+correlated pixels and model mismatch, and a `*` marks a range that reaches a
+fit bound. Sampling takes about a minute per stage. Pass `errorbars=False`
+for best fits only. See
+[What the uncertainties mean](https://diskmelts.readthedocs.io/en/latest/quickstart.html#uncertainties).
 
 For a synthetic spectrum, `wave, flux = diskmelts.synthesize_spectrum('HCN',
 T=300, logN=18, A=1)` returns the native wavelength axis and model flux (new

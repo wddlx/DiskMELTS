@@ -81,4 +81,5 @@ api/v2
 api/trainmodel
 api/validation
 api/plotting
+api/uncertainty
 ```

@@ -64,16 +64,29 @@ def read_stage_result(result_dir, source_name, stage_name):
         if column not in spectrum:
             raise ValueError(f'{stage_name} spectrum has no {column} column')
         component_fluxes[label] = spectrum[column].to_numpy(dtype=float)
+        # Best fits come from *_best columns (newer files); older files
+        # stored best fits in the plain columns.
+        def _best(key):
+            column = f'{key}_best'
+            return float(getattr(row, column) if column in parameter_rows else getattr(row, key))
         params[label] = {
-            'T': float(row.T), 'logN': float(row.logN),
-            'A': float(row.A), 'log10A': float(row.log10A),
+            'T': _best('T'), 'logN': _best('logN'),
+            'A': _best('A'), 'log10A': _best('log10A'),
             'model_mol': str(row.model_mol),
         }
-        uncertainty[label] = {
-            key: {'minus': float(getattr(row, f'{key}_minus')),
-                  'plus': float(getattr(row, f'{key}_plus'))}
-            for key in ('T', 'logN', 'log10A')
-        }
+        uncertainty[label] = {}
+        for key in ('T', 'logN', 'log10A'):
+            entry = {'minus': float(getattr(row, f'{key}_minus')),
+                     'plus': float(getattr(row, f'{key}_plus'))}
+            # Older saved results lack the posterior columns.
+            for extra in ('q16', 'q50', 'q84'):
+                if f'{key}_{extra}' in parameter_rows:
+                    value = float(getattr(row, f'{key}_{extra}'))
+                    if np.isfinite(value):  # NaN when error bars were skipped
+                        entry[extra] = value
+            if f'{key}_at_bound' in parameter_rows:
+                entry['at_bound'] = bool(getattr(row, f'{key}_at_bound'))
+            uncertainty[label][key] = entry
 
     wav = spectrum['wave'].to_numpy(dtype=float)
     flux = spectrum['flux'].to_numpy(dtype=float)

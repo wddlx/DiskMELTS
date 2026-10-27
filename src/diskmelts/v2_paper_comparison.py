@@ -36,6 +36,9 @@ def _errors(row, field, paper):
 
 def _quantity(row, field, paper):
     prefix = 'paper_' if paper else ''
+    if field == 'logNA' and not paper and _finite(row.get('logNA', np.nan)):
+        # Sampled directly from the posterior, which keeps the N-A correlation.
+        return float(row['logNA']), _errors(row, 'logNA', paper)
     if field == 'logNA':
         n, a = row.get(f'{prefix}logN'), row.get(f'{prefix}logA')
         if not (_finite(n) and _finite(a)):
@@ -59,8 +62,11 @@ def _axis_limits(x, y):
 def plot_literature_comparisons(params, output_dir, summary_csv):
     """Plot every molecule, and write paired-difference sample statistics.
 
-    Missing published errors are omitted, never interpreted as zero. The
-    product errors assume independent log N and log A uncertainties.
+    Missing published errors are omitted, never interpreted as zero. Fitted
+    log10(N*A) values and errors come from the posterior samples when saved;
+    otherwise (and for published values) the product errors assume
+    independent log N and log A uncertainties, which overstates them when N
+    and A are anti-correlated.
     """
     output_dir, summary_csv = Path(output_dir), Path(summary_csv)
     output_dir.mkdir(parents=True, exist_ok=True)

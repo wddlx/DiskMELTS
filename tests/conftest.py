@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
+
+# Short MCMC chains keep the suite fast; accuracy tests set their own length.
+os.environ.setdefault("DISKMELTS_N_MCMC", "10000")
 
 
 @pytest.fixture

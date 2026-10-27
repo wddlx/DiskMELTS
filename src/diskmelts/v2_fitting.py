@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from diskmelts.uncertainty import default_mcmc_steps
 from diskmelts.fitting import (
     _build_components,
     _check_bank_wavelength_coverage,
@@ -295,6 +296,8 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     the full observation so it can be subtracted before the next stage.
     ``distance_pc`` converts the 140-pc checkpoint flux normalization to the
     supplied source distance, so the fitted A is an area in au².
+    Other options go to ``fit_molecules``; for example ``errorbars=False``
+    skips the MCMC error bars and returns the best fit only.
     """
     molecules = [molecule] if isinstance(molecule, str) else list(molecule)
     if not molecules or any(mol not in pretrained for mol in molecules):
@@ -335,6 +338,10 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
         fit['component_fluxes'][label] /= to_reference
     for solution in fit['top_list'] + fit.get('global_top', []):
         solution['mse_loss'] /= to_reference ** 2
+    info = fit.get('uncertainty_info', {})
+    for key in ('sigma_input', 'residual_rms', 'sigma_likelihood'):
+        if info.get(key) is not None:
+            info[key] /= to_reference
     fit['obs_wav'] = np.asarray(obs_wav)
     fit['obs_flux'] = np.asarray(obs_flux).copy()
     fit['wavelength_range'] = plot_ranges
@@ -348,7 +355,8 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
                     line_free_windows=((11.45, 11.55), (13.10, 13.20),
                                        (15.65, 15.72), (15.90, 15.91)),
                     detection_screening=True, detection_sigma_factor=None,
-                    n_samples=None, n_refine=None, n_top=None,
+                    n_samples=None, n_refine=None, n_top=None, n_mcmc=None,
+                    errorbars=True,
                     sample_method='sobol', seed=42, skiprows=1,
                     delimiter=',', wav_col=0, flux_col=1,
                     obs_wav=None, obs_flux=None, obs_err=None):
@@ -366,6 +374,10 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
     ``obs_err`` supplies per-pixel measurement errors; their positive finite
     median is used as the scalar noise level for screening and uncertainty
     estimates. Spectral fitting itself remains unweighted by individual errors.
+    With ``errorbars=True`` (default), each stage's error bars come from emcee
+    sampling of its posterior, starting with ``n_mcmc`` likelihood evaluations
+    (default 300000, or ``DISKMELTS_N_MCMC``); see ``diskmelts.uncertainty``.
+    ``errorbars=False`` skips sampling and reports best fits only.
     """
     model_root = MODEL_ROOT if root is None else Path(root)
     model_specs = _model_specs_for_sigma(sigma)
@@ -424,6 +436,7 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
                    os.environ.get('DISKMELTS_N_REFINE', '32'))
     n_top = int(n_top if n_top is not None else
                 os.environ.get('DISKMELTS_N_TOP', '20'))
+    n_mcmc = default_mcmc_steps(n_mcmc)
     if detection_sigma_factor is None:
         detection_sigma_factor = float(os.environ.get('DISKMELTS_DETECTION_SIGMA_FACTOR', '3.0'))
     sigma_noise = None
@@ -466,8 +479,9 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
             logN_bounds=stage.get('logN_bounds', {mol: model_specs[mol]['logN_bounds'] for mol in detected}),
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
             n_samples=n_samples, sample_method=sample_method,
-            n_refine=n_refine, n_top=n_top, sigma=sigma_noise, seed=seed,
-            distance_pc=distance_pc,
+            n_refine=n_refine, n_top=n_top, n_mcmc=n_mcmc, errorbars=errorbars,
+            sigma=sigma_noise,
+            seed=seed, distance_pc=distance_pc,
         )
         residual -= fit['model_flux']
         cumulative_model += fit['model_flux']

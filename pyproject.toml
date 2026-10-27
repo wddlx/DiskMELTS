@@ -31,6 +31,8 @@ dependencies = [
     # Used only to fit PCA/scalers when training; checkpoints store plain arrays.
     "scikit-learn>=1.0",
     "matplotlib",
+    # Ensemble MCMC for posterior error bars (pure Python, NumPy only).
+    "emcee>=3",
 ]
 
 [project.urls]
