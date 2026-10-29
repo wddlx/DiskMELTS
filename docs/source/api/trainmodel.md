@@ -67,3 +67,13 @@ the `.pt` files directly. See {doc}`../quickstart` for fitting and
 .. autofunction:: diskmelts.trainmodel.tune_pca_components
 .. autofunction:: diskmelts.trainmodel.convert_legacy_checkpoint
 ```
+
+---
+
+`grid_sha256` fingerprints a loaded grid. Pass it as `training_data_sha256` so
+a checkpoint trained on one grid version cannot be silently reused after the
+grid changes.
+
+```{eval-rst}
+.. autofunction:: diskmelts.trainmodel.grid_sha256
+```

@@ -11,12 +11,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from diskmelts.fitting import load_observed_spectrum
+from diskmelts.fitting import LINE_FREE_WINDOWS, _estimate_noise, _read_observation
 from diskmelts.plotting import plot_fit
 
 
-LINE_FREE_WINDOWS = ((11.45, 11.55), (13.10, 13.20),
-                     (15.65, 15.72), (15.90, 15.91))
 
 
 def _ranges(value, active_molecules=None):
@@ -108,12 +106,18 @@ def read_stage_result(result_dir, source_name, stage_name):
     }
 
 
-def plot_saved_observation(input_path, result_dir, stages, *, name=None,
+def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, name=None,
                            figure_dir=None, active_stages=None,
                            line_free_windows=LINE_FREE_WINDOWS,
                            sigma_noise=None, skiprows=1, delimiter=',',
-                           wav_col=0, flux_col=1, show=False, savefig=True):
+                           wav_col=0, flux_col=1, show=False, savefig=True,
+                           obs_wav=None, obs_flux=None):
     """Read saved stage CSVs, validate their sequence, and plot the fits.
+
+    Give the observed spectrum the same way it was given to the fit: a CSV
+    ``input_path``, or ``obs_wav``/``obs_flux`` arrays (for example
+    ``result['obs_wav']`` and ``result['obs_flux']`` from ``fit_observation``).
+    ``result_dir`` and ``stages`` are the fit's ``output_dir`` and stage list.
 
     ``active_stages`` should be the names returned by a fresh fitting run. If
     omitted, stages with complete saved CSV products are plotted. This also
@@ -125,20 +129,16 @@ def plot_saved_observation(input_path, result_dir, stages, *, name=None,
     instead of paths. Numeric plot-data CSV output is still written. Defaults
     preserve the batch behavior of saving and closing figures.
     """
-    input_path = Path(input_path)
+    if result_dir is None or stages is None:
+        raise ValueError('result_dir and stages are required')
+    obs_wav, obs_flux, _, source_name = _read_observation(
+        input_path, obs_wav, obs_flux, name=name, skiprows=skiprows,
+        delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
+    )
     result_dir = Path(result_dir)
     figure_dir = Path(figure_dir) if figure_dir else result_dir / 'figures'
-    source_name = name or input_path.stem
-    obs_wav, obs_flux = load_observed_spectrum(
-        input_path, skiprows=skiprows, delimiter=delimiter,
-        wav_col=wav_col, flux_col=flux_col,
-    )
-    if sigma_noise is None and line_free_windows:
-        chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
-                  for lo, hi in line_free_windows
-                  if np.any((obs_wav >= lo) & (obs_wav <= hi))]
-        if chunks:
-            sigma_noise = float(np.nanstd(np.concatenate(chunks)))
+    if sigma_noise is None:
+        sigma_noise = _estimate_noise(obs_wav, obs_flux, None, line_free_windows)
     requested = None if active_stages is None else set(active_stages)
     configured = {stage['name'] for stage in stages}
     if requested is not None and not requested <= configured:

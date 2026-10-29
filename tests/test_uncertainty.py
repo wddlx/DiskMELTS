@@ -8,12 +8,20 @@ import pytest
 pytest.importorskip('torch')
 from diskmelts import fitting
 from diskmelts.uncertainty import (
+    _walker_r_hat,
     likelihood_sigma,
     noise_correlation_length,
     sample_posterior,
     split_r_hat,
     summarize_parameter,
 )
+
+
+def test_frozen_disagreeing_chains_are_not_converged():
+    walkers = np.broadcast_to(np.arange(32)[None, :, None], (100, 32, 1))
+    assert np.isinf(_walker_r_hat(walkers))
+    segments = np.repeat(np.arange(4), 40)[:, None]
+    assert np.isinf(split_r_hat(segments))
 
 
 def test_sampler_recovers_a_known_gaussian():

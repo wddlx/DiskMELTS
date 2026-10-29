@@ -69,6 +69,7 @@ notebooks/index
 continuum
 generate_spectra
 training
+changelog
 ```
 
 ```{toctree}
@@ -82,4 +83,5 @@ api/trainmodel
 api/validation
 api/plotting
 api/uncertainty
+api/deprecated
 ```

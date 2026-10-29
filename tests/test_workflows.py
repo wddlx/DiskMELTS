@@ -120,10 +120,11 @@ def test_fitting_notebook_selects_csv_or_arrays(monkeypatch, tmp_path, array_mod
         np.testing.assert_array_equal(called['obs_wav'], wave)
         np.testing.assert_array_equal(called['obs_flux'], flux)
         np.testing.assert_array_equal(called['obs_err'], error)
-        assert namespace['PLOT_SOURCE'].is_file()
+        assert set(namespace['PLOT_INPUT']) == {'obs_wav', 'obs_flux'}
+        np.testing.assert_array_equal(namespace['PLOT_INPUT']['obs_wav'], wave)
     else:
         assert called['input_path'] == Path('my_spectrum.csv')
-        assert namespace['PLOT_SOURCE'] == Path('my_spectrum.csv')
+        assert namespace['PLOT_INPUT'] == {'input_path': Path('my_spectrum.csv')}
 
 
 @pytest.mark.parametrize("start_dir", [ROOT, ROOT / "notebooks"])
@@ -329,3 +330,53 @@ def test_training_example_explains_missing_local_grids(tmp_path):
 
     assert result.returncode != 0
     assert "Model_grids/ is intentionally ignored by Git" in result.stderr
+
+
+def test_package_and_docs_versions_match():
+    import re
+
+    package = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M)
+    docs = re.search(r"^release\s*=\s*'([^']+)'", (ROOT / "docs/source/conf.py").read_text(), re.M)
+    assert package and docs and package.group(1) == docs.group(1)
+    changelog = (ROOT / "docs/source/changelog.md").read_text()
+    assert f"## {package.group(1)}" in changelog
+
+
+def test_every_public_function_is_in_the_api_docs():
+    pytest.importorskip("torch")
+    import re
+
+    import diskmelts
+
+    api = "\n".join(p.read_text() for p in (ROOT / "docs/source/api").glob("*.md"))
+    documented = set(re.findall(r"auto(?:function|class):: [\w.]*?\.(\w+)\n", api + "\n"))
+    public = {name for name in diskmelts.__all__
+              if callable(getattr(diskmelts, name)) and name != "consub"}
+    assert not public - documented, sorted(public - documented)
+    for name in ("fit_nested", "validate_nt", "plot_validation_split"):
+        assert name in (ROOT / "docs/source/api/deprecated.md").read_text()
+
+
+def test_observation_functions_accept_arrays_or_csv(tmp_path):
+    pytest.importorskip("torch")
+    import numpy as np
+
+    from diskmelts.fitting import _read_observation
+
+    csv = tmp_path / "spec.csv"
+    csv.write_text("wav,flux\n13.8,0.1\n13.9,nan\n14.0,0.3\n")
+    wav, flux, err, name = _read_observation(csv)
+    assert name == "spec" and err is None and list(flux) == [0.1, 0.3]
+    wav2, flux2, err2, name2 = _read_observation(
+        obs_wav=[13.8, 13.9, 14.0], obs_flux=[0.1, np.nan, 0.3],
+        obs_err=[0.01, 0.02, 0.03], name="arr")
+    assert name2 == "arr" and list(err2) == [0.01, 0.03]
+    np.testing.assert_array_equal(wav2, wav)
+    with pytest.raises(ValueError, match="not both"):
+        _read_observation(csv, obs_wav=wav, obs_flux=flux)
+    import inspect
+
+    from diskmelts import fit_observation, fit_observation_grids, plot_saved_observation
+    for function in (fit_observation, fit_observation_grids, plot_saved_observation):
+        parameters = inspect.signature(function).parameters
+        assert {"input_path", "obs_wav", "obs_flux"} <= set(parameters)

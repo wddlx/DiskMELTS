@@ -26,10 +26,12 @@ from diskmelts.uncertainty import (
     default_mcmc_steps, likelihood_sigma, sample_posterior, summarize_parameter,
 )
 from diskmelts.fitting import (
+    _estimate_noise,
+    _read_observation,
     _screened_group_options,
     _tie_layout,
+    LINE_FREE_WINDOWS,
     detect_stage_molecules,
-    load_observed_spectrum,
     print_fit_params,
     save_fit_outputs,
     save_running_spectrum,
@@ -37,8 +39,6 @@ from diskmelts.fitting import (
 
 
 GRID_ROOT = None
-LINE_FREE_WINDOWS = ((11.45, 11.55), (13.10, 13.20),
-                     (15.65, 15.72), (15.90, 15.91))
 _GRID_NAME = re.compile(r'T(?P<T>\d+(?:\.\d+)?)N(?P<N>\d+(?:\.\d+)?)\.csv')
 
 
@@ -483,9 +483,25 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
             R[misordered] = np.inf
             return R
 
+        less_members = [(i, main) for i, (main, mode) in layout['group_for'].items()
+                        if i != main and mode == 'less']
+        def physical_prior(values):
+            z = best.x.copy()
+            z[free_idx] = values
+            physical = decode(z[:n_free])
+            correction = 0.0
+            for i, main in less_members:
+                lo, hi = bounds[i][0]
+                width = min(hi, physical[2 * main]) - lo
+                if width < 0:
+                    return -np.inf
+                correction += np.log(max(width, 1e-9 * (hi - lo)))
+            return correction
+
         free_samples, sampler_info = sample_posterior(
             residual_free, best.x[free_idx], lower[free_idx], upper[free_idx],
             n_steps=n_mcmc, seed=seed, batch_residual_fn=residual_free_batch,
+            extra_log_prob=physical_prior if less_members else None,
         )
         uncertainty_info.update(sampler_info, method='mcmc')
         full = np.repeat(best.x[None, :], len(free_samples), axis=0)
@@ -560,15 +576,25 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     }
 
 
-def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
+def fit_observation_grids(input_path=None, stages=None, *, name=None, grid_root=GRID_ROOT,
                           output_dir=None, line_free_windows=LINE_FREE_WINDOWS,
                           detection_screening=True, detection_sigma_factor=3.0,
                           sigma_noise=None, distance_pc=140.0,
                           seed=42, maxiter=100, popsize=8,
                           n_refine=3, n_mcmc=None, errorbars=True,
                           skiprows=1, delimiter=',',
-                          wav_col=0, flux_col=1):
-    """Run ordered grid-only fits and save stage CSVs for v2_read_plot.
+                          wav_col=0, flux_col=1,
+                          obs_wav=None, obs_flux=None, obs_err=None):
+    """Run ordered direct-grid stages and save the same CSVs as ``fit_observation``.
+
+    This is the slab-grid counterpart of ``fit_observation``: it takes the
+    same stage dictionaries and input options, but evaluates spectra by
+    interpolating the local grids under ``grid_root`` instead of the bundled
+    neural models. Give the spectrum as ``input_path`` (a CSV read with
+    ``load_observed_spectrum``) or as ``obs_wav``/``obs_flux`` arrays with
+    optional ``obs_err``. ``sigma_noise`` overrides the noise estimate; else
+    the median of ``obs_err`` is used, else the scatter in
+    ``line_free_windows``.
 
     ``errorbars`` (default True) computes MCMC error bars for each stage,
     starting with ``n_mcmc`` likelihood evaluations (default 300000 or
@@ -576,26 +602,18 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
     """
     if grid_root is None:
         raise ValueError('grid_root is required for direct-grid fitting')
-    input_path = Path(input_path)
-    if not input_path.is_file():
-        raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
-    stages = list(stages)
+    obs_wav, obs_flux, obs_err, source_name = _read_observation(
+        input_path, obs_wav, obs_flux, obs_err, name=name, skiprows=skiprows,
+        delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
+    )
+    stages = list(stages or ())
     if not stages or len({stage['name'] for stage in stages}) != len(stages):
         raise ValueError('stages must be nonempty and have unique names')
-    obs_wav, obs_flux = load_observed_spectrum(
-        input_path, skiprows=skiprows, delimiter=delimiter,
-        wav_col=wav_col, flux_col=flux_col,
-    )
-    source_name = name or input_path.stem
     output_dir = (Path(output_dir) if output_dir else
                   Path.cwd() / 'realobs_results' / 'grids' / source_name)
     output_dir.mkdir(parents=True, exist_ok=True)
-    if sigma_noise is None and line_free_windows:
-        chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
-                  for lo, hi in line_free_windows
-                  if np.any((obs_wav >= lo) & (obs_wav <= hi))]
-        if chunks:
-            sigma_noise = float(np.nanstd(np.concatenate(chunks)))
+    if sigma_noise is None:
+        sigma_noise = _estimate_noise(obs_wav, obs_flux, obs_err, line_free_windows)
     if sigma_noise is not None and sigma_noise <= 0:
         raise ValueError('noise sigma must be positive to estimate fit errors')
     print(f'Grid fit for {source_name}: noise sigma={sigma_noise} Jy')
@@ -670,5 +688,5 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
         products['summary'] = str(summary_path)
     print('Grid fitting done.')
     return {'fits': fits, 'obs_wav': obs_wav, 'obs_flux': obs_flux,
-            'residual': residual, 'cumulative_model': cumulative,
+            'obs_err': obs_err, 'residual': residual, 'cumulative_model': cumulative,
             'sigma_noise': sigma_noise, 'products': products}

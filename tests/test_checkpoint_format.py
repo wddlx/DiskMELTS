@@ -27,6 +27,32 @@ def test_all_bundled_checkpoints_are_array_only():
         assert ckpt['pca'] is None or {'components', 'mean'} <= set(ckpt['pca'])
 
 
+def test_all_bundled_checkpoints_share_training_recipe():
+    # Since 2.3.0 every bundled model uses local-window peaks, spectral loss,
+    # and log-temperature inputs; a stray old-recipe file would be a regression.
+    for path in CHECKPOINTS:
+        ckpt = torch.load(path, map_location='cpu', weights_only=True)
+        assert ckpt.get('peak_normalization') == 'window', path
+        assert ckpt.get('shape_loss') == 'spectral', path
+        assert ckpt.get('temperature_transform') == 'log10', path
+        assert ckpt.get('scheduler_patience') == 100, path
+
+
+@pytest.mark.parametrize('path', CHECKPOINTS, ids=lambda p: f'{p.parts[-3]}/{p.stem}')
+def test_bundled_checkpoints_are_finite_at_domain_corners(path):
+    from diskmelts.fitting import generate_spectrum, load_models
+
+    ckpt = torch.load(path, map_location='cpu', weights_only=True)
+    model = load_models({ckpt['mol']: str(path)})[ckpt['mol']]
+    (t_lo, t_hi), (n_lo, n_hi) = ckpt['T_range'], ckpt['logN_range']
+    for T in (t_lo, t_hi):
+        for logN in (n_lo, n_hi):
+            flux = generate_spectrum(T, logN, 1.0, model)
+            assert np.isfinite(flux).all(), (path, T, logN)
+    # The hot, high-column corner has signal in every bundled window.
+    assert generate_spectrum(t_hi, n_hi, 1.0, model).max() > 0
+
+
 def test_loading_models_does_not_import_sklearn(tmp_path):
     code = ("import sys; from diskmelts import synthesize_spectrum; "
             "synthesize_spectrum('H2O', 500, 18); synthesize_spectrum('HCN', 500, 17); "
@@ -39,7 +65,7 @@ def test_loading_models_does_not_import_sklearn(tmp_path):
 
 
 def test_legacy_checkpoint_converts_to_identical_preprocessing(tmp_path):
-    sklearn = pytest.importorskip('sklearn')
+    pytest.importorskip('sklearn')
     from sklearn.decomposition import PCA
     from sklearn.preprocessing import StandardScaler
 

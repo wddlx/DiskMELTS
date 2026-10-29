@@ -17,12 +17,14 @@ from diskmelts.uncertainty import default_mcmc_steps
 from diskmelts.fitting import (
     _build_components,
     _check_bank_wavelength_coverage,
+    _estimate_noise,
+    _read_observation,
     _screened_group_options,
+    LINE_FREE_WINDOWS,
     detect_stage_molecules,
     fit_molecules,
     generate_spectrum,
     load_models,
-    load_observed_spectrum,
     print_fit_params,
     save_fit_outputs,
     save_fitted_comparison,
@@ -288,16 +290,45 @@ def _check_trained_bounds(molecules, options, model_specs):
 def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
               pretrained, *, model_specs=None, distance_pc=140.0,
               **options):
-    """Fit molecules jointly within selected windows on the full observed grid.
+    """Fit one or more molecules jointly to one spectrum (one stage).
 
-    ``molecule`` accepts one name or a list. ``fit_ranges`` accepts one interval,
-    several intervals, or a molecule-to-interval mapping. ``wavelength_range``
-    sets the stage's allowed and plotted domain; the returned model still spans
-    the full observation so it can be subtracted before the next stage.
-    ``distance_pc`` converts the 140-pc checkpoint flux normalization to the
-    supplied source distance, so the fitted A is an area in au².
-    Other options go to ``fit_molecules``; for example ``errorbars=False``
-    skips the MCMC error bars and returns the best fit only.
+    The building block of ``fit_observation``: arrays in, one fit result out.
+    It reads no files, writes nothing, and does not estimate noise, so load
+    the models first with ``load_fitting_models``::
+
+        models = load_fitting_models(['C2H2', 'HCN'])
+        fit = fit_stage(wave, flux, ['C2H2', 'HCN'], (11.5, 17.0),
+                        (13.5, 14.1), models, distance_pc=122.5)
+        fit['params']['HCN']['T']
+
+    Args:
+        obs_wav, obs_flux (array-like): wavelength (µm) and continuum-
+            subtracted flux (Jy) on the same 1D grid.
+        molecule (str or list[str]): molecule(s) fitted together.
+        wavelength_range ((lo, hi) or list): the stage's allowed and plotted
+            domain. The returned model still spans the full ``obs_wav`` so it
+            can be subtracted before a next stage.
+        fit_ranges: one ``(lo, hi)`` interval, a list of intervals, or a
+            molecule-to-intervals mapping; all must lie in
+            ``wavelength_range`` and in each model's trained band.
+        pretrained (dict): models from ``load_fitting_models``.
+        model_specs (dict, optional): registry used for default bounds;
+            inferred from the loaded models' grid sigma.
+        distance_pc (float): source distance; converts the 140 pc model
+            normalization so the fitted ``A`` is an area in au².
+        **options: passed to ``fit_molecules``, e.g. ``T_bounds``,
+            ``logN_bounds``, ``loga_bounds`` (default ``(-2, 2)``),
+            ``component_names``, ``h2o_components``, isotopologue ties,
+            ``n_samples``/``n_refine``/``n_top``, ``sigma`` (flux noise in Jy
+            for the error bars, not the grid broadening), ``n_mcmc``, and
+            ``errorbars=False`` to skip MCMC and return the best fit only.
+
+    Returns:
+        dict: the ``fit_molecules`` result in observed flux units, including
+        ``params`` (label -> ``T``, ``logN``, ``A``, ``log10A`` best fit),
+        ``uncertainty`` (posterior summaries), ``model_flux``,
+        ``component_fluxes``, and ``residual`` on ``obs_wav``, plus
+        ``wavelength_range`` and ``distance_pc``.
     """
     molecules = [molecule] if isinstance(molecule, str) else list(molecule)
     if not molecules or any(mol not in pretrained for mol in molecules):
@@ -352,66 +383,100 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
 def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma=0,
                     output_dir=None, comparison_csv=None,
                     distance_pc=140.0,
-                    line_free_windows=((11.45, 11.55), (13.10, 13.20),
-                                       (15.65, 15.72), (15.90, 15.91)),
+                    line_free_windows=LINE_FREE_WINDOWS,
                     detection_screening=True, detection_sigma_factor=None,
                     n_samples=None, n_refine=None, n_top=None, n_mcmc=None,
                     errorbars=True,
                     sample_method='sobol', seed=42, skiprows=1,
                     delimiter=',', wav_col=0, flux_col=1,
                     obs_wav=None, obs_flux=None, obs_err=None):
-    """Fit ordered stages, subtracting each model and saving CSV products.
+    """Fit a whole spectrum in ordered stages and save every result.
 
-    Each stage specifies ``name``, ``mol``, ``wavelength_range``, and
-    ``fit_ranges``. A stage may contain multiple molecules or fit windows.
-    Optional stage keys include ``detect_peaks``, ``h2o_components``,
-    ``component_names``, ``shared_area_groups``, ``isotopologue_groups``,
-    ``Tshare``, ``Ashare``, and bounds passed to
-    ``fit_stage``.
-    ``sigma`` selects the bundled grid broadening (0 or 2), whereas estimated
-    ``sigma_noise`` represents the observed flux uncertainty. Pass either
-    ``input_path`` or in-memory ``obs_wav`` and ``obs_flux`` arrays. Optional
-    ``obs_err`` supplies per-pixel measurement errors; their positive finite
-    median is used as the scalar noise level for screening and uncertainty
-    estimates. Spectral fitting itself remains unweighted by individual errors.
-    With ``errorbars=True`` (default), each stage's error bars come from emcee
-    sampling of its posterior, starting with ``n_mcmc`` likelihood evaluations
-    (default 300000, or ``DISKMELTS_N_MCMC``); see ``diskmelts.uncertainty``.
-    ``errorbars=False`` skips sampling and reports best fits only.
+    This is the main entry point for observed spectra. It wraps ``fit_stage``
+    and handles everything around it:
+
+    1. Read the spectrum: either a CSV file (``input_path``) or arrays already
+       in memory (``obs_wav``, ``obs_flux``, optional ``obs_err``).
+    2. Load the bundled models for every molecule in ``stages`` (``sigma``
+       selects the 0 or 2 km/s grid set).
+    3. Estimate one flux-noise value: the median of ``obs_err`` if given,
+       otherwise the scatter in ``line_free_windows``.
+    4. For each stage in order: optionally screen for detections, fit the
+       stage's molecules with ``fit_stage`` on the current residual, and
+       subtract the best-fit model before the next stage.
+    5. Write per-stage CSVs and a comparison table to ``output_dir``.
+
+    Use ``fit_stage`` directly for a single fit without files or noise
+    estimation; use ``fit_observation`` for a full multi-stage run.
+
+    The spectrum can be given in either of two ways (not both)::
+
+        # From a CSV: first two columns are wavelength (µm) and flux (Jy).
+        fit_observation('my_spectrum.csv', stages, name='my_source')
+
+        # From arrays, e.g. after diskmelts.consub.calculate or FITS I/O.
+        fit_observation(stages=stages, obs_wav=wave, obs_flux=flux,
+                        obs_err=error, name='my_source')
+
+    Args:
+        input_path (str or Path, optional): continuum-subtracted CSV. One
+            header row is skipped and columns ``wav_col``/``flux_col`` are
+            read (see ``skiprows``, ``delimiter``). Omit it for array input.
+        stages (list[dict]): ordered stage definitions. Required keys:
+            ``name``, ``mol`` (one name or a list), ``wavelength_range``,
+            ``fit_ranges``. Optional keys: ``h2o_components``,
+            ``component_names``, ``T_bounds``, ``logN_bounds``,
+            ``loga_bounds``, ``isotopologue_groups``, ``Tshare``, ``Ashare``,
+            ``shared_area_groups``, ``detect_peaks``.
+        name (str, optional): prefix for saved files. Defaults to the CSV
+            file name, or ``'spectrum'`` for array input.
+        obs_wav, obs_flux (array-like, optional): 1D wavelength (µm,
+            increasing) and continuum-subtracted flux (Jy) arrays, used
+            instead of ``input_path``. Pixels with nonfinite values are
+            dropped.
+        obs_err (array-like, optional): per-pixel flux errors (Jy) matching
+            ``obs_wav``. Their positive finite median sets the noise level
+            for detection screening and the error-bar likelihood. The
+            optimization is not weighted pixel by pixel.
+        sigma (int): model grid broadening, 0 (default) or 2 km/s. This is
+            not a noise level.
+        distance_pc (float): source distance; converts the 140 pc model
+            normalization so the fitted ``A`` is an area in au².
+        output_dir (str or Path, optional): where CSVs are written; default
+            ``./realobs_results`` (``./realobs_results/sigma2`` for sigma=2).
+        comparison_csv (str or Path, optional): summary table; default
+            ``output_dir / 'Fitted_Parameters.csv'``.
+        line_free_windows (sequence of (lo, hi)): windows used for the noise
+            estimate when ``obs_err`` is not given.
+        detection_screening (bool): drop molecules whose ``detect_peaks``
+            windows fall below ``detection_sigma_factor`` (default 3) times
+            the noise; stages without ``detect_peaks`` are always fitted.
+        n_samples, n_refine, n_top: global samples, local refinements, and
+            kept solutions per stage (defaults 20000, 32, 20, or the
+            ``DISKMELTS_N_SAMPLES``/``_N_REFINE``/``_N_TOP`` environment
+            variables).
+        errorbars (bool): sample the posterior with emcee (default True);
+            ``n_mcmc`` sets the initial number of likelihood evaluations
+            (default 300000 or ``DISKMELTS_N_MCMC``). False reports best fits
+            only.
+        root (str or Path, optional): alternative checkpoint root; leave
+            unset for the bundled models.
+        sample_method (str), seed (int): global-sampling method and seed.
+
+    Returns:
+        dict: ``fits`` (stage name -> ``fit_stage`` result; skipped stages
+        are absent), ``obs_wav``, ``obs_flux``, ``obs_err`` (the filtered
+        input), ``residual`` and ``cumulative_model`` after all stages,
+        ``sigma_noise``, ``grid_sigma``, and ``products`` (saved file paths).
+        Pass ``obs_wav``/``obs_flux`` and ``output_dir`` to
+        ``plot_saved_observation`` to plot the result.
     """
     model_root = MODEL_ROOT if root is None else Path(root)
     model_specs = _model_specs_for_sigma(sigma)
-    array_input = obs_wav is not None or obs_flux is not None or obs_err is not None
-    if input_path is not None and array_input:
-        raise ValueError('pass either input_path or obs_wav/obs_flux/obs_err, not both')
-    if input_path is None:
-        if obs_wav is None or obs_flux is None:
-            raise ValueError('obs_wav and obs_flux are required without input_path')
-        obs_wav = np.asarray(obs_wav, dtype=float)
-        obs_flux = np.asarray(obs_flux, dtype=float)
-        if (obs_wav.ndim != 1 or obs_flux.ndim != 1 or
-                obs_wav.shape != obs_flux.shape or obs_wav.size == 0):
-            raise ValueError('obs_wav and obs_flux must be nonempty, matching 1D arrays')
-        if obs_err is not None:
-            obs_err = np.asarray(obs_err, dtype=float)
-            if obs_err.shape != obs_wav.shape:
-                raise ValueError('obs_err must match obs_wav and obs_flux')
-        valid = np.isfinite(obs_wav) & np.isfinite(obs_flux)
-        obs_wav, obs_flux = obs_wav[valid], obs_flux[valid]
-        if obs_err is not None:
-            obs_err = obs_err[valid]
-        if obs_wav.size == 0 or np.any(np.diff(obs_wav) <= 0):
-            raise ValueError('usable obs_wav values must be increasing and unique')
-        source_name = name or 'spectrum'
-    else:
-        input_path = Path(input_path)
-        if not input_path.is_file():
-            raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
-        obs_wav, obs_flux = load_observed_spectrum(
-            input_path, skiprows=skiprows, delimiter=delimiter,
-            wav_col=wav_col, flux_col=flux_col,
-        )
-        source_name = name or input_path.stem
+    obs_wav, obs_flux, obs_err, source_name = _read_observation(
+        input_path, obs_wav, obs_flux, obs_err, name=name, skiprows=skiprows,
+        delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
+    )
     stages = list(stages) if stages is not None else []
     if not stages:
         raise ValueError('at least one fitting stage is required')
@@ -439,21 +504,8 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
     n_mcmc = default_mcmc_steps(n_mcmc)
     if detection_sigma_factor is None:
         detection_sigma_factor = float(os.environ.get('DISKMELTS_DETECTION_SIGMA_FACTOR', '3.0'))
-    sigma_noise = None
-    if obs_err is not None:
-        usable_err = obs_err[np.isfinite(obs_err) & (obs_err > 0)]
-        if usable_err.size == 0:
-            raise ValueError('obs_err must contain a positive finite value')
-        sigma_noise = float(np.median(usable_err))
-        print(f'Using median supplied error σ = {sigma_noise:.5f} Jy')
-    elif line_free_windows:
-        chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
-                  for lo, hi in line_free_windows
-                  if np.any((obs_wav >= lo) & (obs_wav <= hi))]
-        if chunks:
-            sample = np.concatenate(chunks)
-            sigma_noise = float(np.nanstd(sample))
-            print(f'Estimated σ = {sigma_noise:.5f} Jy ({len(sample)} line-free pixels)')
+    sigma_noise = _estimate_noise(obs_wav, obs_flux, obs_err, line_free_windows,
+                                  verbose=True)
 
     residual = obs_flux.copy()
     cumulative_model = np.zeros_like(obs_flux)

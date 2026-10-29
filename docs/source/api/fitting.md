@@ -3,9 +3,11 @@
 Spectral fitting with pretrained forward surrogate models.
 
 For observed spectra, use the v2 package workflow in {doc}`v2`, starting with
-`load_fitting_models` and `fit_stage` or `fit_observation`. The lower-level
-`fit_molecules` runs a global Sobol search followed by local refinement.
-`fit_nested` is a simpler single-molecule fitter with random restarts.
+`load_fitting_models` and `fit_stage` or `fit_observation`. Both call the
+lower-level `fit_molecules`, which fits one or several molecules with a
+global Sobol search, local refinement, and MCMC error bars. Use it directly
+only when you need its full option set without distance scaling or the
+bundled-model bookkeeping.
 
 **Forward model convention:**
 
@@ -22,6 +24,9 @@ compatibility options for legacy checkpoints.
 
 `model_paths` may also point to a segmented model-bank JSON manifest. DiskMELTS
 then blends overlapping tiles while fitting one shared physical parameter set.
+`load_models` calls `load_model_bank` for such manifests; call
+`load_model_bank` directly only to load a subset of tiles with its
+`wav_ranges`, `T_range`, or `logN_range` filters.
 
 For a joint fit of main and rare isotopologues, `fit_molecules` accepts
 `isotopologue_groups=[('C2H2', '13C12CH2')]`, `Tshare=['equal']`, and
@@ -63,13 +68,12 @@ pretrained = load_fitting_models(['H2O'])
 
 ---
 
-```{eval-rst}
-.. autofunction:: diskmelts.fitting.fit_nested
-```
-
----
-
 ## I/O helpers
+
+`load_observed_spectrum` reads a continuum-subtracted text file by column
+position (it is what `fit_observation` uses for `input_path`). To read a raw
+JWST FITS file or a CSV with named `wave`/`flux`/`err` columns, use
+`diskmelts.consub.read_spectrum` ({doc}`consub`).
 
 ```{eval-rst}
 .. autofunction:: diskmelts.fitting.load_observed_spectrum

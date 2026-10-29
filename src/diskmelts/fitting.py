@@ -16,8 +16,8 @@ Public functions
     load_models          : load per-molecule .pt checkpoints from disk
     load_model_bank      : load a segmented checkpoint manifest
     generate_spectrum    : evaluate (T, logN, A) → flux via the two-MLP forward model
-    fit_nested           : single-molecule retrieval with analytic amplitude
-    fit_molecules        : multi-molecule global Sobol search + L-BFGS-B refinement
+    fit_molecules        : one- or multi-molecule global Sobol search + L-BFGS-B
+                           refinement, with MCMC error bars
     load_observed_spectrum: load a continuum-subtracted spectrum from CSV
     detect_stage_molecules: screen for molecular detections above a noise threshold
     save_fit_outputs     : write parameter (posterior median + best fit), top-list,
@@ -29,6 +29,7 @@ Public functions
 
 import json
 import os
+from pathlib import Path
 import warnings
 import numpy as np
 import pandas as pd
@@ -434,6 +435,11 @@ def _refine_scaled(objective, initial, bounds, loss_scale):
     return result
 
 
+def _warn_deprecated(old, replacement):
+    warnings.warn(f'{old} is deprecated since 2.3.0 and will be removed in a future '
+                  f'release; use {replacement} instead.', FutureWarning, stacklevel=3)
+
+
 def fit_nested(
     obs_wav,
     obs_flux,
@@ -448,97 +454,26 @@ def fit_nested(
     seed=None,
 ):
     """
-    Retrieve (T, logN, A) with scaled nonlinear optimization and analytic area.
+    Deprecated single-molecule fit; use ``fit_molecules`` instead.
 
-    Outer loop: scaled L-BFGS-B over (T, logN), followed by Nelder-Mead.
-    Inner loop: exact one-component bounded least squares solves for A ≥ 0.
-
-    Args:
-        obs_wav (np.ndarray): observed wavelength axis in µm
-        obs_flux (np.ndarray): observed flux in Jy
-        mol (str): molecule name, e.g. 'H2O', 'C2H2'
-        pretrained (dict): output of load_models
-        fit_ranges: (lo, hi) or [(lo1,hi1), (lo2,hi2)] µm
-        T_bounds (tuple or None): (T_min, T_max) K (default (200, 1400))
-        logN_bounds (tuple or None): (logN_min, logN_max) (default (14, 19))
-        loga_bounds (tuple or None): (log10A_min, log10A_max) (default None = no upper limit)
-        n_restarts (int): number of random L-BFGS-B restarts (default 20)
-        n_top (int): if > 1, include top-n restart solutions in 'top_list'
-        seed (int or None): random seed
-
-    Returns:
-        (dict) with keys:
-            'params'     : {'T', 'logN', 'A'} — best-fit parameters
-            'model_flux' : np.ndarray on obs_wav — model spectrum
-            'residual'   : np.ndarray on obs_wav — obs_flux minus model_flux
-            'top_list'   : list of dicts (only present when n_top > 1)
+    Calls ``fit_molecules`` with ``errorbars=False`` and returns the older
+    flat result: ``params`` holds ``T``, ``logN``, and ``A`` directly, and
+    ``top_list`` (when ``n_top > 1``) holds flat rank/mse_loss/T/logN/A rows.
+    ``n_restarts`` sets the number of local refinements.
     """
-    obs_wav  = np.asarray(obs_wav,  dtype=np.float64)
-    obs_flux = np.asarray(obs_flux, dtype=np.float64)
-
-    if T_bounds is None:
-        T_bounds = _model_bank_bounds(
-            pretrained[mol], 'T_ranges', _DEFAULT_T_BOUNDS
-        )
-    if logN_bounds is None:
-        logN_bounds = _model_bank_bounds(
-            pretrained[mol], 'logN_ranges', _DEFAULT_LOGN_BOUNDS
-        )
-
-    if loga_bounds is not None:
-        _A_lo = 10.0 ** loga_bounds[0]
-        _A_hi = 10.0 ** loga_bounds[1]
-    else:
-        _A_lo, _A_hi = 0.0, np.inf
-
-    rng = np.random.default_rng(seed)
-
-    fit_mask = _wav_mask(obs_wav, fit_ranges) & np.isfinite(obs_flux)
-    wav_fit  = obs_wav[fit_mask]
-    obs_fit  = obs_flux[fit_mask]
-    if len(wav_fit) == 0:
-        raise ValueError('fit_ranges select zero observed wavelength pixels')
-    _check_bank_wavelength_coverage(pretrained[mol], wav_fit)
-
-    def _nnls_step(x0):
-        spec = _mol_flux_on_wav(pretrained[mol], x0[0], x0[1], 1.0, wav_fit)
-        # One linear component has an exact bounded least-squares solution.
-        # Scaling avoids absolute NNLS tolerances on very faint spectra.
-        spec_scale = max(float(np.max(np.abs(spec))), np.finfo(float).tiny)
-        s = spec / spec_scale
-        denom = float(np.dot(s, s))
-        A = float(np.clip(np.dot(s, obs_fit) / denom / spec_scale, _A_lo, _A_hi)) if denom > 0 else _A_lo
-        resid = obs_fit - spec * A
-        return float(np.sum(resid ** 2)), A
-
-    bounds  = [T_bounds, logN_bounds]
-    all_res = []
-    for _ in range(n_restarts):
-        x0 = np.array([rng.uniform(*T_bounds), rng.uniform(*logN_bounds)])
-        opt = _refine_scaled(
-            lambda p: _nnls_step(p)[0], x0, bounds, np.dot(obs_fit, obs_fit))
-        loss, A = _nnls_step(opt.x)
-        all_res.append((loss, opt.x.copy(), A))
-    all_res.sort(key=lambda t: t[0])
-
-    _, best_x, best_A = all_res[0]
-    params     = {'T': float(best_x[0]), 'logN': float(best_x[1]), 'A': float(best_A)}
-    model_flux = _mol_flux_on_wav(pretrained[mol], params['T'], params['logN'],
-                                   params['A'], obs_wav)
-    result = {
-        'mol':        mol,
-        'params':     params,
-        'model_flux': model_flux,
-        'residual':   obs_flux - model_flux,
-    }
+    _warn_deprecated('fit_nested', "fit_molecules(..., errorbars=False)")
+    fit = fit_molecules(
+        obs_wav, obs_flux, mol, pretrained, fit_ranges,
+        T_bounds=T_bounds, logN_bounds=logN_bounds, loga_bounds=loga_bounds,
+        n_refine=n_restarts, n_top=max(int(n_top), 1), seed=seed,
+        verbose=False, errorbars=False,
+    )
+    flat = lambda p: {key: float(p[mol][key]) for key in ('T', 'logN', 'A')}
+    result = {'mol': mol, 'params': flat(fit['params']),
+              'model_flux': fit['model_flux'], 'residual': fit['residual']}
     if n_top > 1:
-        top_list = []
-        for rank, (loss, x, A) in enumerate(all_res[:n_top]):
-            top_list.append({
-                'rank': rank + 1, 'mse_loss': loss,
-                'T': float(x[0]), 'logN': float(x[1]), 'A': float(A),
-            })
-        result['top_list'] = top_list
+        result['top_list'] = [{'rank': item['rank'], 'mse_loss': item['mse_loss'],
+                               **flat(item['params'])} for item in fit['top_list']]
     return result
 
 
@@ -903,7 +838,9 @@ def fit_molecules(
             molecule names or component labels.
         loga_bounds (tuple, dict, or None): bounds on log10(A), optionally
             keyed by component label or molecule. None means A >= 0 with no
-            upper bound. Shared-area groups use the intersection of bounds.
+            upper bound during optimization; posterior sampling then uses
+            log10(A) in [-6, 6], widened to cover the best fit by 4 dex.
+            Shared-area groups use the intersection of bounds.
         shared_area_groups (list of sequences or None): component labels whose
             emitting areas must be equal, e.g. [('C2H2', '13C12CH2')]. Each
             component may appear in at most one group. Unlisted components
@@ -1230,8 +1167,10 @@ def fit_molecules(
         log_lower, log_upper, log_best = [], [], []
         for g in range(n_groups):
             start = np.log10(max(best_A[g], 1e-30))
-            lo = np.log10(area_lower[g]) if area_lower[g] > 0 else start - 4.0
-            hi = np.log10(area_upper[g]) if np.isfinite(area_upper[g]) else start + 4.0
+            # For an unbounded optimization, use a stable posterior domain;
+            # centering it on a zero-area optimum hides nondetections.
+            lo = np.log10(area_lower[g]) if area_lower[g] > 0 else min(-6.0, start - 4.0)
+            hi = np.log10(area_upper[g]) if np.isfinite(area_upper[g]) else max(6.0, start + 4.0)
             log_lower.append(lo)
             log_upper.append(hi)
             log_best.append(float(np.clip(start, lo, hi)))
@@ -1274,6 +1213,23 @@ def fit_molecules(
         prior = None
         if _prior_scale > 0:
             prior = lambda z: -0.5 * _prior_penalty(z[:n_dim])
+        less_members = [(i, main) for i, (main, mode) in layout['group_for'].items()
+                        if i != main and mode == 'less']
+        if less_members:
+            base_prior = prior
+            def physical_prior(z):
+                physical = _physical_params(z[:n_dim])
+                correction = 0.0 if base_prior is None else base_prior(z)
+                for i, main in less_members:
+                    lo, hi = component_bounds[i][0]
+                    width = min(hi, physical[2 * main]) - lo
+                    if width < 0:
+                        return -np.inf
+                    # A main temperature exactly on the rare lower bound is a
+                    # legal optimum; floor the width so it stays finite.
+                    correction += np.log(max(width, 1e-9 * (hi - lo)))
+                return correction
+            prior = physical_prior
         lower = np.array([b[0] for b in nonlinear_bounds] + log_lower)
         upper = np.array([b[1] for b in nonlinear_bounds] + log_upper)
         samples, sampler_info = sample_posterior(
@@ -1357,6 +1313,74 @@ def load_observed_spectrum(path, skiprows=1, delimiter=',', wav_col=0, flux_col=
     ])
     valid = np.isfinite(wav) & np.isfinite(flux)
     return wav[valid], flux[valid]
+
+
+# Continuum-free wavelength windows (µm) used to estimate the flux noise.
+LINE_FREE_WINDOWS = ((11.45, 11.55), (13.10, 13.20), (15.65, 15.72), (15.90, 15.91))
+
+
+def _read_observation(input_path=None, obs_wav=None, obs_flux=None, obs_err=None, *,
+                      name=None, skiprows=1, delimiter=',', wav_col=0, flux_col=1):
+    """Return ``(wav, flux, err, source_name)`` from a CSV path or from arrays.
+
+    Exactly one input is allowed: ``input_path`` (read with
+    ``load_observed_spectrum``) or ``obs_wav``/``obs_flux`` with optional
+    ``obs_err``. Array pixels with nonfinite wavelength or flux are dropped.
+    """
+    array_input = obs_wav is not None or obs_flux is not None or obs_err is not None
+    if input_path is not None and array_input:
+        raise ValueError('pass either input_path or obs_wav/obs_flux/obs_err, not both')
+    if input_path is not None:
+        input_path = Path(input_path)
+        if not input_path.is_file():
+            raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
+        wav, flux = load_observed_spectrum(
+            input_path, skiprows=skiprows, delimiter=delimiter,
+            wav_col=wav_col, flux_col=flux_col,
+        )
+        return wav, flux, None, name or input_path.stem
+    if obs_wav is None or obs_flux is None:
+        raise ValueError('obs_wav and obs_flux are required without input_path')
+    wav = np.asarray(obs_wav, dtype=float)
+    flux = np.asarray(obs_flux, dtype=float)
+    if wav.ndim != 1 or flux.ndim != 1 or wav.shape != flux.shape or wav.size == 0:
+        raise ValueError('obs_wav and obs_flux must be nonempty, matching 1D arrays')
+    err = None
+    if obs_err is not None:
+        err = np.asarray(obs_err, dtype=float)
+        if err.shape != wav.shape:
+            raise ValueError('obs_err must match obs_wav and obs_flux')
+    valid = np.isfinite(wav) & np.isfinite(flux)
+    wav, flux = wav[valid], flux[valid]
+    if err is not None:
+        err = err[valid]
+    if wav.size == 0 or np.any(np.diff(wav) <= 0):
+        raise ValueError('usable obs_wav values must be increasing and unique')
+    return wav, flux, err, name or 'spectrum'
+
+
+def _estimate_noise(obs_wav, obs_flux, obs_err=None, line_free_windows=LINE_FREE_WINDOWS,
+                    verbose=False):
+    """One flux-noise value: the median of ``obs_err`` if given, else the
+    scatter in ``line_free_windows``; None when neither is available."""
+    if obs_err is not None:
+        usable = obs_err[np.isfinite(obs_err) & (obs_err > 0)]
+        if usable.size == 0:
+            raise ValueError('obs_err must contain a positive finite value')
+        sigma = float(np.median(usable))
+        if verbose:
+            print(f'Using median supplied error σ = {sigma:.5f} Jy')
+        return sigma
+    chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
+              for lo, hi in (line_free_windows or ())
+              if np.any((obs_wav >= lo) & (obs_wav <= hi))]
+    if not chunks:
+        return None
+    sample = np.concatenate(chunks)
+    sigma = float(np.nanstd(sample))
+    if verbose:
+        print(f'Estimated σ = {sigma:.5f} Jy ({len(sample)} line-free pixels)')
+    return sigma
 
 
 def save_fit_outputs(result, output_dir, output_prefix):
@@ -1518,7 +1542,10 @@ def _screened_group_options(stage, detected, build_components=None):
     shares = stage.get('Ashare') or [None] * len(groups)
     kept = [(tuple(label for label in group if label in kept_labels), mode, share)
             for group, mode, share in zip(groups, modes, shares)]
-    kept = [item for item in kept if len(item[0]) >= 2]
+    # Ties are relative to each group's main species, so a group whose main
+    # species was screened out is dropped rather than re-anchored.
+    kept = [item for item, group in zip(kept, groups)
+            if len(item[0]) >= 2 and item[0][0] == group[0]]
     options['isotopologue_groups'] = [group for group, _, _ in kept] or None
     options['Tshare'] = ([mode for _, mode, _ in kept]
                          if stage.get('Tshare') is not None and kept else None)

@@ -4,6 +4,10 @@ Visualisation functions for fitting and validation results.
 
 ## Spectral fit plot
 
+`plot_fit` draws one figure from in-memory fit results. For a saved
+`fit_observation` run, use `plot_saved_observation` ({doc}`v2`), which reads
+the stage CSVs and calls `plot_fit` for each stage.
+
 ```{eval-rst}
 .. autofunction:: diskmelts.plotting.plot_fit
 ```
@@ -14,12 +18,6 @@ Visualisation functions for fitting and validation results.
 
 ```{eval-rst}
 .. autofunction:: diskmelts.plotting.plot_validation
-```
-
----
-
-```{eval-rst}
-.. autofunction:: diskmelts.plotting.plot_validation_split
 ```
 
 ---

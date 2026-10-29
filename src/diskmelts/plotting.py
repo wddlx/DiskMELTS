@@ -1,17 +1,18 @@
 """
 diskmelts/plotting.py — Visualise spectral fitting results from fitting.py.
 
-Two public functions:
+Public functions:
     plot_fit         : plot observed + model (top panel) and residuals + chi-sq (bottom panel)
     plot_validation  : scatter plots of predicted vs. true from validation.py results
+    plot_bank_reconstruction : compare a model bank with grid spectra
 
 Typical workflow
 ----------------
     from diskmelts.plotting import plot_fit
 
     obs_wav, obs_flux = ...
-    h2o  = fit_nested(obs_wav, obs_flux, 'H2O',  pretrained, fit_ranges=...)
-    cmol = fit_nested(obs_wav, h2o['residual'], 'C2H2', pretrained, fit_ranges=...)
+    h2o  = fit_molecules(obs_wav, obs_flux, 'H2O',  pretrained, fit_ranges=...)
+    cmol = fit_molecules(obs_wav, h2o['residual'], 'C2H2', pretrained, fit_ranges=...)
     plot_fit(obs_wav, obs_flux, [h2o, cmol],
              fit_ranges=[(11,12),(12.4,14.5),(17,18.5)],
              name='J16120505', save_path='figures/fit.png')
@@ -134,7 +135,7 @@ def plot_fit(
     Args:
         obs_wav (np.ndarray): observed wavelength axis in µm
         obs_flux (np.ndarray): observed flux in Jy
-        results (dict or list[dict]): one result dict from fit_nested / fit_molecules,
+        results (dict or list[dict]): one result dict from fit_molecules or fit_stage,
                                       or a list of such dicts.
                                       Each dict must contain 'model_flux'.
                                       'mol' key is used for legend labels.
@@ -316,17 +317,17 @@ def plot_validation(
     save_path=None,
 ):
     """
-    Scatter plot of predicted vs. true parameters from validate_nt or validate_full.
+    Scatter plot of predicted vs. true parameters from validate_nt_holdout or validate_full.
 
     Automatically detects whether A data is present:
-        validate_nt output   (keys T, logN only)         → 1 × 2 panels
+        validate_nt_holdout output (keys T, logN only)   → 1 × 2 panels
         validate_full output (keys T, logN, log10A, NA)  → 1 × 4 panels
 
     Points with residual > 3σ in any parameter are highlighted in red.
 
     Args:
         mol (str): molecule name; used in the figure title
-        val_results (dict): output of validate_nt or validate_full
+        val_results (dict): output of validate_nt_holdout or validate_full
         save_path (str or None): file path to save figure; returned without
                                  saving if None
 
@@ -413,7 +414,10 @@ def plot_validation_split(
     save_path=None,
 ):
     """
-    Two-row validation scatter plot: in-pretrain (top row) and holdout (bottom row).
+    Deprecated: two-row validation scatter plot, in-pretrain (top) and holdout (bottom).
+
+    It pairs with the deprecated ``validate_nt``; plot held-out results with
+    ``plot_validation`` instead.
 
     Each row has two panels — Temperature and column density — with predicted
     vs. true scatter, a 1:1 reference line, R², and >3σ outlier highlighting.
@@ -429,6 +433,8 @@ def plot_validation_split(
     Returns:
         (matplotlib.figure.Figure)
     """
+    from diskmelts.fitting import _warn_deprecated
+    _warn_deprecated('plot_validation_split', 'plot_validation')
     mol_display = _MOL_LABEL.get(mol, mol)
 
     param_meta = [

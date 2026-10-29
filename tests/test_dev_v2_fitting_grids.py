@@ -79,6 +79,13 @@ def test_grid_fit_and_saved_errors(tmp_path):
         np.hypot(detail['logN_fit_sigma'], 0.125),
     )
     assert combine_grid_uncertainty(3, 25) == pytest.approx(np.hypot(3, 25))
+    # Each side is the posterior side with the grid step in quadrature, and
+    # the reported interval covers the truth.
+    for key, step, truth in (('T', 25, 113.0), ('logN', 0.125, 13.07)):
+        u = fit['uncertainty']['C2H2'][key]
+        assert u['minus'] == pytest.approx(np.hypot(u['q50'] - u['q16'], step))
+        assert u['plus'] == pytest.approx(np.hypot(u['q84'] - u['q50'], step))
+        assert u['q50'] - u['minus'] <= truth <= u['q50'] + u['plus']
 
     input_path = tmp_path / 'observation.csv'
     pd.DataFrame({'wave': wav, 'flux': observed}).to_csv(input_path, index=False)

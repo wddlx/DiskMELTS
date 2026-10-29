@@ -17,7 +17,10 @@ effects that a per-pixel chi-square ignores:
   scaled by ``sqrt(chi2_red)`` (never shrunk below the supplied noise).
 
 With no supplied noise, the best-fit residual RMS is used. Priors are flat
-inside the fit bounds, and the posterior is sampled with the emcee ensemble
+in temperature and logN inside the fit bounds and flat in log10(A) (an
+unbounded area uses at least -6 to 6, widened to cover the best fit by 4 dex).
+Isotopologue groups with ``Tshare='less'`` add a Jacobian term, so the prior
+stays flat in physical temperature. The posterior is sampled with the emcee ensemble
 sampler. The reported value is the posterior median and its error bars reach
 the 16th and 84th percentiles. The best fit (the single best-fitting model,
 which the plotted spectra use) is kept separately: in degenerate
@@ -265,7 +268,7 @@ def _walker_r_hat(chain):
     between = n * means.var(axis=0, ddof=1)
     variance = (n - 1) / n * within + between / n
     with np.errstate(divide='ignore', invalid='ignore'):
-        r_hat = np.sqrt(np.where(within > 0, variance / within, 1.0))
+        r_hat = np.sqrt(np.where(within > 0, variance / within, np.inf))
     return float(np.nanmax(r_hat))
 
 
@@ -285,7 +288,7 @@ def split_r_hat(chain, n_segments=4):
     between = n * means.var(axis=0, ddof=1)
     variance = (n - 1) / n * within + between / n
     with np.errstate(divide='ignore', invalid='ignore'):
-        r_hat = np.sqrt(np.where(within > 0, variance / within, 1.0))
+        r_hat = np.sqrt(np.where(within > 0, variance / within, np.inf))
     return float(np.nanmax(r_hat))
 
 

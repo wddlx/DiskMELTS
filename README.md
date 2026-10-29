@@ -242,8 +242,11 @@ assumes 2 km/s turbulent broadening. Select sigma=2 with `load_fitting_models(..
 | OH | 15–26 | 100–1400 | 13–19.5 |
 
 `diskmelts.MODEL_SPECS` records the exact domains, PCA sizes, and network
-layers. Version 2.2.0 lacks the sigma=0 OH and 6–9 µm C2H2 checkpoints;
-upgrade with `python -m pip install -U diskmelts`.
+layers. Version 2.3.0 retrains 26 of these checkpoints (13C12CH2, 13CO2,
+C2H2 11.5–17 µm, C2H4, C2H6, C2HD, C4H2, CH4, CO17O, CO18O, CO2, HC3N, and HCN at
+both sigmas) with lower held-out error; see the
+[changelog](https://diskmelts.readthedocs.io/en/latest/changelog.html).
+Upgrade with `python -m pip install -U diskmelts`.
 
 ## Training and validation data
 

@@ -171,8 +171,9 @@ and at least one distinct rare component; groups cannot overlap. Incompatible
 temperature bounds raise an error. `T_bounds`, `logN_bounds`, and
 `loga_bounds` may differ by component label or molecule; a tuple applies to
 every component. For a shared-area group, the allowed areas must overlap. If
-detection screening removes a group member, the remaining members are fitted
-and any group left with one member is dropped. The older `shared_area_groups` option still ties areas
+detection screening removes a rare member, the remaining members stay tied;
+if it removes the main species, or leaves only one member, the group's ties
+are dropped. The older `shared_area_groups` option still ties areas
 without specifying a temperature relationship. No constraint spans separate
 stages, because each stage fits the preceding residual.
 
@@ -199,9 +200,15 @@ the full requested T and logN rectangle.
 
 ## Ordered stages, saved results, and plots
 
-`fit_observation` runs several stages in order and saves every result. It
-accepts a CSV path or, since 2.2.1, arrays you have already read from FITS,
-separate files, or your own I/O code. With the Step 1 variables:
+`fit_observation` is the full workflow: it loads the models, estimates the
+noise, runs several stages in order (each one a `fit_stage` call on the
+previous residual), and saves every result. See
+{ref}`fit-stage-vs-observation` for a side-by-side comparison.
+
+Give it the spectrum in one of two ways: a CSV path as the first argument,
+or arrays through the `obs_wav=`, `obs_flux=`, and optional `obs_err=`
+keywords (since 2.2.1). Arrays can come from FITS, separate files, or
+`consub.calculate`. With the Step 1 variables:
 
 ```python
 from diskmelts import fit_observation
@@ -221,11 +228,18 @@ spectral optimization remains unweighted by individual errors. If no error array
 given, the workflow estimates one noise value from `line_free_windows` as in
 the file-based workflow. Arrays must have matching one-dimensional shapes;
 pixels with nonfinite wavelength or flux are dropped, and remaining wavelengths
-must be unique and increasing. Supply either arrays or `input_path`, and set
-`name` to choose the saved-file prefix for array input.
-The fitting notebook writes the filtered array input to a small CSV only when
-calling `plot_saved_observation`, whose saved-result plotting interface reads
-a source file.
+must be unique and increasing. Supply either arrays or `input_path`, not
+both. Pass `stages` by keyword with arrays, because the first positional
+argument is `input_path`, and set `name` to choose the saved-file prefix.
+To plot an array-input fit, pass the same arrays to `plot_saved_observation`:
+
+```python
+plot_saved_observation(result_dir='results/my_source', stages=stages,
+                       obs_wav=result['obs_wav'], obs_flux=result['obs_flux'],
+                       name='my_source', show=True, savefig=False)
+```
+
+The file-based version of the same workflow, with three stages:
 
 ```python
 from pathlib import Path
@@ -479,7 +493,9 @@ between T/logN points, refines the best solutions, samples the posterior on
 the interpolated grid exactly as for model fits, and adds the full local grid
 step in quadrature to each side of the T/logN error bars. For example, a 25 K
 step gives `T_total_sigma = sqrt(T_fit_sigma**2 + 25**2)` K in the
-`*_grid_uncertainty.csv` file. Its `_q16`/`_q84` columns are the pure
-posterior percentiles, while `_minus`/`_plus` include the grid step. With
-`errorbars=False` no grid step is reported. See {doc}`training` for obtaining and
-using optional grids.
+`*_grid_uncertainty.csv` file, which also lists `T_fit_sigma` and
+`T_grid_step` separately. In both that file and the `*_fit_params.csv` file,
+`_minus`/`_plus` include the grid step; the `_q16`/`_q84` columns of the
+params file are the pure posterior percentiles. With `errorbars=False` the
+error columns are empty (NaN). See {doc}`training` for obtaining and using
+optional grids.
