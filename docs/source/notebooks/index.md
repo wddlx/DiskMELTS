@@ -48,9 +48,12 @@ bands; keep each fitting window inside its trained band.
 
 ![Upper Sco J16120505 constrained CO2 isotopologue fit](../_static/examples/upper_sco_co2_tied_fit.png)
 
-These figures demonstrate the requested constraints. The hot-water and HC3N
-areas reach their configured bounds in this example, so their individual
-parameters need further review before scientific interpretation.
+These figures demonstrate the requested constraints. The boxes give posterior
+medians with 16–84% error bars, while the curves show the best fit. The best
+fits for the hot-water and HC3N areas sit on their configured bounds, and the
+wide error bars on the warm-water column density and on HC3N show that the
+data constrain them only loosely; review those before scientific
+interpretation.
 
 ## 3. Generate molecular spectra
 

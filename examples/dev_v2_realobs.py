@@ -5,6 +5,9 @@ The default uses the repository's J16120505 spectrum. For a CSV elsewhere::
     python examples/dev_v2_realobs.py --input /path/to/spectrum.csv \
         --name my_source --distance-pc 140 --sigma 2
 
+Each stage reports MCMC error bars (about a minute per stage); add
+``--no-errorbars`` for best fits only, or ``--n-mcmc 20000`` for a quick look.
+
 Adjust the stage windows below to match the observation. This script uses
 installed checkpoints and does not require local slab grids.
 """
@@ -50,6 +53,10 @@ def main(argv=None):
                         help='Checkpoint grid broadening')
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--figure-dir', type=Path)
+    parser.add_argument('--no-errorbars', action='store_true',
+                        help='Skip MCMC error bars and report best fits only')
+    parser.add_argument('--n-mcmc', type=int,
+                        help='Starting MCMC likelihood evaluations per stage')
     args = parser.parse_args(argv)
     result_dir = args.output_dir or ROOT / 'realobs_results/v2' / args.name
     figure_dir = args.figure_dir or ROOT / 'figures/realobs/v2'
@@ -58,6 +65,7 @@ def main(argv=None):
         distance_pc=args.distance_pc, sigma=args.sigma,
         output_dir=result_dir,
         comparison_csv=result_dir / 'Fitted_Parameters.csv',
+        errorbars=not args.no_errorbars, n_mcmc=args.n_mcmc,
     )
     return plot_saved_observation(
         args.input, result_dir, STAGES, name=args.name,

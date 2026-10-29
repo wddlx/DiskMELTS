@@ -188,3 +188,38 @@ def test_shared_area_groups_reject_invalid_labels(groups, message):
             {'C2H2': {}, '13C12CH2': {}}, (13.0, 14.0),
             shared_area_groups=groups, verbose=False,
         )
+
+
+def test_less_tie_samples_when_main_sits_on_rare_lower_bound(monkeypatch):
+    # Data prefer T below both lower bounds, so the main temperature pins at
+    # the rare species' lower bound, where the 'less' prior width is zero.
+    wave = np.linspace(13.0, 16.0, 61)
+
+    def fake_flux(model, T, logN, A, obs_wav):
+        centre = {'CO2': 14.2, '13CO2': 15.2}[model['mol']] + (T - 400) / 2000
+        return A * (logN - 14.0) * np.exp(-0.5 * ((obs_wav - centre) / 0.1) ** 2)
+
+    monkeypatch.setattr(fitting, '_mol_flux_on_wav', fake_flux)
+    models = {mol: {'mol': mol} for mol in ('CO2', '13CO2')}
+    observed = (fake_flux(models['CO2'], 100, 16, 1, wave)
+                + fake_flux(models['13CO2'], 100, 15, 1, wave))
+    fit = fitting.fit_molecules(
+        wave, observed, ['CO2', '13CO2'], models, (13.0, 16.0),
+        T_bounds=(200, 1400), logN_bounds=(14.5, 17.0), loga_bounds=(-1.0, 1.0),
+        isotopologue_groups=[('CO2', '13CO2')], Tshare=['less'],
+        n_samples=16, n_refine=2, n_top=2, seed=3, verbose=False,
+    )
+    assert fit['params']['CO2']['T'] == pytest.approx(200, abs=1)
+    assert np.isfinite(fit['uncertainty']['CO2']['T']['q50'])
+
+
+def test_screening_out_main_isotopologue_drops_its_tie():
+    stage = {'mol': ['C2H2', '13C12CH2', 'C2HD'],
+             'isotopologue_groups': [('C2H2', '13C12CH2', 'C2HD')],
+             'Tshare': ['less'], 'Ashare': [True]}
+    options = fitting._screened_group_options(stage, {'13C12CH2', 'C2HD'})
+    assert options['isotopologue_groups'] is None
+    assert options['Tshare'] is None and options['Ashare'] is None
+    kept = fitting._screened_group_options(stage, {'C2H2', 'C2HD'})
+    assert kept['isotopologue_groups'] == [('C2H2', 'C2HD')]
+    assert kept['Tshare'] == ['less']

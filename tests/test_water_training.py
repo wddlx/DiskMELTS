@@ -96,15 +96,13 @@ def test_faint_float32_spectrum_retrieval(monkeypatch):
 
     monkeypatch.setattr(fitting,'_mol_flux_on_wav',flux)
     wav=np.array([1.,2.,3.])
-    result=fitting.fit_nested(wav,flux({},725.,16.2,1.3,wav),'H2O',{'H2O':{}},
-                              (1.,3.),T_bounds=(100,1400),logN_bounds=(13,19),
-                              loga_bounds=(-2,2),n_restarts=3,seed=2)
-    assert result['params']['T'] == pytest.approx(725.,abs=.1)
-    assert result['params']['logN'] == pytest.approx(16.2,abs=.001)
-    assert result['params']['A'] == pytest.approx(1.3,rel=1e-4)
     joint = fitting.fit_molecules(wav, flux({},725.,16.2,1.3,wav), 'H2O', {'H2O':{}},
         (1.,3.), T_bounds=(100,1400), logN_bounds=(13,19), loga_bounds=(-2,2),
-        n_samples=32, n_refine=3, seed=2)
+        n_samples=32, n_refine=3, seed=2, verbose=False, errorbars=False)
+    params = joint['params']['H2O']
+    assert params['T'] == pytest.approx(725.,abs=.1)
+    assert params['logN'] == pytest.approx(16.2,abs=.001)
+    assert params['A'] == pytest.approx(1.3,rel=1e-4)
     np.testing.assert_allclose(joint['model_flux'], flux({},725.,16.2,1.3,wav), rtol=1e-4)
 
 

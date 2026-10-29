@@ -826,6 +826,11 @@ for molecule_number, MOL in enumerate(MOLECULES, start=1):
         early_stopping_patience=PATIENCE,
         T_range=T_range,
         logN_range=logN_range,
+        peak_normalization='window',
+        shape_loss='spectral',
+        scheduler_patience=100,
+        min_lr=1e-6,
+        temperature_transform='log10',
         training_data_sha256=holdout_metadata['grid_sha256'],
     )
 

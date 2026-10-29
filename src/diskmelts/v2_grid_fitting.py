@@ -3,17 +3,18 @@
 This workflow reads ``<grid_root>/<molecule>/T...N....csv`` (currently
 ``Model_grids/sigma0/<molecule>/``) and never loads a
 trained surrogate. It interpolates flux linearly between adjacent T/logN grid
-points, fits positive component amplitudes, and estimates local likelihood
-errors. The reported T and logN errors include the *full local grid step* in
-quadrature, as requested: ``sqrt(fit_sigma**2 + grid_step**2)``.
+points, fits positive component amplitudes, and samples the posterior by
+MCMC (``diskmelts.uncertainty``). The reported T and logN errors include the
+*full local grid step* in quadrature: ``sqrt(fit_sigma**2 + grid_step**2)``.
 
 ``fit_grid_stage`` fits one or several molecules. ``fit_observation_grids``
 runs sequential stages and writes the same stage-spectrum/parameter/running
-CSV format used by ``diskmelts.v2_read_plot``. The local covariance describes one
-mode near the optimum; it is not a substitute for a multimodal posterior.
+CSV format used by ``diskmelts.v2_read_plot``. The sampler starts at the best
+fit, so it describes that mode; a distant second mode would need its own run.
 """
 
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,11 +22,16 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import differential_evolution, least_squares, lsq_linear
 
+from diskmelts.uncertainty import (
+    default_mcmc_steps, likelihood_sigma, sample_posterior, summarize_parameter,
+)
 from diskmelts.fitting import (
+    _estimate_noise,
+    _read_observation,
     _screened_group_options,
     _tie_layout,
+    LINE_FREE_WINDOWS,
     detect_stage_molecules,
-    load_observed_spectrum,
     print_fit_params,
     save_fit_outputs,
     save_running_spectrum,
@@ -33,8 +39,6 @@ from diskmelts.fitting import (
 
 
 GRID_ROOT = None
-LINE_FREE_WINDOWS = ((11.45, 11.55), (13.10, 13.20),
-                     (15.65, 15.72), (15.90, 15.91))
 _GRID_NAME = re.compile(r'T(?P<T>\d+(?:\.\d+)?)N(?P<N>\d+(?:\.\d+)?)\.csv')
 
 
@@ -107,6 +111,14 @@ def _bracket(axis, value):
     return lower, float(np.clip(fraction, 0.0, 1.0))
 
 
+def _bracket_many(axis, values):
+    """Vectorized _bracket for points already inside the loaded axis."""
+    values = np.asarray(values, dtype=float)
+    lower = np.clip(np.searchsorted(axis, values, side='right') - 1, 0, len(axis) - 2)
+    fraction = (values - axis[lower]) / (axis[lower + 1] - axis[lower])
+    return lower, np.clip(fraction, 0.0, 1.0)
+
+
 def _local_step(axis, value):
     index, _ = _bracket(axis, value)
     return float(axis[index + 1] - axis[index])
@@ -120,6 +132,16 @@ class GridCube:
     fit_wav: np.ndarray
     fit_flux: np.ndarray
     paths: dict
+
+    def evaluate_batch(self, temperatures, log_columns):
+        """Bilinear flux on the fit pixels for many points, shape (n, n_pixels)."""
+        i, ft = _bracket_many(self.temperatures, temperatures)
+        j, fn = _bracket_many(self.log_columns, log_columns)
+        f = self.fit_flux
+        return (((1 - ft) * (1 - fn))[:, None] * f[i, j] +
+                (ft * (1 - fn))[:, None] * f[i + 1, j] +
+                ((1 - ft) * fn)[:, None] * f[i, j + 1] +
+                (ft * fn)[:, None] * f[i + 1, j + 1])
 
     def evaluate(self, temperature, log_column, obs_wav=None):
         """Bilinear flux interpolation on fit pixels or a requested axis."""
@@ -207,57 +229,28 @@ def combine_grid_uncertainty(fit_sigma, grid_step):
     return float(np.hypot(fit_sigma, grid_step))
 
 
-def _fit_covariance(result, scales, sigma_known, fixed=None, return_cov=False):
-    """Local Gaussian errors (and optionally covariance) from the Jacobian."""
-    if fixed is None:
-        fixed = np.zeros(len(scales), dtype=bool)
-    active = ~np.asarray(fixed, dtype=bool)
-    jac_scaled = result.jac[:, active] * scales[None, active]
-    _, singular, vh = np.linalg.svd(jac_scaled, full_matrices=False)
-    threshold = singular[0] * max(jac_scaled.shape) * np.finfo(float).eps * 100
-    valid = singular > threshold
-    inverse = np.zeros_like(singular)
-    inverse[valid] = 1.0 / singular[valid] ** 2
-    cov_scaled = (vh.T * inverse) @ vh
-    if not sigma_known:
-        dof = max(1, len(result.fun) - int(active.sum()))
-        scatter = float(np.sqrt(np.sum(result.fun ** 2) / dof))
-        cov_scaled *= scatter ** 2
-    active_scales = scales[active]
-    cov = (active_scales[:, None] * cov_scaled) * active_scales[None, :]
-    errors = np.zeros(len(scales))
-    errors[active] = np.sqrt(np.maximum(np.diag(cov), 0.0))
-    if not np.all(valid):
-        null_weight = np.sum(vh[~valid] ** 2, axis=0)
-        active_errors = errors[active]
-        active_errors[null_weight > 1e-4] = np.nan
-        errors[active] = active_errors
-    if return_cov:
-        full = np.zeros((len(scales), len(scales)))
-        full[np.ix_(active, active)] = cov
-        return errors, full
-    return errors
-
-
 def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
                    grid_root=GRID_ROOT, h2o_components=1, component_names=None,
                    T_bounds=(100.0, 1400.0), logN_bounds=None,
                    loga_bounds=(-2.0, 2.0), sigma=None, distance_pc=140.0,
                    isotopologue_groups=None, Tshare=None, Ashare=None,
                    shared_area_groups=None, seed=42,
-                   maxiter=100, popsize=8, n_refine=3):
+                   maxiter=100, popsize=8, n_refine=3, n_mcmc=None,
+                   errorbars=True):
     """Fit one or more slab-grid molecules with positive amplitudes.
 
     Differential evolution searches nonlinear T/logN space while amplitudes
     are solved by bounded least squares. A few best candidates are refined by
-    weighted nonlinear least squares. Formal 1σ errors come from the local
-    covariance; the T/logN errors then include their grid steps in quadrature.
+    weighted nonlinear least squares. Errors come from ``n_mcmc`` MCMC steps of
+    the posterior on the interpolated grid (see ``diskmelts.uncertainty``);
+    the T/logN intervals then include their grid steps in quadrature.
+    ``errorbars=False`` skips sampling and reports best fits only.
     ``distance_pc`` converts the 140-pc grid flux normalization to the source
     distance and makes fitted amplitudes physical emitting areas in au².
     ``isotopologue_groups``, ``Tshare``, ``Ashare``, and ``shared_area_groups``
     tie temperatures and areas exactly as in ``fit_molecules``. Tied
-    components share free coordinates, and their errors are propagated from
-    the covariance of those coordinates.
+    components share free coordinates, so their posterior samples respect
+    the ties.
     """
     if grid_root is None:
         raise ValueError('grid_root is required for direct-grid fitting')
@@ -459,30 +452,70 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     if best is None:
         raise RuntimeError('grid optimization returned no solution')
 
-    fixed = upper - lower < 1e-4
-    free_error, free_cov = _fit_covariance(best, scales,
-                                           sigma_known=sigma is not None,
-                                           fixed=fixed, return_cov=True)
-    # Propagate free-coordinate covariance to each component's T, logN,
-    # log10A. Without ties this Jacobian is the identity.
     best_physical = physical_vector(best.x)
-    jacobian = np.zeros((len(best_physical), len(best.x)))
-    for j in range(len(best.x)):
-        step = 1e-6 * max(scales[j], 1e-12)
-        shifted = best.x.copy()
-        if shifted[j] + step <= upper[j]:
-            shifted[j] += step
-        else:
-            shifted[j] -= step
-            step = -step
-        jacobian[:, j] = (physical_vector(shifted) - best_physical) / step
-    jacobian[np.abs(jacobian) < 1e-9] = 0.0
-    covariance_error = np.sqrt(np.maximum(
-        np.einsum('ij,jk,ik->i', jacobian, free_cov, jacobian), 0.0,
-    ))
-    undefined = np.isnan(free_error)
-    if undefined.any():
-        covariance_error[np.any(jacobian[:, undefined] != 0, axis=1)] = np.nan
+    # Posterior sampling of the free coordinates (fixed ones stay at the best
+    # fit); intervals are then widened by the local grid step.
+    fixed = upper - lower < 1e-4
+    free_idx = np.flatnonzero(~fixed)
+    sigma_like, uncertainty_info = likelihood_sigma(
+        best.fun * noise_scale, None if sigma is None else noise_scale,
+        n_params=len(free_idx), flux_scale=np.max(np.abs(target)),
+    )
+    posterior = None
+    n_mcmc = default_mcmc_steps(n_mcmc)
+    if errorbars and n_mcmc > 0 and len(free_idx):
+        def residual_free(values):
+            z = best.x.copy()
+            z[free_idx] = values
+            return residual_vector(z) * (noise_scale / sigma_like)
+
+        def residual_free_batch(values):
+            Z = np.repeat(best.x[None, :], len(values), axis=0)
+            Z[:, free_idx] = values
+            physical = np.array([decode(z[:n_free]) for z in Z])
+            areas = 10.0 ** np.array([expand_areas(z[n_free:]) for z in Z])
+            model = np.zeros((len(Z), len(target)))
+            for k, part in enumerate(parts):
+                model += areas[:, k, None] * libraries[part['model_mol']].evaluate_batch(
+                    physical[:, 2 * k], physical[:, 2 * k + 1])
+            R = (model - target) / sigma_like
+            misordered = np.array([water_misordered(p) for p in physical])
+            R[misordered] = np.inf
+            return R
+
+        less_members = [(i, main) for i, (main, mode) in layout['group_for'].items()
+                        if i != main and mode == 'less']
+        def physical_prior(values):
+            z = best.x.copy()
+            z[free_idx] = values
+            physical = decode(z[:n_free])
+            correction = 0.0
+            for i, main in less_members:
+                lo, hi = bounds[i][0]
+                width = min(hi, physical[2 * main]) - lo
+                if width < 0:
+                    return -np.inf
+                correction += np.log(max(width, 1e-9 * (hi - lo)))
+            return correction
+
+        free_samples, sampler_info = sample_posterior(
+            residual_free, best.x[free_idx], lower[free_idx], upper[free_idx],
+            n_steps=n_mcmc, seed=seed, batch_residual_fn=residual_free_batch,
+            extra_log_prob=physical_prior if less_members else None,
+        )
+        uncertainty_info.update(sampler_info, method='mcmc')
+        full = np.repeat(best.x[None, :], len(free_samples), axis=0)
+        full[:, free_idx] = free_samples
+        posterior = np.array([physical_vector(z) for z in full])
+        print(f"  MCMC: {sampler_info['n_steps']} steps, acceptance "
+              f"{sampler_info['acceptance']:.2f}, R-hat {sampler_info['r_hat_max']:.3f}, "
+              f"noise correlation length {uncertainty_info['correlation_length']:.1f} px")
+        if not sampler_info['converged']:
+            warnings.warn(f"grid MCMC has not converged (R-hat "
+                          f"{sampler_info['r_hat_max']:.2f}) after {sampler_info['n_steps']} "
+                          f"likelihood evaluations; increase n_mcmc", stacklevel=2)
+    else:
+        uncertainty_info['method'] = 'none'
     params, uncertainty, details, component_fluxes = {}, {}, {}, {}
     model_flux = np.zeros_like(flux)
     plot_mask = np.logical_or.reduce([(wav >= lo) & (wav <= hi)
@@ -497,33 +530,39 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
         model_flux += component
         params[label] = {'T': T, 'logN': logN, 'A': A,
                          'log10A': logA, 'model_mol': mol}
-        T_step = _local_step(libraries[mol].temperatures, T)
-        N_step = _local_step(libraries[mol].log_columns, logN)
-        T_fit = float(covariance_error[3 * k])
-        N_fit = float(covariance_error[3 * k + 1])
-        A_fit = float(covariance_error[3 * k + 2])
-        T_total = combine_grid_uncertainty(T_fit, T_step)
-        N_total = combine_grid_uncertainty(N_fit, N_step)
-        uncertainty[label] = {
-            'T': {'minus': T_total, 'plus': T_total},
-            'logN': {'minus': N_total, 'plus': N_total},
-            'log10A': {'minus': A_fit, 'plus': A_fit},
-        }
-        details[label] = {
-            'T_fit_sigma': T_fit, 'T_grid_step': T_step, 'T_total_sigma': T_total,
-            'logN_fit_sigma': N_fit, 'logN_grid_step': N_step,
-            'logN_total_sigma': N_total, 'log10A_fit_sigma': A_fit,
-            'T_at_bound': bool(np.isclose(T, bounds[k][0][0], rtol=0, atol=1e-5) or
-                               np.isclose(T, bounds[k][0][1], rtol=0, atol=1e-5)),
-            'logN_at_bound': bool(np.isclose(logN, bounds[k][1][0], rtol=0, atol=1e-6) or
-                                  np.isclose(logN, bounds[k][1][1], rtol=0, atol=1e-6)),
-            'log10A_at_bound': bool(np.isclose(logA, area_bounds[k][0], rtol=0, atol=1e-6) or
-                                   np.isclose(logA, area_bounds[k][1], rtol=0, atol=1e-6)),
-        }
+        steps = {'T': _local_step(libraries[mol].temperatures, T),
+                 'logN': _local_step(libraries[mol].log_columns, logN)}
+        limits = {'T': bounds[k][0], 'logN': bounds[k][1], 'log10A': area_bounds[k]}
+        best_values = {'T': T, 'logN': logN, 'log10A': logA}
+        uncertainty[label], details[label] = {}, {}
+        for j, key in enumerate(('T', 'logN', 'log10A')):
+            if posterior is None:
+                summary = {'minus': np.nan, 'plus': np.nan, 'at_bound': False}
+            else:
+                summary = summarize_parameter(posterior[:, 3 * k + j],
+                                              best_values[key], limits[key])
+            fit_sigma = 0.5 * (summary.get('q84', np.nan) - summary.get('q16', np.nan))
+            on_bound = bool(np.isclose(best_values[key], limits[key][0], rtol=0, atol=1e-6) or
+                            np.isclose(best_values[key], limits[key][1], rtol=0, atol=1e-6))
+            summary['at_bound'] = bool(summary['at_bound'] or on_bound)
+            details[label][f'{key}_fit_sigma'] = fit_sigma
+            if key in steps:
+                # The grid step is added in quadrature to each side.
+                step = steps[key]
+                summary['minus'] = combine_grid_uncertainty(summary['minus'], step)
+                summary['plus'] = combine_grid_uncertainty(summary['plus'], step)
+                details[label][f'{key}_grid_step'] = step
+                details[label][f'{key}_total_sigma'] = combine_grid_uncertainty(fit_sigma, step)
+            details[label][f'{key}_at_bound'] = summary['at_bound']
+            uncertainty[label][key] = summary
+        if posterior is not None:
+            uncertainty[label]['logNA'] = summarize_parameter(
+                posterior[:, 3 * k + 1] + posterior[:, 3 * k + 2], logN + logA)
     print(f'  Grid fit: {len(parts)} components, weighted SSE={best_loss:.4g}')
     return {
         'mol': molecule, 'components': parts, 'params': params,
         'uncertainty': uncertainty, 'uncertainty_details': details,
+        'uncertainty_info': uncertainty_info,
         'obs_wav': wav, 'obs_flux': flux.copy(), 'model_flux': model_flux,
         'component_fluxes': component_fluxes, 'residual': flux - model_flux,
         'fit_ranges': selected_ranges,
@@ -537,36 +576,44 @@ def fit_grid_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges, *,
     }
 
 
-def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
+def fit_observation_grids(input_path=None, stages=None, *, name=None, grid_root=GRID_ROOT,
                           output_dir=None, line_free_windows=LINE_FREE_WINDOWS,
                           detection_screening=True, detection_sigma_factor=3.0,
                           sigma_noise=None, distance_pc=140.0,
                           seed=42, maxiter=100, popsize=8,
-                          n_refine=3, skiprows=1, delimiter=',',
-                          wav_col=0, flux_col=1):
-    """Run ordered grid-only fits and save stage CSVs for v2_read_plot."""
+                          n_refine=3, n_mcmc=None, errorbars=True,
+                          skiprows=1, delimiter=',',
+                          wav_col=0, flux_col=1,
+                          obs_wav=None, obs_flux=None, obs_err=None):
+    """Run ordered direct-grid stages and save the same CSVs as ``fit_observation``.
+
+    This is the slab-grid counterpart of ``fit_observation``: it takes the
+    same stage dictionaries and input options, but evaluates spectra by
+    interpolating the local grids under ``grid_root`` instead of the bundled
+    neural models. Give the spectrum as ``input_path`` (a CSV read with
+    ``load_observed_spectrum``) or as ``obs_wav``/``obs_flux`` arrays with
+    optional ``obs_err``. ``sigma_noise`` overrides the noise estimate; else
+    the median of ``obs_err`` is used, else the scatter in
+    ``line_free_windows``.
+
+    ``errorbars`` (default True) computes MCMC error bars for each stage,
+    starting with ``n_mcmc`` likelihood evaluations (default 300000 or
+    ``DISKMELTS_N_MCMC``); ``errorbars=False`` reports best fits only.
+    """
     if grid_root is None:
         raise ValueError('grid_root is required for direct-grid fitting')
-    input_path = Path(input_path)
-    if not input_path.is_file():
-        raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
-    stages = list(stages)
+    obs_wav, obs_flux, obs_err, source_name = _read_observation(
+        input_path, obs_wav, obs_flux, obs_err, name=name, skiprows=skiprows,
+        delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
+    )
+    stages = list(stages or ())
     if not stages or len({stage['name'] for stage in stages}) != len(stages):
         raise ValueError('stages must be nonempty and have unique names')
-    obs_wav, obs_flux = load_observed_spectrum(
-        input_path, skiprows=skiprows, delimiter=delimiter,
-        wav_col=wav_col, flux_col=flux_col,
-    )
-    source_name = name or input_path.stem
     output_dir = (Path(output_dir) if output_dir else
                   Path.cwd() / 'realobs_results' / 'grids' / source_name)
     output_dir.mkdir(parents=True, exist_ok=True)
-    if sigma_noise is None and line_free_windows:
-        chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
-                  for lo, hi in line_free_windows
-                  if np.any((obs_wav >= lo) & (obs_wav <= hi))]
-        if chunks:
-            sigma_noise = float(np.nanstd(np.concatenate(chunks)))
+    if sigma_noise is None:
+        sigma_noise = _estimate_noise(obs_wav, obs_flux, obs_err, line_free_windows)
     if sigma_noise is not None and sigma_noise <= 0:
         raise ValueError('noise sigma must be positive to estimate fit errors')
     print(f'Grid fit for {source_name}: noise sigma={sigma_noise} Jy')
@@ -598,7 +645,7 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
             loga_bounds=stage.get('loga_bounds', (-2.0, 2.0)),
             sigma=sigma_noise, distance_pc=distance_pc,
             seed=seed, maxiter=maxiter,
-            popsize=popsize, n_refine=n_refine,
+            popsize=popsize, n_refine=n_refine, n_mcmc=n_mcmc, errorbars=errorbars,
         )
         residual -= fit['model_flux']
         cumulative += fit['model_flux']
@@ -609,10 +656,19 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
         )
         error_rows = []
         for label, param in fit['params'].items():
+            # Posterior medians as in the params CSV; best fits as *_best.
+            u = fit['uncertainty'][label]
+            median = {key: u[key].get('q50', np.nan) for key in ('T', 'logN', 'log10A')}
+            median = {key: value if np.isfinite(value) else param[key]
+                      for key, value in median.items()}
             row = {'stage': stage['name'], 'component': label,
                    'model_mol': param['model_mol'],
-                   'T': param['T'], 'logN': param['logN'],
-                   'A': param['A'], 'log10A': param['log10A'],
+                   'T': median['T'], 'logN': median['logN'],
+                   'A': 10.0 ** median['log10A'], 'log10A': median['log10A'],
+                   'T_best': param['T'], 'logN_best': param['logN'],
+                   'A_best': param['A'], 'log10A_best': param['log10A'],
+                   **{f'{key}_{side}': u[key][side]
+                      for key in ('T', 'logN', 'log10A') for side in ('minus', 'plus')},
                    **fit['uncertainty_details'][label]}
             error_rows.append(row)
             summary_rows.append(row)
@@ -632,5 +688,5 @@ def fit_observation_grids(input_path, stages, *, name=None, grid_root=GRID_ROOT,
         products['summary'] = str(summary_path)
     print('Grid fitting done.')
     return {'fits': fits, 'obs_wav': obs_wav, 'obs_flux': obs_flux,
-            'residual': residual, 'cumulative_model': cumulative,
+            'obs_err': obs_err, 'residual': residual, 'cumulative_model': cumulative,
             'sigma_noise': sigma_noise, 'products': products}

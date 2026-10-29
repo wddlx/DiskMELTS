@@ -13,6 +13,7 @@ from diskmelts.trainmodel import (
     select_grid_holdout,
     tune_pca_components,
     convert_legacy_checkpoint,
+    grid_sha256,
 )
 from diskmelts.fitting import (
     load_models,
@@ -58,6 +59,9 @@ from diskmelts.v2_read_plot import (
 from diskmelts.v2_paper_comparison import plot_literature_comparisons
 from diskmelts import consub
 
+# fit_nested, validate_nt, and plot_validation_split stay importable for
+# existing scripts but are deprecated since 2.3.0 and left out of __all__.
+
 __all__ = [
     "consub",
     "MODEL_SPECS",
@@ -80,11 +84,11 @@ __all__ = [
     "select_grid_holdout",
     "tune_pca_components",
     "convert_legacy_checkpoint",
+    "grid_sha256",
     # fitting
     "load_models",
     "load_model_bank",
     "generate_spectrum",
-    "fit_nested",
     "fit_molecules",
     "load_observed_spectrum",
     "save_fit_outputs",
@@ -93,12 +97,10 @@ __all__ = [
     "print_fit_params",
     "save_fitted_comparison",
     # validation
-    "validate_nt",
     "validate_nt_holdout",
     "validate_full",
     # plotting
     "plot_fit",
     "plot_validation",
-    "plot_validation_split",
     "plot_bank_reconstruction",
 ]

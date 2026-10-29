@@ -174,3 +174,41 @@ def test_single_exclude_pair_is_accepted():
         result = consub.subtract_continuum(wave, flux, exclude=(14.0, 15.0),
                                            boxsizes=np.array(31))
     assert result.excluded[(wave > 14.1) & (wave < 14.9)].all()
+
+
+@pytest.mark.parametrize('errorbars', [True, False])
+def test_fit_observation_passes_errorbars_option(monkeypatch, tmp_path, errorbars):
+    captured = {}
+
+    def fake_fit_stage(obs_wav, obs_flux, molecule, *args, **kwargs):
+        captured.update(kwargs)
+        n = len(obs_wav)
+        return {'model_flux': np.zeros(n), 'residual': np.zeros(n),
+                'component_fluxes': {}, 'top_list': [], 'params': {}}
+
+    monkeypatch.setattr(v2_fitting, 'fit_stage', fake_fit_stage)
+    monkeypatch.setattr(v2_fitting, 'load_fitting_models',
+                        lambda mols, **kw: {m: {} for m in mols})
+    for name in ('save_fit_outputs', 'save_running_spectrum', 'print_fit_params',
+                 'save_fitted_comparison'):
+        monkeypatch.setattr(v2_fitting, name, lambda *a, **kw: {})
+    wave = np.linspace(13.0, 16.0, 50)
+    v2_fitting.fit_observation(
+        stages=[{'name': 'hcn', 'mol': 'HCN', 'wavelength_range': (13.0, 16.0),
+                 'fit_ranges': (13.0, 16.0)}],
+        obs_wav=wave, obs_flux=np.zeros_like(wave), name='s',
+        output_dir=tmp_path, errorbars=errorbars,
+    )
+    assert captured['errorbars'] is errorbars
+
+
+def test_real_model_fit_without_errorbars(tmp_path):
+    wave, flux = v2_fitting.synthesize_spectrum('HCN', 400, 17, wavelength=np.linspace(13.8, 14.2, 121))
+    result = v2_fitting.fit_observation(
+        stages=[{'name': 'hcn', 'mol': 'HCN', 'wavelength_range': (11.5, 17.0),
+                 'fit_ranges': (13.8, 14.2)}],
+        obs_wav=wave, obs_flux=flux, name='t', output_dir=tmp_path,
+        n_samples=128, n_refine=2, n_top=2, errorbars=False,
+    )
+    fit = result['fits']['hcn']
+    assert fit['uncertainty'] == {} and fit['params']['HCN']['T'] == pytest.approx(400, abs=2)

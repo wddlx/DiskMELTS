@@ -1,33 +1,31 @@
 """
 diskmelts/validation.py — Validation functions for pretrained forward models.
 
-Two public functions, both operating on a single molecule per call:
+Public functions, each operating on a single molecule per call:
 
-    validate_nt   : T and logN retrieval on pretrain grid spectra (A=1 fixed).
-                    Tests model accuracy without the confound of A scaling.
-                    Input comes from the pretrain CSV produced by
-                    generate_pre_training_set.
+    validate_nt_holdout : T and logN retrieval at known area (A=1) on grid
+                    spectra withheld from training. Tests model accuracy
+                    without the confound of A scaling.
 
     validate_full : T, logN, and A retrieval on synthetic spectra with random A.
                     Tests the full fitting pipeline as it is used on observations.
                     Spectra are generated in-memory directly from the model grid.
 
-Both functions return dicts of true and predicted parameter arrays for downstream
+The functions return dicts of true and predicted parameter arrays for downstream
 analysis and plotting (see diskmelts/plotting.py :: plot_validation).
 
 Typical workflow
 ----------------
     from diskmelts.fitting import load_models
     from diskmelts.trainmodel import load_model_grid
-    from diskmelts.validation import validate_nt, validate_full
+    from diskmelts.validation import validate_nt_holdout, validate_full
     from diskmelts.plotting import plot_validation
 
     pretrained = load_models(model_paths)
     models_h2o = load_model_grid('Model_grids/sigma0/H2O')
 
-    nt   = validate_nt('H2O', pretrained,
-                       pretrain_csv='Pretrain_grid/pretrain_H2O_11to19.csv',
-                       fit_ranges=[(11.0, 12.0), (17.0, 18.5)])
+    nt   = validate_nt_holdout('H2O', pretrained, models_h2o, holdout_keys,
+                               fit_ranges=[(11.0, 12.0), (17.0, 18.5)])
     full = validate_full('H2O', models_h2o, pretrained,
                          fit_ranges=[(11.0, 12.0), (17.0, 18.5)])
 
@@ -40,7 +38,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from diskmelts.fitting import fit_nested
+from diskmelts.fitting import _warn_deprecated, fit_molecules
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +209,10 @@ def validate_nt(
     validation_points=None,
 ):
     """
-    Validate T and logN retrieval on pretrain grid spectra with A=1.
+    Deprecated: validate T and logN retrieval on pretrain grid spectra with A=1.
+
+    Use ``validate_nt_holdout`` instead: rows of the pretraining table were
+    seen in training, so they overstate accuracy.
 
     Uses the same gradient-based Adam optimizer as the NT-only fitter: jointly
     matches the peak-normalised spectral shape (net_shape output) and the
@@ -247,6 +248,7 @@ def validate_nt(
             'logN_true' : np.ndarray — grid log10 column densities
             'logN_pred' : np.ndarray — recovered log10 column densities
     """
+    _warn_deprecated('validate_nt', 'validate_nt_holdout')
     df = pd.read_csv(pretrain_csv)
     flux_cols = [c for c in df.columns if c.startswith('wav_')]
     wav_pre   = np.array([float(c[4:]) for c in flux_cols])
@@ -431,8 +433,9 @@ def validate_full(
     Validate T, logN, and A retrieval on synthetic spectra with random A.
 
     Draws distinct (T, logN) grid points when enough are available, plus A values, and constructs the
-    corresponding physical spectrum with optional noise, then runs fit_nested
-    to recover all three parameters.  This tests the full fitting pipeline.
+    corresponding physical spectrum with optional noise, then runs
+    ``fit_molecules`` (best fit only, no MCMC) to recover all three
+    parameters. This tests the full fitting pipeline.
 
     Call once per molecule.
 
@@ -441,16 +444,17 @@ def validate_full(
         models (dict): output of load_model_grid for this molecule,
                        keyed by (T, logN) with 'wavelength' and 'flux' arrays
         pretrained (dict): output of load_models (keyed by mol name)
-        fit_ranges: (lo, hi) or [(lo1,hi1), ...] µm passed to fit_nested
+        fit_ranges: (lo, hi) or [(lo1,hi1), ...] µm passed to fit_molecules
         n_samples (int): number of synthetic spectra to generate (default 30)
         log_A_range (tuple): (log10A_min, log10A_max) for uniform A draw
         noise_scale (float): Gaussian noise std as fraction of peak flux;
                              0.0 for noise-free spectra (default 0.001)
-        T_bounds (tuple): (T_min, T_max) K passed to fit_nested
-        logN_bounds (tuple): (logN_min, logN_max) passed to fit_nested
+        T_bounds (tuple): (T_min, T_max) K passed to fit_molecules
+        logN_bounds (tuple): (logN_min, logN_max) passed to fit_molecules
         loga_bounds (tuple): (log10A_min, log10A_max) for fitting search range
                              (default (-2, 2)); independent of log_A_range
-        n_restarts (int): random restarts per spectrum in fit_nested (default 50)
+        n_restarts (int): local refinements per spectrum in fit_molecules
+                          (default 50), after 4096 Sobol samples
         seed (int): random seed (default 42)
 
     Returns:
@@ -483,13 +487,13 @@ def validate_full(
             if peak > 0:
                 flux += rng.normal(0, noise_scale * peak, size=len(flux))
 
-        result = fit_nested(
-            wav_grid, flux, mol, pretrained,
-            fit_ranges=fit_ranges,
-            T_bounds=T_bounds, logN_bounds=logN_bounds,
-            loga_bounds=loga_bounds,
-            n_restarts=n_restarts, seed=i,
+        fit = fit_molecules(
+            wav_grid, flux, mol, pretrained, fit_ranges,
+            T_bounds=T_bounds, logN_bounds=logN_bounds, loga_bounds=loga_bounds,
+            n_samples=4096, n_refine=n_restarts, n_top=1, seed=i,
+            verbose=False, errorbars=False,
         )
+        result = {'params': fit['params'][mol]}
 
         T_true_list.append(float(T_t))
         logN_true_list.append(float(logN_t))

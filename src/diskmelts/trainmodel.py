@@ -153,7 +153,15 @@ def convert_legacy_checkpoint(path, output_path=None):
 # ===========================================================================
 
 def grid_sha256(models):
-    """Fingerprint wavelength and flux arrays in a loaded model grid."""
+    """Fingerprint wavelength and flux arrays in a loaded model grid.
+
+    Args:
+        models (dict): output of ``load_model_grid``, keyed by ``(T, logN)``.
+
+    Returns:
+        str: SHA-256 hex digest. It changes if any grid key, wavelength, or
+        flux value changes; pass it as ``training_data_sha256`` when training.
+    """
     digest = hashlib.sha256()
     for key in sorted(models):
         digest.update(np.asarray(key, dtype='<f8').tobytes())
@@ -884,9 +892,9 @@ def pretrain_forward_model(
 
         def shape_criterion(prediction, target):
             if shape_loss == 'spectral_edge':
-                delta = (prediction - target) * torch.as_tensor(
-                    yp_sc_shape.scale_, dtype=torch.float32, device=device
-                )
+                # The weight matrix already converts standardized PCA
+                # coefficients to physical spectral units.
+                delta = prediction - target
                 return torch.einsum('bi,ij,bj->', delta, weight_matrix, delta) / len(delta)
             return ((prediction - target).square() * shape_weights).mean()
 

@@ -22,6 +22,8 @@ def main(argv=None):
                         default=Path('results/synthetic_hcn'))
     parser.add_argument('--sigma', type=int, choices=(0, 2), default=2)
     parser.add_argument('--n-samples', type=int, default=128)
+    parser.add_argument('--no-errorbars', action='store_true',
+                        help='Skip MCMC error bars and report the best fit only')
     args = parser.parse_args(argv)
 
     wavelength = np.linspace(13.8, 14.2, 121)
@@ -37,9 +39,11 @@ def main(argv=None):
         stages=stages, obs_wav=wave, obs_flux=flux, obs_err=error,
         name='synthetic_hcn', sigma=args.sigma, output_dir=args.output_dir,
         detection_screening=False, n_samples=args.n_samples,
-        n_refine=2, n_top=2,
+        n_refine=2, n_top=2, errorbars=not args.no_errorbars,
     )
     print('Fitted HCN:', result['fits']['hcn']['params']['HCN'])
+    if result['fits']['hcn']['uncertainty']:
+        print('Error bars:', result['fits']['hcn']['uncertainty']['HCN'])
     return result
 
 

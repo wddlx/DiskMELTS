@@ -16,18 +16,21 @@ Public functions
     load_models          : load per-molecule .pt checkpoints from disk
     load_model_bank      : load a segmented checkpoint manifest
     generate_spectrum    : evaluate (T, logN, A) → flux via the two-MLP forward model
-    fit_nested           : single-molecule retrieval with analytic amplitude
-    fit_molecules        : multi-molecule global Sobol search + L-BFGS-B refinement
+    fit_molecules        : one- or multi-molecule global Sobol search + L-BFGS-B
+                           refinement, with MCMC error bars
     load_observed_spectrum: load a continuum-subtracted spectrum from CSV
     detect_stage_molecules: screen for molecular detections above a noise threshold
-    save_fit_outputs     : write best-fit CSV, top-list CSV, and spectrum to disk
+    save_fit_outputs     : write parameter (posterior median + best fit), top-list,
+                           and spectrum CSVs to disk
     save_running_spectrum: write residual / running-model spectrum to disk
-    print_fit_params     : pretty-print best-fit parameters and uncertainties
-    save_fitted_comparison: upsert best-fit parameters into a comparison CSV
+    print_fit_params     : print posterior medians with error bars and best fits
+    save_fitted_comparison: upsert fitted parameters into a comparison CSV
 """
 
 import json
 import os
+from pathlib import Path
+import warnings
 import numpy as np
 import pandas as pd
 import torch
@@ -35,6 +38,9 @@ import scipy.optimize
 from scipy.stats import qmc
 
 from diskmelts.trainmodel import pretrain_forward_model   # load-only (n_epochs=0)
+from diskmelts.uncertainty import (
+    default_mcmc_steps, likelihood_sigma, sample_posterior, summarize_parameter,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +110,65 @@ def _single_model_flux_on_wav(pretrained_mol, T, logN, A, wav_grid):
 
     flux_net = A * (10.0 ** log10p) * np.maximum(shape, 0.0)
     return np.interp(wav_grid, wav_net, flux_net, left=0.0, right=0.0)
+
+
+def _linear_interp_matrix(x_new, x_old):
+    """Indices and weights that reproduce np.interp(x_new, x_old, y, 0, 0)."""
+    x_new = np.asarray(x_new, dtype=np.float64)
+    idx = np.clip(np.searchsorted(x_old, x_new, side='right') - 1, 0, len(x_old) - 2)
+    frac = (x_new - x_old[idx]) / (x_old[idx + 1] - x_old[idx])
+    inside = (x_new >= x_old[0]) & (x_new <= x_old[-1])
+    return idx, np.clip(frac, 0.0, 1.0), inside
+
+
+def _single_model_flux_batch(pretrained_mol, T, logN, wav_grid):
+    """Unit-area flux for many (T, logN) points at once, shape (n, len(wav_grid))."""
+    T = np.asarray(T, dtype=np.float64)
+    logN = np.asarray(logN, dtype=np.float64)
+    net_shape, net_peak = pretrained_mol['net_shape'], pretrained_mol['net_peak']
+    xp_sc, yp_sc_shape = pretrained_mol['xp_sc'], pretrained_mol['yp_sc_shape']
+    yp_sc_peak, pca = pretrained_mol['yp_sc_peak'], pretrained_mol.get('pca', None)
+    device = next(net_shape.parameters()).device
+    input_T = np.log10(T) if pretrained_mol.get('temperature_transform') == 'log10' else T
+    x_s = np.column_stack([(input_T - xp_sc.mean_[0]) / xp_sc.scale_[0],
+                           (logN - xp_sc.mean_[1]) / xp_sc.scale_[1]])
+    with torch.no_grad():
+        x_t = torch.tensor(x_s, dtype=torch.float32, device=device)
+        z_shape = net_shape(x_t).cpu().numpy()
+        z_peak = net_peak(x_t).cpu().numpy()[:, 0]
+    shape = z_shape * yp_sc_shape.scale_ + yp_sc_shape.mean_
+    if pca is not None:
+        shape = pca.inverse_transform(shape)
+    log10p = z_peak * yp_sc_peak.scale_[0] + yp_sc_peak.mean_[0]
+    flux_net = (10.0 ** log10p)[:, None] * np.maximum(shape, 0.0)
+    idx, frac, inside = _linear_interp_matrix(wav_grid, pretrained_mol['wav'])
+    out = flux_net[:, idx] * (1.0 - frac) + flux_net[:, idx + 1] * frac
+    out[:, ~inside] = 0.0
+    return out
+
+
+def _mol_flux_batch(pretrained_mol, T, logN, wav_grid):
+    """Batched unit-area flux for one checkpoint or an overlapping model bank."""
+    if not pretrained_mol.get('is_model_bank', False):
+        return _single_model_flux_batch(pretrained_mol, T, logN, wav_grid)
+    wav_grid = np.asarray(wav_grid, dtype=np.float64)
+    weighted = np.zeros((len(T), len(wav_grid)))
+    total = np.zeros_like(weighted)
+    for tile in pretrained_mol['tiles']:
+        point_weight = (_tile_axis_weight(T, tile['T_range']) *
+                        _tile_axis_weight(logN, tile['logN_range']))
+        wav_weight = _tile_axis_weight(wav_grid, tile['wav_range'])
+        active = point_weight > 0
+        if not np.any(active) or not np.any(wav_weight):
+            continue
+        weight = point_weight[active, None] * wav_weight[None, :]
+        weighted[active] += weight * _single_model_flux_batch(
+            tile['model'], np.asarray(T)[active], np.asarray(logN)[active], wav_grid)
+        total[active] += weight
+    out = np.zeros_like(weighted)
+    covered = total > 0
+    out[covered] = weighted[covered] / total[covered]
+    return out
 
 
 def _tile_axis_weight(values, bounds):
@@ -370,6 +435,11 @@ def _refine_scaled(objective, initial, bounds, loss_scale):
     return result
 
 
+def _warn_deprecated(old, replacement):
+    warnings.warn(f'{old} is deprecated since 2.3.0 and will be removed in a future '
+                  f'release; use {replacement} instead.', FutureWarning, stacklevel=3)
+
+
 def fit_nested(
     obs_wav,
     obs_flux,
@@ -384,97 +454,26 @@ def fit_nested(
     seed=None,
 ):
     """
-    Retrieve (T, logN, A) with scaled nonlinear optimization and analytic area.
+    Deprecated single-molecule fit; use ``fit_molecules`` instead.
 
-    Outer loop: scaled L-BFGS-B over (T, logN), followed by Nelder-Mead.
-    Inner loop: exact one-component bounded least squares solves for A ≥ 0.
-
-    Args:
-        obs_wav (np.ndarray): observed wavelength axis in µm
-        obs_flux (np.ndarray): observed flux in Jy
-        mol (str): molecule name, e.g. 'H2O', 'C2H2'
-        pretrained (dict): output of load_models
-        fit_ranges: (lo, hi) or [(lo1,hi1), (lo2,hi2)] µm
-        T_bounds (tuple or None): (T_min, T_max) K (default (200, 1400))
-        logN_bounds (tuple or None): (logN_min, logN_max) (default (14, 19))
-        loga_bounds (tuple or None): (log10A_min, log10A_max) (default None = no upper limit)
-        n_restarts (int): number of random L-BFGS-B restarts (default 20)
-        n_top (int): if > 1, include top-n restart solutions in 'top_list'
-        seed (int or None): random seed
-
-    Returns:
-        (dict) with keys:
-            'params'     : {'T', 'logN', 'A'} — best-fit parameters
-            'model_flux' : np.ndarray on obs_wav — model spectrum
-            'residual'   : np.ndarray on obs_wav — obs_flux minus model_flux
-            'top_list'   : list of dicts (only present when n_top > 1)
+    Calls ``fit_molecules`` with ``errorbars=False`` and returns the older
+    flat result: ``params`` holds ``T``, ``logN``, and ``A`` directly, and
+    ``top_list`` (when ``n_top > 1``) holds flat rank/mse_loss/T/logN/A rows.
+    ``n_restarts`` sets the number of local refinements.
     """
-    obs_wav  = np.asarray(obs_wav,  dtype=np.float64)
-    obs_flux = np.asarray(obs_flux, dtype=np.float64)
-
-    if T_bounds is None:
-        T_bounds = _model_bank_bounds(
-            pretrained[mol], 'T_ranges', _DEFAULT_T_BOUNDS
-        )
-    if logN_bounds is None:
-        logN_bounds = _model_bank_bounds(
-            pretrained[mol], 'logN_ranges', _DEFAULT_LOGN_BOUNDS
-        )
-
-    if loga_bounds is not None:
-        _A_lo = 10.0 ** loga_bounds[0]
-        _A_hi = 10.0 ** loga_bounds[1]
-    else:
-        _A_lo, _A_hi = 0.0, np.inf
-
-    rng = np.random.default_rng(seed)
-
-    fit_mask = _wav_mask(obs_wav, fit_ranges) & np.isfinite(obs_flux)
-    wav_fit  = obs_wav[fit_mask]
-    obs_fit  = obs_flux[fit_mask]
-    if len(wav_fit) == 0:
-        raise ValueError('fit_ranges select zero observed wavelength pixels')
-    _check_bank_wavelength_coverage(pretrained[mol], wav_fit)
-
-    def _nnls_step(x0):
-        spec = _mol_flux_on_wav(pretrained[mol], x0[0], x0[1], 1.0, wav_fit)
-        # One linear component has an exact bounded least-squares solution.
-        # Scaling avoids absolute NNLS tolerances on very faint spectra.
-        spec_scale = max(float(np.max(np.abs(spec))), np.finfo(float).tiny)
-        s = spec / spec_scale
-        denom = float(np.dot(s, s))
-        A = float(np.clip(np.dot(s, obs_fit) / denom / spec_scale, _A_lo, _A_hi)) if denom > 0 else _A_lo
-        resid = obs_fit - spec * A
-        return float(np.sum(resid ** 2)), A
-
-    bounds  = [T_bounds, logN_bounds]
-    all_res = []
-    for _ in range(n_restarts):
-        x0 = np.array([rng.uniform(*T_bounds), rng.uniform(*logN_bounds)])
-        opt = _refine_scaled(
-            lambda p: _nnls_step(p)[0], x0, bounds, np.dot(obs_fit, obs_fit))
-        loss, A = _nnls_step(opt.x)
-        all_res.append((loss, opt.x.copy(), A))
-    all_res.sort(key=lambda t: t[0])
-
-    _, best_x, best_A = all_res[0]
-    params     = {'T': float(best_x[0]), 'logN': float(best_x[1]), 'A': float(best_A)}
-    model_flux = _mol_flux_on_wav(pretrained[mol], params['T'], params['logN'],
-                                   params['A'], obs_wav)
-    result = {
-        'mol':        mol,
-        'params':     params,
-        'model_flux': model_flux,
-        'residual':   obs_flux - model_flux,
-    }
+    _warn_deprecated('fit_nested', "fit_molecules(..., errorbars=False)")
+    fit = fit_molecules(
+        obs_wav, obs_flux, mol, pretrained, fit_ranges,
+        T_bounds=T_bounds, logN_bounds=logN_bounds, loga_bounds=loga_bounds,
+        n_refine=n_restarts, n_top=max(int(n_top), 1), seed=seed,
+        verbose=False, errorbars=False,
+    )
+    flat = lambda p: {key: float(p[mol][key]) for key in ('T', 'logN', 'A')}
+    result = {'mol': mol, 'params': flat(fit['params']),
+              'model_flux': fit['model_flux'], 'residual': fit['residual']}
     if n_top > 1:
-        top_list = []
-        for rank, (loss, x, A) in enumerate(all_res[:n_top]):
-            top_list.append({
-                'rank': rank + 1, 'mse_loss': loss,
-                'T': float(x[0]), 'logN': float(x[1]), 'A': float(A),
-            })
-        result['top_list'] = top_list
+        result['top_list'] = [{'rank': item['rank'], 'mse_loss': item['mse_loss'],
+                               **flat(item['params'])} for item in fit['top_list']]
     return result
 
 
@@ -809,6 +808,8 @@ def fit_molecules(
     isotopologue_groups=None,
     Tshare=None,
     Ashare=None,
+    n_mcmc=None,
+    errorbars=True,
 ):
     """
     Fit one or more selected molecules with global screening + local optimisation.
@@ -837,7 +838,9 @@ def fit_molecules(
             molecule names or component labels.
         loga_bounds (tuple, dict, or None): bounds on log10(A), optionally
             keyed by component label or molecule. None means A >= 0 with no
-            upper bound. Shared-area groups use the intersection of bounds.
+            upper bound during optimization; posterior sampling then uses
+            log10(A) in [-6, 6], widened to cover the best fit by 4 dex.
+            Shared-area groups use the intersection of bounds.
         shared_area_groups (list of sequences or None): component labels whose
             emitting areas must be equal, e.g. [('C2H2', '13C12CH2')]. Each
             component may appear in at most one group. Unlisted components
@@ -854,9 +857,9 @@ def fit_molecules(
         n_top (int): number of ranked refined solutions to return.
         distinct_min_distance (float): normalized distance used to avoid
             refining many nearly identical global candidates.
-        sigma (float or None): optional noise std in Jy.  If provided,
-            top-solution uncertainties are likelihood-weighted by SSE.  If
-            None, unweighted top-solution percentiles are returned.
+        sigma (float or None): optional per-pixel noise std in Jy for the MCMC
+            error-bar likelihood (see diskmelts.uncertainty).  If None, the
+            best-fit residual RMS is used.
         seed (int or None): random seed.
         verbose (bool): print progress and best losses.
         T_prior (dict or None): Gaussian prior on temperature for each
@@ -897,7 +900,16 @@ def fit_molecules(
             'isotopologue_groups', 'Tshare', 'Ashare': group constraints used.
             'top_list'         : ranked refined solutions.
             'global_top'       : best unrefined global candidates.
-            'uncertainty'      : label -> parameter percentile summary.
+            'uncertainty'      : label -> {'T', 'logN', 'log10A'} -> posterior 'q16', 'q50', 'q84', 'minus', 'plus', 'best', 'at_bound' (see diskmelts.uncertainty).
+            'uncertainty_info' : sampler and noise diagnostics.
+            'solution_spread'  : spread of the top optimizer solutions; a multimodality diagnostic, not an error bar.
+
+    ``errorbars`` (default True) samples the posterior with emcee to give
+    error bars. Set it to False to return only the best fit: 'uncertainty'
+    is then empty and the saved and printed values are best fits.
+    ``n_mcmc`` sets the starting number of posterior likelihood evaluations,
+    shared by the ensemble walkers (half are burn-in; default 300000 or
+    ``DISKMELTS_N_MCMC``).
     """
     if h2o_components not in (1, 2):
         raise ValueError('h2o_components must be 1 or 2')
@@ -1143,7 +1155,115 @@ def fit_molecules(
     top_list = [_decode_solution(sol, rank=i + 1) for i, sol in enumerate(top_refined)]
     global_top = [_decode_solution(sol, rank=i + 1)
                   for i, sol in enumerate(global_candidates[:n_top])]
-    uncertainty = _top_list_uncertainty(top_list, sigma=sigma)
+    solution_spread = _top_list_uncertainty(top_list, sigma=sigma)
+
+    uncertainty, uncertainty_info = {}, {'method': 'none'}
+    n_mcmc = default_mcmc_steps(n_mcmc)
+    if errorbars and n_mcmc > 0:
+        # Sample the free nonlinear coordinates plus one log10 area per area
+        # group around the best fit.
+        n_groups = len(area_group_members)
+        best_A = np.array([best['A'][members[0]] for members in area_group_members])
+        log_lower, log_upper, log_best = [], [], []
+        for g in range(n_groups):
+            start = np.log10(max(best_A[g], 1e-30))
+            # For an unbounded optimization, use a stable posterior domain;
+            # centering it on a zero-area optimum hides nondetections.
+            lo = np.log10(area_lower[g]) if area_lower[g] > 0 else min(-6.0, start - 4.0)
+            hi = np.log10(area_upper[g]) if np.isfinite(area_upper[g]) else max(6.0, start + 4.0)
+            log_lower.append(lo)
+            log_upper.append(hi)
+            log_best.append(float(np.clip(start, lo, hi)))
+        _, A_best_all, M_best = _penalized_loss(best['x'])
+        sigma_like, uncertainty_info = likelihood_sigma(
+            obs_fit - M_best @ A_best_all, sigma, n_params=n_dim + n_groups,
+            flux_scale=np.max(np.abs(obs_fit)),
+        )
+
+        def _residual(z):
+            physical = _physical_params(z[:n_dim])
+            if not _is_ordered_water(physical, components):
+                return np.array([np.inf])
+            M = _matrix_for(physical)
+            M_group = np.column_stack([M[:, members].sum(axis=1)
+                                       for members in area_group_members])
+            return (obs_fit - M_group @ (10.0 ** z[n_dim:])) / sigma_like
+
+        def _residual_batch(Z):
+            physical = np.array([_physical_params(z[:n_dim]) for z in Z])
+            ordered = np.array([_is_ordered_water(p, components) for p in physical])
+            R = np.full((len(Z), len(obs_fit)), np.inf)
+            if not np.any(ordered):
+                return R
+            P, areas = physical[ordered], 10.0 ** Z[ordered, n_dim:]
+            model = np.zeros((len(P), len(obs_fit)))
+            for g, members in enumerate(area_group_members):
+                for i in members:
+                    model += areas[:, g, None] * _mol_flux_batch(
+                        pretrained[components[i]['model_mol']],
+                        P[:, 2 * i], P[:, 2 * i + 1], wav_fit,
+                    )
+            R[ordered] = (obs_fit - model) / sigma_like
+            return R
+
+        # Batch evaluation needs real checkpoints (tests may stub the models).
+        batchable = all('net_shape' in pretrained[c['model_mol']] or
+                        pretrained[c['model_mol']].get('is_model_bank', False)
+                        for c in components)
+        prior = None
+        if _prior_scale > 0:
+            prior = lambda z: -0.5 * _prior_penalty(z[:n_dim])
+        less_members = [(i, main) for i, (main, mode) in layout['group_for'].items()
+                        if i != main and mode == 'less']
+        if less_members:
+            base_prior = prior
+            def physical_prior(z):
+                physical = _physical_params(z[:n_dim])
+                correction = 0.0 if base_prior is None else base_prior(z)
+                for i, main in less_members:
+                    lo, hi = component_bounds[i][0]
+                    width = min(hi, physical[2 * main]) - lo
+                    if width < 0:
+                        return -np.inf
+                    # A main temperature exactly on the rare lower bound is a
+                    # legal optimum; floor the width so it stays finite.
+                    correction += np.log(max(width, 1e-9 * (hi - lo)))
+                return correction
+            prior = physical_prior
+        lower = np.array([b[0] for b in nonlinear_bounds] + log_lower)
+        upper = np.array([b[1] for b in nonlinear_bounds] + log_upper)
+        samples, sampler_info = sample_posterior(
+            _residual, np.concatenate([best['x'], log_best]), lower, upper,
+            n_steps=n_mcmc, seed=seed, extra_log_prob=prior,
+            batch_residual_fn=_residual_batch if batchable else None,
+        )
+        uncertainty_info.update(sampler_info, method='mcmc')
+        physical = np.array([_physical_params(z[:n_dim]) for z in samples])
+        for i, comp in enumerate(components):
+            label = comp['label']
+            g = next(k for k, members in enumerate(area_group_members) if i in members)
+            p = best_params[label]
+            uncertainty[label] = {
+                'T': summarize_parameter(physical[:, 2 * i], p['T'], component_bounds[i][0]),
+                'logN': summarize_parameter(physical[:, 2 * i + 1], p['logN'],
+                                            component_bounds[i][1]),
+                'log10A': summarize_parameter(samples[:, n_dim + g], p['log10A'],
+                                              (log_lower[g], log_upper[g])),
+                # N and A are strongly correlated, so their product is summarized
+                # from the samples rather than combined in quadrature.
+                'logNA': summarize_parameter(physical[:, 2 * i + 1] + samples[:, n_dim + g],
+                                             p['logN'] + p['log10A']),
+            }
+        if verbose:
+            print(f"  MCMC: {sampler_info['n_steps']} steps, acceptance "
+                  f"{sampler_info['acceptance']:.2f}, R-hat {sampler_info['r_hat_max']:.3f}, "
+                  f"noise correlation length {uncertainty_info['correlation_length']:.1f} px")
+        if not sampler_info['converged']:
+            warnings.warn(
+                f"MCMC for {', '.join(c['label'] for c in components)} has not converged "
+                f"(R-hat {sampler_info['r_hat_max']:.2f}) after {sampler_info['n_steps']} "
+                f"likelihood evaluations; increase n_mcmc", stacklevel=2,
+            )
 
     if verbose:
         print(f'  best SSE={best["loss"]:.6g}')
@@ -1166,6 +1286,8 @@ def fit_molecules(
         'top_list': top_list,
         'global_top': global_top,
         'uncertainty': uncertainty,
+        'uncertainty_info': uncertainty_info,
+        'solution_spread': solution_spread,
     }
 
 
@@ -1193,9 +1315,81 @@ def load_observed_spectrum(path, skiprows=1, delimiter=',', wav_col=0, flux_col=
     return wav[valid], flux[valid]
 
 
+# Continuum-free wavelength windows (µm) used to estimate the flux noise.
+LINE_FREE_WINDOWS = ((11.45, 11.55), (13.10, 13.20), (15.65, 15.72), (15.90, 15.91))
+
+
+def _read_observation(input_path=None, obs_wav=None, obs_flux=None, obs_err=None, *,
+                      name=None, skiprows=1, delimiter=',', wav_col=0, flux_col=1):
+    """Return ``(wav, flux, err, source_name)`` from a CSV path or from arrays.
+
+    Exactly one input is allowed: ``input_path`` (read with
+    ``load_observed_spectrum``) or ``obs_wav``/``obs_flux`` with optional
+    ``obs_err``. Array pixels with nonfinite wavelength or flux are dropped.
+    """
+    array_input = obs_wav is not None or obs_flux is not None or obs_err is not None
+    if input_path is not None and array_input:
+        raise ValueError('pass either input_path or obs_wav/obs_flux/obs_err, not both')
+    if input_path is not None:
+        input_path = Path(input_path)
+        if not input_path.is_file():
+            raise FileNotFoundError(f'Observed spectrum does not exist: {input_path}')
+        wav, flux = load_observed_spectrum(
+            input_path, skiprows=skiprows, delimiter=delimiter,
+            wav_col=wav_col, flux_col=flux_col,
+        )
+        return wav, flux, None, name or input_path.stem
+    if obs_wav is None or obs_flux is None:
+        raise ValueError('obs_wav and obs_flux are required without input_path')
+    wav = np.asarray(obs_wav, dtype=float)
+    flux = np.asarray(obs_flux, dtype=float)
+    if wav.ndim != 1 or flux.ndim != 1 or wav.shape != flux.shape or wav.size == 0:
+        raise ValueError('obs_wav and obs_flux must be nonempty, matching 1D arrays')
+    err = None
+    if obs_err is not None:
+        err = np.asarray(obs_err, dtype=float)
+        if err.shape != wav.shape:
+            raise ValueError('obs_err must match obs_wav and obs_flux')
+    valid = np.isfinite(wav) & np.isfinite(flux)
+    wav, flux = wav[valid], flux[valid]
+    if err is not None:
+        err = err[valid]
+    if wav.size == 0 or np.any(np.diff(wav) <= 0):
+        raise ValueError('usable obs_wav values must be increasing and unique')
+    return wav, flux, err, name or 'spectrum'
+
+
+def _estimate_noise(obs_wav, obs_flux, obs_err=None, line_free_windows=LINE_FREE_WINDOWS,
+                    verbose=False):
+    """One flux-noise value: the median of ``obs_err`` if given, else the
+    scatter in ``line_free_windows``; None when neither is available."""
+    if obs_err is not None:
+        usable = obs_err[np.isfinite(obs_err) & (obs_err > 0)]
+        if usable.size == 0:
+            raise ValueError('obs_err must contain a positive finite value')
+        sigma = float(np.median(usable))
+        if verbose:
+            print(f'Using median supplied error σ = {sigma:.5f} Jy')
+        return sigma
+    chunks = [obs_flux[(obs_wav >= lo) & (obs_wav <= hi)]
+              for lo, hi in (line_free_windows or ())
+              if np.any((obs_wav >= lo) & (obs_wav <= hi))]
+    if not chunks:
+        return None
+    sample = np.concatenate(chunks)
+    sigma = float(np.nanstd(sample))
+    if verbose:
+        print(f'Estimated σ = {sigma:.5f} Jy ({len(sample)} line-free pixels)')
+    return sigma
+
+
 def save_fit_outputs(result, output_dir, output_prefix):
     """
-    Save fitted spectrum, best parameters, and top solutions to CSV files.
+    Save the fitted spectrum, fitted parameters, and top solutions to CSV files.
+
+    In the parameter file, ``T``, ``logN``, ``log10A``, ``A``, and ``logNA``
+    (log10 N*A) are posterior medians when error bars were computed and best
+    fits otherwise; the best fits are always in the ``*_best`` columns.
 
     Args:
         result (dict): result returned by fit_molecules, with obs_wav/obs_flux
@@ -1225,20 +1419,30 @@ def save_fit_outputs(result, output_dir, output_prefix):
         u_T = u.get('T', {})
         u_logN = u.get('logN', {})
         u_log10A = u.get('log10A', {})
-        param_rows.append({
-            'component': label,
-            'model_mol': p['model_mol'],
-            'T': p['T'],
-            'T_minus': u_T.get('minus', np.nan),
-            'T_plus': u_T.get('plus', np.nan),
-            'logN': p['logN'],
-            'logN_minus': u_logN.get('minus', np.nan),
-            'logN_plus': u_logN.get('plus', np.nan),
-            'A': p['A'],
-            'log10A': p['log10A'],
-            'log10A_minus': u_log10A.get('minus', np.nan),
-            'log10A_plus': u_log10A.get('plus', np.nan),
-        })
+        row = {'component': label, 'model_mol': p['model_mol']}
+        p = dict(p, logNA=p['logN'] + p['log10A'])
+        for key, u_key in (('T', u_T), ('logN', u_logN), ('log10A', u_log10A),
+                           ('logNA', u.get('logNA', {}))):
+            # Reported value: posterior median; the best fit is kept as *_best.
+            value = u_key.get('q50', np.nan)
+            value = value if np.isfinite(value) else p[key]
+            if key == 'log10A':
+                row['A'] = 10.0 ** value
+                row['A_best'] = p['A']
+            row[key] = value
+            row[f'{key}_best'] = p[key]
+            row[f'{key}_minus'] = u_key.get('minus', np.nan)
+            row[f'{key}_plus'] = u_key.get('plus', np.nan)
+            row[f'{key}_q16'] = u_key.get('q16', np.nan)
+            row[f'{key}_q50'] = u_key.get('q50', np.nan)
+            row[f'{key}_q84'] = u_key.get('q84', np.nan)
+            row[f'{key}_at_bound'] = bool(u_key.get('at_bound', False))
+        info = result.get('uncertainty_info', {})
+        row['uncertainty_method'] = info.get('method', 'none')
+        row['noise_correlation_length'] = info.get('correlation_length', np.nan)
+        row['mcmc_r_hat'] = info.get('r_hat_max', np.nan)
+        row['sigma_likelihood'] = info.get('sigma_likelihood', np.nan)
+        param_rows.append(row)
     params_path = os.path.join(output_dir, f'{output_prefix}_fit_params.csv')
     pd.DataFrame(param_rows).to_csv(params_path, index=False)
 
@@ -1338,7 +1542,10 @@ def _screened_group_options(stage, detected, build_components=None):
     shares = stage.get('Ashare') or [None] * len(groups)
     kept = [(tuple(label for label in group if label in kept_labels), mode, share)
             for group, mode, share in zip(groups, modes, shares)]
-    kept = [item for item in kept if len(item[0]) >= 2]
+    # Ties are relative to each group's main species, so a group whose main
+    # species was screened out is dropped rather than re-anchored.
+    kept = [item for item, group in zip(kept, groups)
+            if len(item[0]) >= 2 and item[0][0] == group[0]]
     options['isotopologue_groups'] = [group for group, _, _ in kept] or None
     options['Tshare'] = ([mode for _, mode, _ in kept]
                          if stage.get('Tshare') is not None and kept else None)
@@ -1373,30 +1580,34 @@ def save_running_spectrum(obs_wav, residual, cumulative_model, output_dir, prefi
 
 def print_fit_params(fit):
     """
-    Print best-fit parameters with ± uncertainties for all components in a fit result.
+    Print posterior medians with 16-84% error bars, and each best fit.
 
     Args:
         fit (dict): result dict returned by fit_molecules.
     """
+    def _fmt(best, u, digits):
+        if not np.isfinite(u.get('q50', np.nan)):
+            return f'{best:.{digits}f}'
+        mark = '*' if u.get('at_bound') else ''
+        return (f'{u["q50"]:.{digits}f} (+{u["plus"]:.{digits}f}/'
+                f'-{u["minus"]:.{digits}f}){mark} [best {best:.{digits}f}]')
+
+    flagged = False
     for label, p in fit['params'].items():
-        u        = fit.get('uncertainty', {}).get(label, {})
-        u_T      = u.get('T',      {})
-        u_logN   = u.get('logN',   {})
-        u_log10A = u.get('log10A', {})
-        print(
-            f'    {label:14s} '
-            f'T={p["T"]:.1f} (+{u_T.get("plus", float("nan")):.1f}/'
-            f'-{u_T.get("minus", float("nan")):.1f}) K  '
-            f'logN={p["logN"]:.3f} (+{u_logN.get("plus", float("nan")):.3f}/'
-            f'-{u_logN.get("minus", float("nan")):.3f})  '
-            f'log10A={p["log10A"]:.3f} (+{u_log10A.get("plus", float("nan")):.3f}/'
-            f'-{u_log10A.get("minus", float("nan")):.3f})'
-        )
+        u = fit.get('uncertainty', {}).get(label, {})
+        flagged |= any(u.get(key, {}).get('at_bound') for key in ('T', 'logN', 'log10A'))
+        print(f'    {label:14s} T={_fmt(p["T"], u.get("T", {}), 1)} K  '
+              f'logN={_fmt(p["logN"], u.get("logN", {}), 3)}  '
+              f'log10A={_fmt(p["log10A"], u.get("log10A", {}), 3)}')
+    if flagged:
+        print('    * the 16-84% range or the best fit reaches a fit bound; widen the '
+              'bound or treat the value as a limit.')
 
 
 def save_fitted_comparison(csv_path, source_name, all_fits):
     """
-    Upsert one row of best-fit parameters into a comparison CSV.
+    Upsert one row of fitted parameters (posterior medians when sampled,
+    otherwise best fits) into a comparison CSV.
 
     The CSV schema matches Parameter_Comparison.csv (log10 units for N and A,
     K for T).  If the file does not exist it is created.  If *source_name* is
@@ -1417,7 +1628,9 @@ def save_fitted_comparison(csv_path, source_name, all_fits):
     def _v(comp, key):
         if comp not in all_params:
             return np.nan
-        return round(all_params[comp][key], 4)
+        # Posterior median when sampled, matching the saved error bars.
+        value = all_unc.get(comp, {}).get(key, {}).get('q50', all_params[comp][key])
+        return round(value, 4)
 
     def _e(comp, key, which):
         if comp not in all_unc:

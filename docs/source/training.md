@@ -13,6 +13,66 @@ The training notebook loads a bundled checkpoint from any folder after
 change it to the folder holding your downloaded training script and slab
 grids before enabling training. No repository marker search is required.
 
+(bundled-checkpoints-2-3-0)=
+## Bundled checkpoints in 2.3.0
+
+All 46 bundled checkpoints now share one training recipe:
+`peak_normalization='window'`, `shape_loss='spectral'`,
+`temperature_transform='log10'`, `scheduler_patience=100`, and `min_lr=1e-6`
+(see {ref}`training-recipe`). In 2.3.0, 26 checkpoints that had
+been trained with the older standardized/CSV-peak/linear-temperature settings
+were retrained: 13C12CH2, 13CO2, C2H2 (11.5–17 µm), C2H4, C2H6, C2HD, C4H2,
+CH4, CO17O, CO18O, CO2, HC3N, and HCN, at both sigma values. Their wavelength
+windows, T/logN domains, network sizes, and PCA dimensions are unchanged.
+The other 20 checkpoints already used this recipe and are unchanged.
+
+The table summarizes held-out accuracy on noiseless grid spectra that were
+never used in training. Shape RMSE is the median over 100 held-out spectra,
+after normalizing prediction and truth to their own peaks. T and logN RMSE are
+from T/logN retrieval at known area on 40 further held-out spectra (27 for
+C6H6), using 64 optimizer starts. The last column gives the 2.2.2 checkpoint's
+T RMSE on the same spectra for retrained models.
+
+| Checkpoint | Retrained in 2.3.0 | Shape RMSE σ0 / σ2 | T RMSE (K) σ0 / σ2 | logN RMSE (dex) σ0 / σ2 | 2.2.2 T RMSE σ0 / σ2 |
+| --- | :---: | ---: | ---: | ---: | ---: |
+| 13C12CH2 | yes | 0.027% / 0.030% | 2.1 / 3.3 | 0.006 / 0.014 | 13.4 / 16.6 |
+| 13CO2 | yes | 0.033% / 0.026% | 2.8 / 3.4 | 0.014 / 0.038 | 11.2 / 14.3 |
+| C2H2 (11.5–17 µm) | yes | 0.031% / 0.042% | 2.5 / 4.0 | 0.014 / 0.016 | 9.7 / 13.5 |
+| C2H2 (6–9 µm) |  | 0.078% / 0.053% | 3.0 / 3.3 | 0.015 / 0.041 | — |
+| C2H4 | yes | 0.019% / 0.014% | 23.9 / 17.1 | 0.042 / 0.038 | 18.9 / 21.6 |
+| C2H6 | yes | 0.012% / 0.012% | 7.7 / 6.2 | 0.045 / 0.027 | 13.7 / 10.9 |
+| C2HD | yes | 0.025% / 0.021% | 5.5 / 2.5 | 0.040 / 0.005 | 16.7 / 16.2 |
+| C3H4 |  | 0.255% / 0.246% | 10.7 / 11.1 | 0.026 / 0.024 | — |
+| C4H2 | yes | 0.019% / 0.029% | 11.4 / 12.0 | 0.025 / 0.026 | 20.9 / 26.7 |
+| C6H6 |  | 0.027% / 0.033% | 5.7 / 3.5 | 0.029 / 0.024 | — |
+| CH3 |  | 0.157% / 0.134% | 3.1 / 2.4 | 0.007 / 0.006 | — |
+| CH4 | yes | 0.022% / 0.015% | 7.1 / 4.7 | 0.045 / 0.068 | 9.2 / 12.3 |
+| CO17O | yes | 0.032% / 0.031% | 2.9 / 3.3 | 0.010 / 0.017 | 14.9 / 18.1 |
+| CO18O | yes | 0.032% / 0.029% | 2.6 / 4.0 | 0.012 / 0.031 | 9.7 / 16.4 |
+| CO2 | yes | 0.040% / 0.028% | 2.1 / 2.5 | 0.009 / 0.030 | 12.9 / 19.8 |
+| H2O 13.5–19.2 |  | 0.096% / 0.065% | 2.9 / 6.2 | 0.042 / 0.062 | — |
+| H2O 19–25 |  | 0.658% / 0.609% | 2.8 / 3.2 | 0.027 / 0.020 | — |
+| H2O 4.9–7.4 |  | 0.089% / 0.047% | 2.8 / 1.5 | 0.032 / 0.022 | — |
+| H2O 7.2–11.2 |  | 0.074% / 0.061% | 5.9 / 7.0 | 0.054 / 0.079 | — |
+| H2O 9.9–15.1 |  | 0.081% / 0.076% | 5.8 / 5.8 | 0.064 / 0.062 | — |
+| HC3N | yes | 0.025% / 0.027% | 14.2 / 13.4 | 0.022 / 0.021 | 21.5 / 30.1 |
+| HCN | yes | 0.039% / 0.031% | 2.1 / 2.1 | 0.010 / 0.035 | 15.1 / 17.7 |
+| OH |  | 0.041% / 0.033% | 6.8 / 6.8 | 0.024 / 0.029 | — |
+
+The retrained models reduce median shape error by 3–8x and median peak-flux
+error by 2–5x. C2H4 at sigma=0 is the one case where T RMSE rose
+(18.9 to 23.9 K), driven by a few spectra; its median T error fell from
+11.1 to 4.1 K.
+
+All models, old and new, are least accurate in the cold, saturated corner
+(T ≤ 400 K with logN ≥ 18.5) and for very faint cold spectra (logN ≤ 13.5).
+There, logN RMSE is 0.08–0.19 dex, and single errors reach about 0.4 dex.
+Wider networks (128-256-128), longer training, and 50 PCA components did
+not reduce these errors. When lines saturate, the peak flux barely changes
+with column density, so treat logN in that regime with caution. The MCMC
+error bars from fitting widen accordingly. These are surrogate tests, not
+error budgets for observed spectra.
+
 ## Local-only data
 
 The following local directories are intentionally ignored by Git:
@@ -79,6 +139,12 @@ python examples/train_band_checkpoint.py C3H4 15 18 --sigma 2 --pca-candidates 1
 python examples/train_band_checkpoint.py CH3 15 18 --sigma 2 --pca-candidates 10 15 20 25 30 50 75 --validate-retrieval
 python examples/train_band_checkpoint.py OH 15 26 --sigma 2 --pca-candidates 10 15 20 25 30 50 75 --validate-retrieval
 python examples/train_band_checkpoint.py C6H6 13 17 --t-min 100 --t-max 675 --sigma 2 --pca-candidates 10 15 20 25 30 --validate-retrieval
+```
+
+```{note}
+The reconstruction and retrieval numbers below were measured for the
+2.2.x checkpoints. For the 26 checkpoints retrained in 2.3.0, see
+{ref}`bundled-checkpoints-2-3-0`.
 ```
 
 The first eleven additional models held out 281 of 2,809 in domain spectra.
@@ -334,7 +400,15 @@ rejects reuse of a checkpoint made from the old grid. Choose a new checkpoint
 path for retraining after such a change.
 Checkpoints can be loaded later with only `model_paths`.
 
-## Water normalization and optimization
+(training-recipe)=
+## Training recipe
+
+These settings were introduced for the corrected water bank and are now used
+for every bundled checkpoint. `examples/dev_v2_pt_validation.py` and
+`examples/train_band_checkpoint.py` apply them. The library defaults of
+`pretrain_forward_model` (`'csv'`, `'standardized'`, `'linear'`,
+`scheduler_patience=10`, `min_lr=0`) are unchanged for backward compatibility,
+so pass the settings explicitly when training your own models.
 
 The corrected water workflow writes a separate bank under
 `Trained_model/H2O_wavelength_bank_v2_fixed/`, preserving the previous bank.
