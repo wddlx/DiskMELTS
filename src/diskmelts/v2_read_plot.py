@@ -27,11 +27,38 @@ def _ranges(value, active_molecules=None):
     return [tuple(map(float, pair)) for pair in value]
 
 
-def _same_array(actual, expected, description):
-    if actual.shape != expected.shape or not np.allclose(
-        actual, expected, rtol=1e-7, atol=1e-12, equal_nan=True,
-    ):
-        raise ValueError(f'{description} disagrees with the saved fitting sequence')
+INPUT_MISMATCH_HINT = (
+    'The spectrum given to plot_saved_observation is not the one the CSVs in '
+    'result_dir were fitted on. Either result_dir holds results from an earlier '
+    'fit with the same name, or the input arrays changed after fitting. Re-run '
+    "the fit, pass the arrays the fit returned (result['obs_wav'], "
+    "result['obs_flux']), or omit the spectrum to plot the saved one."
+)
+
+
+def _same_array(actual, expected, description, hint=None):
+    if actual.shape != expected.shape:
+        detail = f'{actual.size} saved vs {expected.size} given pixels'
+    elif not np.allclose(actual, expected, rtol=1e-7, atol=1e-12, equal_nan=True):
+        detail = f'max |difference| = {np.nanmax(np.abs(actual - expected)):.3g}'
+    else:
+        return
+    message = f'{description} disagrees with the saved fitting sequence ({detail})'
+    raise ValueError(f'{message}. {hint}' if hint else message)
+
+
+def _saved_observation(result_dir, source_name, stages):
+    """Observed wavelength and flux saved by the first stage with results."""
+    for stage in stages:
+        path = Path(result_dir) / f"{source_name}_{stage['name']}_fit_spectrum.csv"
+        if path.is_file():
+            spectrum = pd.read_csv(path)
+            return (spectrum['wave'].to_numpy(dtype=float),
+                    spectrum['flux'].to_numpy(dtype=float))
+    raise FileNotFoundError(
+        f'No saved stage spectrum for {source_name!r} in {result_dir}; '
+        'check name and result_dir, or pass input_path or obs_wav/obs_flux'
+    )
 
 
 def read_stage_result(result_dir, source_name, stage_name):
@@ -114,10 +141,19 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
                            obs_wav=None, obs_flux=None):
     """Read saved stage CSVs, validate their sequence, and plot the fits.
 
-    Give the observed spectrum the same way it was given to the fit: a CSV
-    ``input_path``, or ``obs_wav``/``obs_flux`` arrays (for example
-    ``result['obs_wav']`` and ``result['obs_flux']`` from ``fit_observation``).
-    ``result_dir`` and ``stages`` are the fit's ``output_dir`` and stage list.
+    The observed spectrum can be given in three ways:
+
+    - the same CSV ``input_path`` that was fitted;
+    - the same ``obs_wav``/``obs_flux`` arrays that were fitted, ideally
+      ``result['obs_wav']`` and ``result['obs_flux']`` from the fit;
+    - nothing: the spectrum saved with the first stage's results is used.
+
+    A given spectrum is checked against the saved results, and a mismatch
+    (for example results left from an earlier fit with the same ``name``)
+    raises ``ValueError``. ``result_dir`` and ``stages`` are the fit's
+    ``output_dir`` and stage list; ``name`` is the fit's ``name`` (the saved
+    file prefix), and is required when no CSV is given unless the fit used
+    the default ``'spectrum'``.
 
     ``active_stages`` should be the names returned by a fresh fitting run. If
     omitted, stages with complete saved CSV products are plotted. This also
@@ -131,11 +167,15 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
     """
     if result_dir is None or stages is None:
         raise ValueError('result_dir and stages are required')
-    obs_wav, obs_flux, _, source_name = _read_observation(
-        input_path, obs_wav, obs_flux, name=name, skiprows=skiprows,
-        delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
-    )
     result_dir = Path(result_dir)
+    if input_path is None and obs_wav is None and obs_flux is None:
+        source_name = name or 'spectrum'
+        obs_wav, obs_flux = _saved_observation(result_dir, source_name, stages)
+    else:
+        obs_wav, obs_flux, _, source_name = _read_observation(
+            input_path, obs_wav, obs_flux, name=name, skiprows=skiprows,
+            delimiter=delimiter, wav_col=wav_col, flux_col=flux_col,
+        )
     figure_dir = Path(figure_dir) if figure_dir else result_dir / 'figures'
     if sigma_noise is None:
         sigma_noise = _estimate_noise(obs_wav, obs_flux, None, line_free_windows)
@@ -171,8 +211,12 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
         if requested is None and not Path(f'{prefix}_fit_spectrum.csv').is_file():
             continue
         fit = read_stage_result(result_dir, source_name, stage_name)
-        _same_array(fit['obs_wav'], obs_wav, f'{stage_name} observed wavelength')
-        _same_array(fit['obs_flux'], prior_residual, f'{stage_name} input flux')
+        _same_array(fit['obs_wav'], obs_wav, f'{stage_name} observed wavelength',
+                    INPUT_MISMATCH_HINT)
+        _same_array(fit['obs_flux'], prior_residual, f'{stage_name} input flux',
+                    INPUT_MISMATCH_HINT if not fits else
+                    'The saved stages come from different fitting runs; '
+                    're-run the full fit.')
         prior_residual = fit['residual']
         cumulative += fit['model_flux']
         _same_array(fit['running_cumulative'], cumulative,

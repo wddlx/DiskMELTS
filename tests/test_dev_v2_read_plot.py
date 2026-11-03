@@ -93,3 +93,32 @@ def test_saved_stage_rejects_inconsistent_running_spectrum(saved_observation, tm
     running.to_csv(running_path, index=False)
     with pytest.raises(ValueError, match='running residual'):
         read_stage_result(tmp_path, 'source', 'C2H2')
+
+
+STAGES = [{'name': 'C2H2', 'wavelength_range': (11, 13),
+           'fit_ranges': [(11, 12), (12, 13)]}]
+
+
+def test_saved_stage_plots_without_a_spectrum(saved_observation, tmp_path):
+    figures = plot_saved_observation(
+        result_dir=tmp_path, stages=STAGES, name='source',
+        line_free_windows=(), savefig=False,
+    )
+    plotted = pd.read_csv(figures['plot_data'])
+    np.testing.assert_allclose(plotted['observed_flux'], [0.12, 0.21, 0.11])
+    with pytest.raises(FileNotFoundError, match='other_source'):
+        plot_saved_observation(result_dir=tmp_path, stages=STAGES,
+                               name='other_source', savefig=False)
+
+
+def test_mismatched_arrays_explain_stale_results(saved_observation, tmp_path):
+    wav = np.array([11.0, 12.0, 13.0])
+    changed = np.array([0.12, 0.25, 0.11])  # e.g. a later continuum subtraction
+    with pytest.raises(ValueError, match=r'input flux.*0\.04.*earlier fit'):
+        plot_saved_observation(result_dir=tmp_path, stages=STAGES, name='source',
+                               obs_wav=wav, obs_flux=changed,
+                               line_free_windows=(), savefig=False)
+    with pytest.raises(ValueError, match=r'observed wavelength.*3 saved vs 2 given'):
+        plot_saved_observation(result_dir=tmp_path, stages=STAGES, name='source',
+                               obs_wav=wav[:2], obs_flux=changed[:2],
+                               line_free_windows=(), savefig=False)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.1
+
+- `plot_saved_observation` no longer needs the spectrum: if neither
+  `input_path` nor `obs_wav`/`obs_flux` is given, it plots the spectrum saved
+  with the first stage's results.
+- When a given spectrum differs from the saved results, its error now states
+  the size of the difference and the likely causes (an earlier fit with the
+  same `name` in `result_dir`, or arrays changed after fitting).
+- The fitting notebook's input variable `SOURCE` is renamed `FILEPATH`; the
+  notebook reads `OBS_WAV`/`OBS_FLUX`/`OBS_ERR` only when `FILEPATH` is `None`.
+- The docs show separate CSV, array, and replot examples and explain that
+  one set of results must be fitted and plotted from the same spectrum.
+
 ## 2.3.0
 
 ### Retrained checkpoints

@@ -231,13 +231,7 @@ pixels with nonfinite wavelength or flux are dropped, and remaining wavelengths
 must be unique and increasing. Supply either arrays or `input_path`, not
 both. Pass `stages` by keyword with arrays, because the first positional
 argument is `input_path`, and set `name` to choose the saved-file prefix.
-To plot an array-input fit, pass the same arrays to `plot_saved_observation`:
-
-```python
-plot_saved_observation(result_dir='results/my_source', stages=stages,
-                       obs_wav=result['obs_wav'], obs_flux=result['obs_flux'],
-                       name='my_source', show=True, savefig=False)
-```
+To plot an array-input fit, see {ref}`same-input-fit-plot`.
 
 The file-based version of the same workflow, with three stages:
 
@@ -245,10 +239,10 @@ The file-based version of the same workflow, with three stages:
 from pathlib import Path
 from diskmelts import fit_observation, plot_saved_observation
 
-# Set this to your own continuum-subtracted CSV, wherever you keep it.
-source = Path('my_spectrum.csv')
+# Path to your own continuum-subtracted CSV, wherever you keep it.
+filepath = Path('my_spectrum.csv')
 # Repository example only, if you downloaded its files:
-# source = Path('Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv')
+# filepath = Path('Realobs_data/Consub_data/j16120505_v9.0_contsub_RVcorr.csv')
 stages = [
     {
         'name': 'water', 'mol': 'H2O',
@@ -275,12 +269,12 @@ stages = [
 ]
 output = Path('results/my_source')
 result = fit_observation(
-    source, stages, name='my_source', output_dir=output,
+    filepath, stages, name='my_source', output_dir=output,
     distance_pc=140.0, detection_screening=False,
     n_samples=4096, n_refine=12, n_top=10, seed=42,
 )
 figures = plot_saved_observation(
-    source, output, stages, name='my_source',
+    filepath, output, stages, name='my_source',
     active_stages=result['fits'], sigma_noise=result['sigma_noise'],
     show=True, savefig=False,
 )
@@ -324,7 +318,7 @@ Each stage writes these files to `output_dir` (prefix `{name}_{stage}`):
 The returned dict has `fits` (one `fit_stage` result per stage), `residual`,
 `cumulative_model`, `sigma_noise`, `grid_sigma`, and `products` (saved paths). Adjust the stage
 wavelength windows and `distance_pc` for your observation. The shown stage
-settings follow the repository's J16120505 example; that source path is
+settings follow the repository's J16120505 example; that file path is
 commented out above. The plotter checks the
 saved subtraction sequence and creates stage and combined figures. It can be
 called later without loading checkpoints or rerunning optimization. Set
@@ -339,6 +333,54 @@ to display each stage and combined figure inline without writing PNGs.
 Set `savefig=True` to save them as well. With `savefig=False`, the returned
 entries for the figures are Matplotlib Figure objects; otherwise they are
 paths to the saved PNGs. The numeric plot-data CSV is written in either case.
+
+(same-input-fit-plot)=
+### Use the same spectrum for fitting and plotting
+
+`fit_observation`, `plot_saved_observation`, and `fit_observation_grids`
+each take the spectrum either as a CSV path (`input_path`) or as arrays
+(`obs_wav`, `obs_flux`, and `obs_err` where accepted), never both. Pick one
+form and use the same spectrum for every call on one set of results. The
+plotter checks the spectrum against the saved CSVs. If they differ, for
+example because `output_dir` still holds an earlier fit with the same `name`
+or the arrays were changed after fitting, it raises
+`ValueError: ... input flux disagrees with the saved fitting sequence`.
+
+**CSV input.** Pass the same path to every call:
+
+```python
+filepath = 'my_spectrum.csv'
+result = fit_observation(filepath, stages, name='my_source',
+                         output_dir='results/my_source')
+plot_saved_observation(filepath, 'results/my_source', stages, name='my_source',
+                       show=True, savefig=False)
+```
+
+**Array input.** Fit the arrays, then plot with the arrays the fit returns.
+`result['obs_wav']` and `result['obs_flux']` are exactly what was fitted,
+after nonfinite pixels were dropped. Do not change `wave` or `flux`, or
+rerun the continuum subtraction, between the fit and the plot; if you do,
+fit again.
+
+```python
+result = fit_observation(stages=stages, obs_wav=wave, obs_flux=flux,
+                         obs_err=error, name='my_source',
+                         output_dir='results/my_source')
+plot_saved_observation(result_dir='results/my_source', stages=stages,
+                       name='my_source',
+                       obs_wav=result['obs_wav'], obs_flux=result['obs_flux'],
+                       show=True, savefig=False)
+```
+
+**No input (replot saved results).** Leave out the spectrum, and the plotter
+uses the one saved with the first stage's results. `name` must match the
+fit's `name`. This works for either input form and does not need the
+original file or arrays.
+
+```python
+plot_saved_observation(result_dir='results/my_source', stages=stages,
+                       name='my_source', show=True, savefig=False)
+```
 
 ![Upper Sco J16120505 constrained carbon isotopologue fit](_static/examples/upper_sco_carbon_tied_fit.png)
 
@@ -420,7 +462,7 @@ Error bars are on by default. Pass `errorbars=False` to `fit_stage`,
 MCMC step, for example while exploring stage settings:
 
 ```python
-result = fit_observation(source, stages, name='my_source',
+result = fit_observation(filepath, stages, name='my_source',
                          output_dir='results/quick', errorbars=False)
 ```
 
@@ -450,11 +492,11 @@ new_stages = [
      'wavelength_range': (15.0, 18.0), 'fit_ranges': (15.7, 15.9)},
 ]
 model_fits = fit_observation(
-    source, new_stages, output_dir='results/new_models',
+    filepath, new_stages, output_dir='results/new_models',
     distance_pc=122.5, detection_screening=False,
 )
 grid_fits = fit_observation_grids(
-    source, new_stages, grid_root='Model_grids/sigma0',
+    filepath, new_stages, grid_root='Model_grids/sigma0',
     output_dir='results/new_grids', distance_pc=122.5,
     detection_screening=False,
 )
@@ -477,12 +519,12 @@ grid_stages = [
     for stage in stages
 ]
 result = fit_observation_grids(
-    source, grid_stages, name='my_source',
+    filepath, grid_stages, name='my_source',
     grid_root='Model_grids/sigma0', output_dir='results/my_source_grids',
     distance_pc=122.5,
 )
 plot_saved_observation(
-    source, 'results/my_source_grids', grid_stages, name='my_source',
+    filepath, 'results/my_source_grids', grid_stages, name='my_source',
     figure_dir='figures/my_source_grids', active_stages=result['fits'],
 )
 ```
