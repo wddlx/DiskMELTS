@@ -468,8 +468,10 @@ def fit_observation(input_path=None, stages=None, *, name=None, root=None, sigma
         are absent), ``obs_wav``, ``obs_flux``, ``obs_err`` (the filtered
         input), ``residual`` and ``cumulative_model`` after all stages,
         ``sigma_noise``, ``grid_sigma``, and ``products`` (saved file paths).
-        Pass ``obs_wav``/``obs_flux`` and ``output_dir`` to
-        ``plot_saved_observation`` to plot the result.
+        To plot the result, call ``plot_saved_observation`` with
+        ``output_dir`` and the same spectrum: the same CSV path, these
+        returned ``obs_wav``/``obs_flux`` arrays, or no spectrum at all (the
+        saved one is then used).
     """
     model_root = MODEL_ROOT if root is None else Path(root)
     model_specs = _model_specs_for_sigma(sigma)

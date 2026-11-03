@@ -24,12 +24,18 @@ light red shading where those wavelengths are omitted from fitting.
 ## 2. Fit molecular emission
 
 {doc}`Example_Fitting` fits water, carbon molecules, and CO₂ in sequence. In
-its input cell, set `SOURCE = Path('/path/to/my_spectrum.csv')` for your own
-continuum-subtracted CSV. For arrays already in memory, set `SOURCE = None`
-and `OBS_WAV, OBS_FLUX, OBS_ERR = wav, flux, err`. The repository J16120505
+its input cell, set `FILEPATH = Path('/path/to/my_spectrum.csv')` for your own
+continuum-subtracted CSV. `FILEPATH` is only the path to that file. For arrays
+already in memory, set `FILEPATH = None` and
+`OBS_WAV, OBS_FLUX, OBS_ERR = wav, flux, err`; the notebook reads these arrays
+only when `FILEPATH` is `None`, and ignores them otherwise. `NAME` is only the
+label used for saved file names and plot titles; it does not select the input.
+The fit, plot, and grid-fit cells all use the same input; see
+{ref}`same-input-fit-plot`.
+The repository J16120505
 path is commented out and labeled as an optional example. Change the stages,
 distance, and output location for your source. The array option requires
-DiskMELTS 2.2.1 or newer.
+DiskMELTS 2.3.0 or newer.
 In the carbon stage, 13C12CH2 has at most the fitted temperature of C2H2 and
 shares its emitting area. In the CO₂ stage, 13CO2 shares both values with CO₂. HCN, HC3N, and
 the column densities remain independent. The plots below were generated

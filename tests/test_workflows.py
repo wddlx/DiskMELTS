@@ -68,7 +68,7 @@ def test_fitting_notebook_accepts_standalone_paths(monkeypatch, start_dir):
     exec(_code_cell(notebook, 2), namespace)
 
     assert "BASE_DIR" not in namespace
-    assert namespace["SOURCE"] == Path('my_spectrum.csv')
+    assert namespace["FILEPATH"] == Path('my_spectrum.csv')
     assert namespace["OBS_WAV"] is None
     assert namespace["OBS_FLUX"] is None
     assert namespace["OBS_ERR"] is None
@@ -85,7 +85,7 @@ def test_fitting_notebook_config_runs_outside_checkout(monkeypatch, tmp_path):
     namespace = {}
     exec(_code_cell(notebook, 1), namespace)
     exec(_code_cell(notebook, 2), namespace)
-    assert namespace['SOURCE'] == Path('my_spectrum.csv')
+    assert namespace['FILEPATH'] == Path('my_spectrum.csv')
     assert namespace['OUTPUT_DIR'] == Path('results/my_source')
 
 
@@ -104,7 +104,7 @@ def test_fitting_notebook_selects_csv_or_arrays(monkeypatch, tmp_path, array_mod
     source = tmp_path / 'my_spectrum.csv'
     source.write_text('wav,flux\n13.8,0.1\n13.9,0.2\n')
     if array_mode:
-        namespace.update(SOURCE=None, OBS_WAV=wave, OBS_FLUX=flux,
+        namespace.update(FILEPATH=None, OBS_WAV=wave, OBS_FLUX=flux,
                          OBS_ERR=error)
     called = {}
 
