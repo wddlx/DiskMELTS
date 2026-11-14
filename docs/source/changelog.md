@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.0
 
 - A bundled catalogue of lines that DiskMELTS does not fit:
   H I recombination lines, H$_2$ and HD rotational lines, and atomic

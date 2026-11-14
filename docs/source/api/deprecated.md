@@ -1,6 +1,6 @@
 # Deprecated functions
 
-These functions still work in 2.3.0 but raise a `FutureWarning` and will be
+These functions were deprecated in 2.3.0. They still work in 2.4.0 but raise a `FutureWarning` and will be
 removed in a future release. They are no longer part of `diskmelts.__all__`.
 
 | Deprecated | Use instead | Notes |

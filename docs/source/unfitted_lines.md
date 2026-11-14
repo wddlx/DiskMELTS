@@ -6,7 +6,7 @@ recombination lines, H$_2$ and HD rotational lines, and atomic
 fine-structure lines such as [Ne II], [Ne III], [Ar II], and [Ar III]. The
 package bundles their vacuum wavelengths so you can mark them on fit plots.
 Marked lines help you read the residuals and keep `fit_ranges` clear of
-these features.
+these features. The catalogue and the OH comparison below were added in 2.4.0.
 
 ## Plot the lines with a fit
 
