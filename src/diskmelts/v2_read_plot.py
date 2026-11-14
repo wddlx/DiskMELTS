@@ -12,6 +12,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from diskmelts.fitting import LINE_FREE_WINDOWS, _estimate_noise, _read_observation
+from diskmelts.lines import check_oh_model_args
 from diskmelts.plotting import plot_fit
 
 
@@ -138,7 +139,9 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
                            line_free_windows=LINE_FREE_WINDOWS,
                            sigma_noise=None, skiprows=1, delimiter=',',
                            wav_col=0, flux_col=1, show=False, savefig=True,
-                           obs_wav=None, obs_flux=None):
+                           obs_wav=None, obs_flux=None, show_lines=False,
+                           line_species=None, oh_T=None, oh_logN=14.0,
+                           oh_sigma=0):
     """Read saved stage CSVs, validate their sequence, and plot the fits.
 
     The observed spectrum can be given in three ways:
@@ -164,9 +167,21 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
     the returned dict then contains open Figure objects for those entries
     instead of paths. Numeric plot-data CSV output is still written. Defaults
     preserve the batch behavior of saving and closing figures.
+
+    ``show_lines=True`` marks unfitted lines (H I, H2, HD, [Ne II], [Ar II],
+    ...) with gray dashed lines and their names; ``line_species`` limits the
+    marks to some species, e.g. ``['H2', 'NeII']``. See
+    ``diskmelts.load_line_list`` for the catalogue.
+
+    ``oh_T`` (K, 100-6000, one value or a list) draws LTE OH models in each
+    residual panel, scaled to the plotted residual peak and shifted by -0.4 ×
+    that peak. ``oh_sigma`` should match the fit's ``sigma`` (saved results
+    do not record it); ``oh_logN`` defaults to the optically thin 14.
     """
     if result_dir is None or stages is None:
         raise ValueError('result_dir and stages are required')
+    if oh_T is not None:
+        check_oh_model_args(oh_T, oh_logN, oh_sigma)
     result_dir = Path(result_dir)
     if input_path is None and obs_wav is None and obs_flux is None:
         source_name = name or 'spectrum'
@@ -240,6 +255,8 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
             fit_ranges=fit_ranges, wav_plot_range=wav_plot_range,
             name=f'{source_name}_{stage_name}', save_path=None,
             params=fit['params'], uncertainty=fit['uncertainty'], show=False,
+            show_lines=show_lines, line_species=line_species,
+            oh_T=oh_T, oh_logN=oh_logN, oh_sigma=oh_sigma,
         )
         figures[stage_name] = finish_figure(fig, figure_path)
 
@@ -271,6 +288,8 @@ def plot_saved_observation(input_path=None, result_dir=None, stages=None, *, nam
                             max(hi for _, hi in displayed_ranges)),
             name=source_name, save_path=None,
             params=params, uncertainty=uncertainty, show=False,
+            show_lines=show_lines, line_species=line_species,
+            oh_T=oh_T, oh_logN=oh_logN, oh_sigma=oh_sigma,
         )
         figures['combined'] = finish_figure(fig, combined_path)
         figures['plot_data'] = plot_data_path

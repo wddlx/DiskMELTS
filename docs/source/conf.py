@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 project   = 'DiskMELTS'
 copyright = '2026, Chengyan Xie, Dingshan Deng'
 author    = 'Chengyan Xie, Dingshan Deng'
-release   = '2.3.1'
+release   = '2.4.0'
 
 # ---------------------------------------------------------------------------
 # Extensions

@@ -12,6 +12,21 @@ the stage CSVs and calls `plot_fit` for each stage.
 .. autofunction:: diskmelts.plotting.plot_fit
 ```
 
+Pass `show_lines=True` to mark unfitted lines (H I, H$_2$, HD, [Ne II],
+...), and `oh_T=` to compare LTE OH models with the residuals; see
+{doc}`../unfitted_lines`.
+
+---
+
+## Unfitted-line markers
+
+```{eval-rst}
+.. autofunction:: diskmelts.lines.load_line_list
+.. autofunction:: diskmelts.lines.plot_line_markers
+.. autofunction:: diskmelts.lines.plot_oh_model
+.. autofunction:: diskmelts.lines.oh_model_flux
+```
+
 ---
 
 ## Validation plots

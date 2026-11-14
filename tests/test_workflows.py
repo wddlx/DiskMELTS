@@ -168,7 +168,15 @@ def test_production_checkpoint_files_are_bundled():
     for molecule, spec in SIGMA2_MODEL_SPECS.items():
         assert spec['grid_sigma'] == 2
         assert (MODEL_ROOT / spec['path']).is_file(), molecule
-    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 46
+    # 46 fitting checkpoints plus the 3-tile broad-T OH bank at each sigma.
+    from diskmelts import OH_BROAD_T_SPECS
+    for sigma, spec in OH_BROAD_T_SPECS.items():
+        manifest = MODEL_ROOT / spec['path']
+        assert manifest.is_file(), sigma
+        tiles = json.loads(manifest.read_text())['tiles']
+        assert len(tiles) == 3 and all((manifest.parent / t['path']).is_file()
+                                       for t in tiles)
+    assert len(list(MODEL_ROOT.rglob('*.pt'))) == 52
 
 
 def test_new_grid_checkpoints_load_and_generate_finite_spectra():

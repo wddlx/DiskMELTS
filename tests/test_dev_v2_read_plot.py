@@ -122,3 +122,37 @@ def test_mismatched_arrays_explain_stale_results(saved_observation, tmp_path):
         plot_saved_observation(result_dir=tmp_path, stages=STAGES, name='source',
                                obs_wav=wav[:2], obs_flux=changed[:2],
                                line_free_windows=(), savefig=False)
+
+
+def test_saved_stage_marks_unfitted_lines(saved_observation, tmp_path):
+    figures = plot_saved_observation(
+        result_dir=tmp_path, stages=STAGES, name='source',
+        line_free_windows=(), savefig=False,
+        show_lines=True, line_species=['H2', 'NeII'],
+    )
+    for key in ('C2H2', 'combined'):
+        labels = {t.get_text() for t in figures[key].axes[0].texts
+                  if t.get_rotation() == 90}
+        assert labels == {'H$_2$ S(2)', '[Ne II]'}
+    plain = plot_saved_observation(result_dir=tmp_path, stages=STAGES,
+                                   name='source', line_free_windows=(),
+                                   savefig=False)
+    assert not [t for t in plain['combined'].axes[0].texts if t.get_rotation() == 90]
+
+
+def test_saved_stage_draws_oh_model(saved_observation, tmp_path):
+    figures = plot_saved_observation(
+        result_dir=tmp_path, stages=STAGES, name='source',
+        line_free_windows=(), savefig=False, oh_T=[600, 3000], oh_sigma=2,
+    )
+    for key in ('C2H2', 'combined'):
+        legend = figures[key].axes[1].get_legend()
+        assert [t.get_text()[:15] for t in legend.get_texts()] == [
+            'OH LTE 600 K (s', 'OH LTE 3000 K (']
+
+
+def test_saved_stage_rejects_bad_oh_t_before_plotting(saved_observation, tmp_path):
+    with pytest.raises(ValueError, match='outside'):
+        plot_saved_observation(result_dir=tmp_path, stages=STAGES, name='source',
+                               line_free_windows=(), oh_T=50)
+    assert not list(tmp_path.glob('*.png'))

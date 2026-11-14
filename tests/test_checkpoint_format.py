@@ -18,7 +18,8 @@ CHECKPOINTS = sorted((ROOT / 'src/diskmelts/models/Trained_model').glob('sigma*/
 
 
 def test_all_bundled_checkpoints_are_array_only():
-    assert len(CHECKPOINTS) == 46
+    # 46 fitting checkpoints plus the 3-tile broad-T OH bank at each sigma.
+    assert len(CHECKPOINTS) == 52
     for path in CHECKPOINTS:
         # weights_only=True rejects any pickled scikit-learn or NumPy object.
         ckpt = torch.load(path, map_location='cpu', weights_only=True)

@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.4.0
+
+- A bundled catalogue of lines that DiskMELTS does not fit:
+  H I recombination lines, H$_2$ and HD rotational lines, and atomic
+  fine-structure lines ([Ne II], [Ne III], [Ar II], [Ar III], [Fe II],
+  [Ni II], and others), with vacuum wavelengths from the MPE ISO line lists.
+  Read it with `load_line_list`.
+- `plot_line_markers` draws these lines on a Matplotlib axis as gray dashed
+  lines with their names.
+- `plot_fit` and `plot_saved_observation` take `show_lines` and
+  `line_species` to mark them on fit figures; the default leaves plots
+  unchanged. See {doc}`unfitted_lines`.
+- A broad-temperature OH model (100–6000 K, 4.9–27 µm, three wavelength
+  tiles for each of sigma=0 and sigma=2), listed in `OH_BROAD_T_SPECS`. It is
+  for comparison only; OH fits still use the 100–1400 K, 15–26 µm checkpoint.
+  `oh_model_flux` evaluates it, and `synthesize_spectrum('OH_broadT', ...)`
+  returns its spectrum.
+- `plot_fit` and `plot_saved_observation` take `oh_T` (one temperature or a
+  list, in K): each LTE OH model is drawn in the residual panel, scaled to the
+  plotted residual peak and shifted down by 0.4 × that peak. `oh_logN`
+  (default 14, optically thin) and `oh_sigma` set the model.
+  `plot_oh_model` draws the same overlay on any axis.
+- `fit_stage` results (and each stage in `fit_observation`'s `fits`) record
+  `grid_sigma`, so `plot_fit(..., oh_T=...)` draws OH at the fit's
+  broadening without `oh_sigma`. Invalid `oh_T`, `oh_logN`, or `oh_sigma`
+  raise before any figure is created.
+- With `show_lines=True`, the `plot_fit` title is placed above the tallest
+  line name.
+- Training: reloading an existing checkpoint to resume `train_model_bank` on
+  Apple MPS no longer fails; checkpoints are read on the CPU and their
+  networks are then moved to the training device.
+
 ## 2.3.1
 
 - `plot_saved_observation` no longer needs the spectrum: if neither

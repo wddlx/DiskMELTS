@@ -22,6 +22,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
+from diskmelts.lines import check_oh_model_args, plot_line_markers, plot_oh_model
+
 # ---------------------------------------------------------------------------
 # Molecule display labels
 # ---------------------------------------------------------------------------
@@ -124,6 +126,11 @@ def plot_fit(
     params=None,
     uncertainty=None,
     show=True,
+    show_lines=False,
+    line_species=None,
+    oh_T=None,
+    oh_logN=14.0,
+    oh_sigma=None,
 ):
     """
     Two-panel spectral fit figure.
@@ -157,6 +164,22 @@ def plot_fit(
                                       When present, the box shows posterior medians
                                       with 16-84% error bars; otherwise best fits.
         show (bool): display the figure interactively; set False for batch fits.
+        show_lines (bool): mark unfitted lines (H I, H2, HD, [Ne II], ...)
+                           with gray dashed lines, named in the top panel;
+                           see ``diskmelts.lines.load_line_list``
+        line_species (str, list, or None): species to mark when show_lines
+                                           is True, e.g. ['H2', 'NeII'];
+                                           None marks all bundled lines
+        oh_T (float, list, or None): temperature(s) in K (100-6000) of LTE
+                                     OH models drawn in the residual panel,
+                                     scaled to the plotted residual peak and
+                                     shifted by -0.4 × that peak; see
+                                     ``diskmelts.lines.plot_oh_model``
+        oh_logN (float): log10 OH column density for oh_T (default 14,
+                         optically thin)
+        oh_sigma (0, 2, or None): grid broadening of the OH model; None uses
+                                  the results' 'grid_sigma' (recorded by
+                                  fit_stage and fit_observation), else 0
 
     Returns:
         (matplotlib.figure.Figure)
@@ -183,6 +206,12 @@ def plot_fit(
             mol_models.append((key, lbl, flux))
 
     residual = obs_flux - total_model
+    if oh_T is not None:
+        # Check the OH settings before any figure is created.
+        if oh_sigma is None:
+            oh_sigma = next((res['grid_sigma'] for res in results
+                             if res.get('grid_sigma') is not None), 0)
+        check_oh_model_args(oh_T, oh_logN, oh_sigma)
 
     # --- Noise for chi-square ---
     if sigma is None:
@@ -232,10 +261,15 @@ def plot_fit(
             for lo, hi in ranges:
                 ax_top.axvspan(lo, hi, alpha=0.07, color='steelblue', zorder=1)
         ax_top.set_ylabel('Flux (Jy)')
+        if show_lines:
+            ax_top.set_xlim(lo_p, hi_p)
+            plot_line_markers(ax_top, species=line_species, text_y=1.01)
+            plot_line_markers(ax_bot, species=line_species, label=False,
+                              wav_range=(lo_p, hi_p))
         ax_top.legend(fontsize=8, loc='upper left')
         ax_top.tick_params(labelbottom=False)
-        ax_top.set_title(f'{name} — spectral fit' if name else 'Spectral fit',
-                         fontsize=10)
+        title = f'{name} — spectral fit' if name else 'Spectral fit'
+        ax_top.set_title(title, fontsize=10)
 
         # --- Parameter text box with errorbars ---
         if params is not None:
@@ -278,6 +312,9 @@ def plot_fit(
         ax_bot.plot(w, residual[pmask], color=palette[1], lw=0.8)
         ax_bot.axhline(0, color='k', lw=0.5, ls=':')
         ax_bot.axhspan(-sigma, sigma, alpha=0.12, color='grey')
+        if oh_T is not None:
+            plot_oh_model(ax_bot, w, residual[pmask], oh_T, logN=oh_logN,
+                          sigma=oh_sigma)
         if ranges is not None:
             for lo, hi in ranges:
                 ax_bot.axvspan(lo, hi, alpha=0.07, color='steelblue', zorder=1)
@@ -289,6 +326,8 @@ def plot_fit(
 
         fig.subplots_adjust(left=0.11, right=0.98, bottom=0.10, top=0.92,
                             hspace=0.08)
+        if show_lines:
+            _title_above_labels(fig, ax_top, title)
         if show:
             plt.show()
         if save_path is not None:
@@ -298,6 +337,18 @@ def plot_fit(
             print(f'Saved → {save_path}')
 
     return fig
+
+
+def _title_above_labels(fig, ax, title):
+    """Raise the title over line names standing above ``ax`` and make room."""
+    ax_top = ax.get_window_extent().y1
+    rise = max((text.get_window_extent().y1 - ax_top for text in ax.texts
+                if not text.get_clip_on()), default=0.0)
+    pad = max(rise, 0.0) * 72 / fig.dpi + 4
+    ax.set_title(title, fontsize=10, pad=pad)
+    # Title height (~16 pt) plus the pad must fit above the axes.
+    top = 1 - (pad + 16) / 72 / fig.get_figheight()
+    fig.subplots_adjust(top=min(0.92, top))
 
 
 # ---------------------------------------------------------------------------

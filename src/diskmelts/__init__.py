@@ -42,6 +42,7 @@ from diskmelts.plotting import (
 from diskmelts.v2_fitting import (
     MODEL_SPECS,
     SIGMA2_MODEL_SPECS,
+    OH_BROAD_T_SPECS,
     load_fitting_models,
     synthesize_spectrum,
     fit_stage,
@@ -57,6 +58,12 @@ from diskmelts.v2_read_plot import (
     plot_saved_observation,
 )
 from diskmelts.v2_paper_comparison import plot_literature_comparisons
+from diskmelts.lines import (
+    load_line_list,
+    plot_line_markers,
+    oh_model_flux,
+    plot_oh_model,
+)
 from diskmelts import consub
 
 # fit_nested, validate_nt, and plot_validation_split stay importable for
@@ -66,6 +73,7 @@ __all__ = [
     "consub",
     "MODEL_SPECS",
     "SIGMA2_MODEL_SPECS",
+    "OH_BROAD_T_SPECS",
     "load_fitting_models",
     "synthesize_spectrum",
     "fit_stage",
@@ -76,6 +84,10 @@ __all__ = [
     "read_stage_result",
     "plot_saved_observation",
     "plot_literature_comparisons",
+    "load_line_list",
+    "plot_line_markers",
+    "oh_model_flux",
+    "plot_oh_model",
     # trainmodel
     "load_model_grid",
     "generate_pre_training_set",

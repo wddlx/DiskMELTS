@@ -1,0 +1,53 @@
+species,transition,wavelength_um,label,category,reference,source_url
+FeII,a4F7/2-a6D7/2,4.889137,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+H2,v=0-0 S(8),5.05303,H$_2$ S(8),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+FeII,a4F5/2-a6D3/2,5.062350,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+FeII,a4F9/2-a6D9/2,5.340169,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+H2,v=0-0 S(7),5.51116,H$_2$ S(7),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+FeII,a4F7/2-a6D5/2,5.673905,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,9-6,5.908213,H I 9-6,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+H2,v=0-0 S(6),6.10856,H$_2$ S(6),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+NiII,2D3/2-2D5/2,6.636000,[Ni II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+FeII,a4F9/2-a6D7/2,6.721283,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+H2,v=0-0 S(5),6.90952,H$_2$ S(5),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+ArII,2P1/2-2P3/2,6.985274,[Ar II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,6-5,7.459858,H I 6-5,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HI,8-6,7.502493,H I 8-6,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+H2,v=0-0 S(4),8.02505,H$_2$ S(4),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+HI,10-7,8.760064,H I 10-7,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+ArIII,3P1-3P2,8.991380,[Ar III],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+H2,v=0-0 S(3),9.66491,H$_2$ S(3),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+SIV,2P3/2-2P1/2,10.510500,[S IV],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+NiII,4F7/2-4F9/2,10.682200,[Ni II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,9-7,11.308695,H I 9-7,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+ClI,2P1/2-2P3/2,11.333347,[Cl I],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HD,v=0-0 R(10),11.57346,HD R(10),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+H2,v=0-0 S(2),12.27861,H$_2$ S(2),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+HI,7-6,12.371898,H I 7-6,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HI,11-8,12.387168,H I 11-8,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HD,v=0-0 R(9),12.47181,HD R(9),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+NiII,4F5/2-4F7/2,12.728800,[Ni II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+NeII,2P1/2-2P3/2,12.813550,[Ne II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HD,v=0-0 R(8),13.59265,HD R(8),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+HD,v=0-0 R(7),15.25104,HD R(7),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+NeIII,3P1-3P2,15.555100,[Ne III],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,10-8,16.209104,H I 10-8,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HI,12-9,16.880628,H I 12-9,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HD,v=0-0 R(6),16.89381,HD R(6),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+H2,v=0-0 S(1),17.03483,H$_2$ S(1),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+FeII,a4F7/2-a4F9/2,17.935950,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+NiII,4F3/2-4F5/2,18.240500,[Ni II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+SIII,3P2-3P1,18.713000,[S III],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,8-7,19.061898,H I 8-7,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HD,v=0-0 R(5),19.43100,HD R(5),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+ArIII,3P0-3P1,21.830200,[Ar III],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,13-10,22.331574,H I 13-10,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HI,11-9,22.340457,H I 11-9,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+HD,v=0-0 R(4),23.03376,HD R(4),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+FeI,a5D3-a5D4,24.042330,[Fe I],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+FeII,a4F5/2-a4F7/2,24.519250,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+SI,3P1-3P2,25.249000,[S I],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+FeII,a6D7/2-a6D9/2,25.988290,[Fe II],atomic,"Feuchtgruber et al. 1997, ApJ 487, 962; 2001, ApJS 136, 221; MPE ISO list",https://www.mpe.mpg.de/ir/ISO/linelists/FSlines.html
+HI,9-8,27.803379,H I 9-8,HI,"van Hoof (MPE ISO list), l-mixed vacuum wavelengths",https://www.mpe.mpg.de/ir/ISO/linelists/Hydrogenic.html
+H2,v=0-0 S(0),28.21883,H$_2$ S(0),molecular,Jennings et al. 1987; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
+HD,v=0-0 R(3),28.50197,HD R(3),molecular,Ulivi et al. 1991; MPE ISO list (van Dishoeck 1994),https://www.mpe.mpg.de/ir/ISO/linelists/Molecular.html
