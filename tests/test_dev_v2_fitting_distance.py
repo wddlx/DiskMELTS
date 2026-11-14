@@ -39,3 +39,19 @@ def test_model_stage_scales_flux_and_noise_to_reference_distance(monkeypatch):
     assert result['params']['C2H2']['A'] == 1.5
     assert result['top_list'][0]['mse_loss'] == pytest.approx(0.25)
     assert result['distance_pc'] == 280.0
+
+
+@pytest.mark.parametrize('grid_sigma', (0, 2))
+def test_model_stage_records_grid_sigma(monkeypatch, grid_sigma):
+    def fake_fit_molecules(**kwargs):
+        return {'model_flux': np.ones(2), 'residual': np.zeros(2),
+                'component_fluxes': {'C2H2': np.ones(2)},
+                'top_list': [{'mse_loss': 1.0}], 'params': {'C2H2': {'A': 1.0}}}
+
+    monkeypatch.setattr(dev_v2_fitting, 'fit_molecules', fake_fit_molecules)
+    result = dev_v2_fitting.fit_stage(
+        np.array([12.0, 12.1]), np.ones(2), 'C2H2', (12.0, 12.1), (12.0, 12.1),
+        pretrained={'C2H2': {'grid_sigma': grid_sigma}},
+    )
+    # plot_fit reads this to pick the OH overlay broadening.
+    assert result['grid_sigma'] == grid_sigma

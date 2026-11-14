@@ -16,7 +16,7 @@ grids before enabling training. No repository marker search is required.
 (bundled-checkpoints-2-3-0)=
 ## Bundled checkpoints in 2.3.0
 
-All 46 bundled checkpoints now share one training recipe:
+All 46 bundled fitting checkpoints now share one training recipe:
 `peak_normalization='window'`, `shape_loss='spectral'`,
 `temperature_transform='log10'`, `scheduler_patience=100`, and `min_lr=1e-6`
 (see {ref}`training-recipe`). In 2.3.0, 26 checkpoints that had
@@ -72,6 +72,35 @@ not reduce these errors. When lines saturate, the peak flux barely changes
 with column density, so treat logN in that regime with caution. The MCMC
 error bars from fitting widen accordingly. These are surrogate tests, not
 error budgets for observed spectra.
+
+(oh-broad-t-bank)=
+## Broad-temperature OH comparison model
+
+The OH model used for the {ref}`residual overlay <oh-model-overlay>` is not
+one of the 46 fitting checkpoints. It covers 100–6000 K and logN 13–19.5
+with three wavelength tiles (4.9–10.5, 9.5–16, and 15–27 µm) for each of
+sigma=0 and sigma=2. Each tile uses the training recipe above with 100 PCA
+components, chosen from 30, 50, 75, and 100 on the training grid. It is
+registered in `OH_BROAD_T_SPECS` and was trained with
+`examples/train_oh_broadT_bank.py`.
+
+On 827 held-out grid spectra (10% of the grid), the median full-spectrum
+shape RMSE is 0.036% (σ0) / 0.041% (σ2), with a 95th percentile of 0.11% and
+a maximum of 0.26%. The error does not grow with temperature: the medians
+are 0.03–0.06% in every bin from 100 to 6000 K. Predicted peaks are within
+3–4% (σ0) and 9% (σ2) of the true peaks, with medians of 1.000.
+
+| Tile | Held-out T range (K) | T RMSE (K) σ0 / σ2 | logN RMSE (dex) σ0 / σ2 |
+| --- | ---: | ---: | ---: |
+| 4.9–10.5 µm | 1000–5900 | 95 / 70 | 0.07 / 0.06 |
+| 9.5–16 µm | 400–5500 | 18 / 31 | 0.08 / 0.07 |
+| 15–27 µm | 150–5500 | 24 / 31 | 0.36 / 0.28 |
+
+T and logN RMSE come from T/logN retrieval at known area on 30 held-out
+spectra per tile that put at least 5% of their peak in that tile. In the
+15–27 µm tile the relative T error is 14–19%, mostly from cold spectra, and
+logN is poorly constrained. This model is meant for comparing line patterns
+with the residuals, not for fitting OH.
 
 ## Local-only data
 

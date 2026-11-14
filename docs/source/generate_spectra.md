@@ -15,6 +15,8 @@ $N=10^{18}\,\mathrm{cm}^{-2}$, `A=1` means 1 au², and the default distance is
 `sigma=2`. To generate flux on your own wavelength axis, pass
 `wavelength=your_wave`. The function returns that axis and the corresponding
 flux. Keep $T$ and $\log_{10}N$ within the selected checkpoint's trained bounds.
+For OH up to 6000 K across 4.9–27 µm, use the comparison model
+`synthesize_spectrum('OH_broadT', T=3000, logN=14)` (see {ref}`oh-model-overlay`).
 
 `synthesize_spectrum` was added in 2.2.1. With 2.2.0, the same HCN spectrum
 takes four lines:

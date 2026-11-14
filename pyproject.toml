@@ -52,7 +52,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 diskmelts = ["models/Trained_model/sigma*/*/*.pt", "models/Trained_model/sigma*/*/*.json",
-            "consub/*.csv", "consub/regions/*.csv", "consub/regions/*.json"]
+            "consub/*.csv", "consub/regions/*.csv", "consub/regions/*.json",
+            "data/*.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -68,6 +68,7 @@ quickstart
 notebooks/index
 continuum
 generate_spectra
+unfitted_lines
 training
 changelog
 ```

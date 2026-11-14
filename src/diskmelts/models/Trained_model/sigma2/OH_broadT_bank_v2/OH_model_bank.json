@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "mol": "OH_broadT",
+  "n_pca": 100,
+  "hidden": [
+    64,
+    128,
+    64
+  ],
+  "peak_normalization": "window",
+  "shape_loss": "spectral",
+  "shape_edge_weight": 10.0,
+  "temperature_transform": "log10",
+  "wavelength_ranges": [
+    [
+      4.9,
+      10.5
+    ],
+    [
+      9.5,
+      16.0
+    ],
+    [
+      15.0,
+      27.0
+    ]
+  ],
+  "logN_ranges": [
+    [
+      13.0,
+      19.5
+    ]
+  ],
+  "T_ranges": [
+    [
+      100.0,
+      6000.0
+    ]
+  ],
+  "tiles": [
+    {
+      "path": "net_OH_w4p9to10p5_n13to19p5_t100to6000.pt",
+      "wav_range": [
+        4.9,
+        10.5
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        100.0,
+        6000.0
+      ],
+      "n_pca": 100
+    },
+    {
+      "path": "net_OH_w9p5to16_n13to19p5_t100to6000.pt",
+      "wav_range": [
+        9.5,
+        16.0
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        100.0,
+        6000.0
+      ],
+      "n_pca": 100
+    },
+    {
+      "path": "net_OH_w15to27_n13to19p5_t100to6000.pt",
+      "wav_range": [
+        15.0,
+        27.0
+      ],
+      "logN_range": [
+        13.0,
+        19.5
+      ],
+      "T_range": [
+        100.0,
+        6000.0
+      ],
+      "n_pca": 100
+    }
+  ],
+  "grid_sigma": 2
+}

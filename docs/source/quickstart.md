@@ -333,6 +333,9 @@ to display each stage and combined figure inline without writing PNGs.
 Set `savefig=True` to save them as well. With `savefig=False`, the returned
 entries for the figures are Matplotlib Figure objects; otherwise they are
 paths to the saved PNGs. The numeric plot-data CSV is written in either case.
+Add `show_lines=True` to mark unfitted H I, H$_2$, HD, and atomic lines,
+and `oh_T=[1000, 4000]` to compare LTE OH models with the residuals
+(add `oh_sigma=2` for a sigma=2 fit; see {doc}`unfitted_lines`).
 
 (same-input-fit-plot)=
 ### Use the same spectrum for fitting and plotting

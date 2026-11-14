@@ -13,7 +13,8 @@ density (`logN`), and emitting area scaling (`A`) from observed spectra.
 DiskMELTS is available on [PyPI](https://pypi.org/project/diskmelts/) and
 requires Python 3.9 or newer. It bundles 46 production checkpoints, 23 each
 for the sigma=0 and sigma=2 grids, covering the same 18 species (see
-[Available molecules](#available-molecules)).
+[Available molecules](#available-molecules)), plus a 100–6000 K OH model
+used only to compare OH line patterns with fit residuals.
 Install it from any directory. These commands use
 `python` in an activated environment; the
 [installation guide](https://diskmelts.readthedocs.io/en/latest/installation.html)

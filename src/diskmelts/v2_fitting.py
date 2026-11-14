@@ -116,10 +116,37 @@ SIGMA2_MODEL_SPECS = {
 }
 
 
+# Broad-temperature OH bank (100-6000 K, 4.9-27 µm) for comparing LTE OH
+# shapes with residuals. It is not in MODEL_SPECS: fits use the 100-1400 K
+# OH checkpoint, and only synthesize_spectrum('OH_broadT', ...),
+# oh_model_flux, plot_oh_model, and the oh_T plot option use this bank.
+OH_BROAD_T = 'OH_broadT'
+OH_BROAD_T_SPECS = {
+    sigma: {
+        'grid_sigma': sigma,
+        'path': f'Trained_model/sigma{sigma}/OH_broadT_bank_v2/OH_model_bank.json',
+        'wavelength_ranges': ((4.9, 10.5), (9.5, 16.0), (15.0, 27.0)),
+        'T_bounds': (100.0, 6000.0),
+        'logN_bounds': (13.0, 19.5),
+        'n_pca': 100,
+        'hidden': (64, 128, 64),
+    }
+    for sigma in (0, 2)
+}
+
+
 def _model_specs_for_sigma(sigma):
     if isinstance(sigma, bool) or sigma not in (0, 2):
         raise ValueError('sigma must be 0 or 2')
     return MODEL_SPECS if sigma == 0 else SIGMA2_MODEL_SPECS
+
+
+def _specs_with_extra(molecule, sigma):
+    """Registry for ``molecule``, including the opt-in broad-T OH bank."""
+    specs = _model_specs_for_sigma(sigma)
+    if molecule == OH_BROAD_T:
+        return {OH_BROAD_T: OH_BROAD_T_SPECS[sigma]}
+    return specs
 
 
 def _ranges(value):
@@ -219,8 +246,9 @@ def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
     au². Checkpoints predict flux for A=1 au² at 140 pc; ``distance_pc``
     rescales that flux. With no ``wavelength``, use the checkpoint's native
     wavelength axis (the union of its tiles for a model bank).
+    ``molecule='OH_broadT'`` selects the 100-6000 K, 4.9-27 µm OH bank.
     """
-    specs = _model_specs_for_sigma(sigma)
+    specs = _specs_with_extra(molecule, sigma)
     if molecule not in specs:
         raise ValueError(f'No v2 model checkpoint for {molecule!r} at sigma={sigma}')
     spec = specs[molecule]
@@ -232,7 +260,8 @@ def synthesize_spectrum(molecule, T, logN, A=1.0, *, sigma=0,
         raise ValueError('A must be finite and nonnegative')
     if not np.isfinite(distance_pc) or distance_pc <= 0:
         raise ValueError('distance_pc must be finite and positive')
-    model = load_fitting_models(molecule, root=root, sigma=sigma)[molecule]
+    model = load_fitting_models(molecule, root=root, sigma=sigma,
+                                model_specs=specs)[molecule]
     if wavelength is None:
         if model.get('is_model_bank', False):
             wavelength = np.unique(np.concatenate([
@@ -328,7 +357,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
         ``params`` (label -> ``T``, ``logN``, ``A``, ``log10A`` best fit),
         ``uncertainty`` (posterior summaries), ``model_flux``,
         ``component_fluxes``, and ``residual`` on ``obs_wav``, plus
-        ``wavelength_range`` and ``distance_pc``.
+        ``wavelength_range``, ``distance_pc``, and ``grid_sigma``.
     """
     molecules = [molecule] if isinstance(molecule, str) else list(molecule)
     if not molecules or any(mol not in pretrained for mol in molecules):
@@ -377,6 +406,7 @@ def fit_stage(obs_wav, obs_flux, molecule, wavelength_range, fit_ranges,
     fit['obs_flux'] = np.asarray(obs_flux).copy()
     fit['wavelength_range'] = plot_ranges
     fit['distance_pc'] = float(distance_pc)
+    fit['grid_sigma'] = model_specs[molecules[0]]['grid_sigma']
     return fit
 
 

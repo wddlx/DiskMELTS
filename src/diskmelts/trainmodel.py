@@ -599,7 +599,7 @@ def pretrain_forward_model(
                 'pretrain_csv is required when training or when model_path '
                 'does not point to an existing checkpoint'
             )
-        ckpt = _load_checkpoint(model_path, device)
+        ckpt = _load_checkpoint(model_path)  # CPU: arrays are float64; nets move to device
         missing = [key for key in ('xp_sc', 'wav') if key not in ckpt]
         if missing:
             raise ValueError(
@@ -759,7 +759,7 @@ def pretrain_forward_model(
 
     # --- Load from checkpoint if it exists ---
     if model_path and os.path.exists(model_path):
-        ckpt        = _load_checkpoint(model_path, device)
+        ckpt        = _load_checkpoint(model_path)  # CPU: arrays are float64; nets move to device
         expected_metadata = {
             'wav_range': tuple(map(float, wav_range)),
             'T_range': None if T_range is None else tuple(map(float, T_range)),

@@ -91,7 +91,7 @@ To update an existing installation later, run
 
 The package includes 46 production checkpoints, 23 trained on the sigma=0
 grids and 23 on the sigma=2 grids, covering the same 18 molecules, plus
-continuum reference data. Choose the sigma=2 models with
+a 100–6000 K OH comparison model and continuum reference data. Choose the sigma=2 models with
 `load_fitting_models('C6H6', sigma=2)` or `fit_observation(..., sigma=2)`.
 You supply a spectrum. The {doc}`quick start <quickstart>` shows how to load a
 CSV, subtract a continuum if needed, fit a molecule, and use a

@@ -45,6 +45,13 @@ PUBLIC_SYMBOLS = [
     "plot_validation",
     "plot_bank_reconstruction",
     "synthesize_spectrum",
+    # unfitted lines
+    "load_line_list",
+    "plot_line_markers",
+    # broad-T OH comparison model
+    "OH_BROAD_T_SPECS",
+    "oh_model_flux",
+    "plot_oh_model",
 ]
 DEPRECATED_SYMBOLS = ["fit_nested", "validate_nt", "plot_validation_split"]
 
